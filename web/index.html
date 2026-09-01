@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ClipBlitz — ProX Editor · AI Clipping Studio</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar glass">
+    <div class="logo"><span class="bolt grad-text">✂️</span><span class="grad-text">ClipBlitz</span></div>
+    <nav class="snav" id="snav">
+      <button class="snavbtn active" data-screen="studio">🎬 <span>Studio</span></button>
+      <button class="snavbtn" data-screen="clips">🎞️ <span>Clips</span></button>
+      <button class="snavbtn" data-screen="lab">⚖️ <span>Candidates</span></button>
+      <button class="snavbtn" data-screen="transcript">📝 <span>Transcript</span></button>
+      <button class="snavbtn" data-screen="connect">🔗 <span>Connect</span></button>
+    </nav>
+    <div class="sstatus">
+      <span class="chip" id="caps">checking…</span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="jobtitle" id="jobtitle">Studio</div>
+      <div class="topchips">
+        <span class="chip" id="jobchip" hidden></span>
+        <span class="chip" id="livechip">checking…</span>
+      </div>
+    </header>
+
+    <div class="screens">
+    <!-- ============ STUDIO ============ -->
+    <section class="screen" id="screen-studio">
+      <div class="glass" style="padding:24px">
+        <div class="row" style="align-items:stretch; gap:20px">
+          <div style="flex:1.15; min-width:300px">
+            <div class="uploadzone" id="dropzone">
+              <div class="big">Drop your long video here, or click to browse</div>
+              <div>The AI editor finds <b style="color:var(--text)">stories, drafts the cut, judges it,</b> and renders the top 3 · 9:16</div>
+              <input type="file" id="file" accept="video/*" />
+            </div>
+            <div class="urlrow">
+              <input type="text" id="url" placeholder="…or paste a YouTube link — https://youtube.com/watch?v=…" />
+              <button class="btn" id="fetch">⬇️ From URL</button>
+            </div>
+            <div class="row" style="margin-top:16px">
+              <div class="field">
+                <label>Size <span id="scaleval">1.0×</span></label>
+                <input type="range" id="scale" min="0.7" max="1.4" step="0.05" value="1" />
+              </div>
+              <div class="field">
+                <label>Framing</label>
+                <select id="framing">
+                  <option value="blur">Blur-pad — full frame, nothing cut (recommended)</option>
+                  <option value="crop">Center crop — cuts sides</option>
+                  <option value="crop-left">Crop left speaker</option>
+                  <option value="crop-right">Crop right speaker</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Position</label>
+                <select id="position">
+                  <option value="bottom">Bottom</option>
+                  <option value="middle">Middle</option>
+                  <option value="top">Top</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>YouTube privacy</label>
+                <select id="privacy">
+                  <option value="public">Public</option>
+                  <option value="unlisted">Unlisted</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Auto-post when ready</label>
+                <select id="autopost">
+                  <option value="0">Manual — I press Post</option>
+                  <option value="1">Automatic</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:18px">
+              <button class="btn" id="upload">⚡ Edit my video</button>
+              <button class="btn ghost" id="demo">▶ Demo (generated test video)</button>
+            </div>
+          </div>
+
+          <!-- LIVE CAPTION PREVIEW -->
+          <div class="preview-panel glass" style="flex:1; min-width:260px; padding:14px">
+            <div class="metahead" style="margin-bottom:10px">Live caption preview <span id="pv-hint" class="chip gold" style="margin-left:6px">pick a style → watch it move</span></div>
+            <div class="pv-frame" id="pv-frame">
+              <canvas id="pv-canvas" width="270" height="480"></canvas>
+              <div class="pv-caption" id="pv-caption">Your captions <br> look like this</div>
+              <div class="pv-empty" id="pv-empty">drop a video to see<br>your real frame here</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="metahead" style="margin:18px 0 8px">Caption style</div>
+        <div class="stylegrid" id="stylegrid"></div>
+        <p class="note">The <b>ProX editor</b> segments the episode into <b>stories</b>, drafts the tightest cut inside each one,
+        polishes the edges (never starts on filler, lands the ending on the laugh), then a strict <b>QC judge</b> reads the exact
+        clip and scores it — only clips that stand alone make the podium, each with its verdict.</p>
+      </div>
+
+      <div id="error"></div>
+      <div id="toasts"></div>
+
+      <!-- PROCESSING (lives in Studio) -->
+      <div class="glass jobbox" id="job" hidden>
+        <div class="jobhead">
+          <b id="jobname"></b>
+          <span id="jobstage" class="stage">queued</span>
+        </div>
+        <div class="bar"><div id="jobbar"></div></div>
+        <div class="timeline" id="timeline"></div>
+        <div class="skeletons" id="skeletons" hidden>
+          <div class="skel glass"></div><div class="skel glass"></div><div class="skel glass"></div>
+        </div>
+        <div class="jobdone" id="jobdone" hidden>
+          <button class="btn" id="goto-clips">🎞️ Open the Clips</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CLIPS ============ -->
+    <section class="screen" id="screen-clips" hidden>
+      <div class="emptystate glass" id="clips-empty">
+        <div class="big">No clips yet</div>
+        <div class="dim">Run a video in the Studio — the podium lands here with judge verdicts and scores.</div>
+        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+      </div>
+      <div class="podium" id="clips"></div>
+    </section>
+
+    <!-- ============ CANDIDATES ============ -->
+    <section class="screen" id="screen-lab" hidden>
+      <div class="emptystate glass" id="lab-empty">
+        <div class="big">No candidates yet</div>
+        <div class="dim">Every runner-up with its real measured score appears here after a run — one click renders any of them.</div>
+        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+      </div>
+      <div id="labwrap">
+        <div class="metahead" style="margin-bottom:10px">Candidate lab — every runner-up, measured and judged
+          <span class="chip gold" style="margin-left:8px">click a card to render it</span></div>
+        <div class="labgrid" id="labgrid"></div>
+      </div>
+    </section>
+
+    <!-- ============ TRANSCRIPT ============ -->
+    <section class="screen" id="screen-transcript" hidden>
+      <div class="emptystate glass" id="cut-empty">
+        <div class="big">No transcript yet</div>
+        <div class="dim">After a run: click any line to jump, drag the white handles to cut your own clip.</div>
+        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+      </div>
+      <div class="cutwrap glass" id="cutwrap" style="padding:18px">
+        <div class="cutplayer">
+          <video id="srcvid" controls preload="metadata"></video>
+        </div>
+        <div class="cutpanel">
+          <div class="cutbar" id="cutbar">
+            <div class="cutwin" id="cutwin"><i class="h l" id="hl"></i><i class="h r" id="hr"></i></div>
+          </div>
+          <div class="cutinfo">
+            <span id="cutrange" class="chip gold">—</span>
+            <button class="btn small" id="cutgo">✂ Cut this window</button>
+          </div>
+          <div class="transcript" id="transcript"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CONNECT ============ -->
+    <section class="screen" id="screen-connect" hidden>
+      <div class="connectgrid">
+        <div class="glass platcard">
+          <div class="picon">▶️</div>
+          <h3>YouTube <span class="chip" id="yt-status">checking…</span></h3>
+          <p class="pdesc"><b style="color:var(--text)">Fully automatic posting</b> needs a one-time OAuth setup —
+          it does <b>not</b> work without it. Steps (≈15 min, click-by-click in <b>SETUP-YOUTUBE.md</b>):
+          ① create a free Google Cloud project → enable <b>YouTube Data API v3</b> → create an
+          <b>OAuth client ID</b> (type: Desktop app). ② paste the client ID + secret into <b>.env</b> (no restart needed).
+          ③ add the redirect URI below in Google Cloud → "Authorized redirect URIs". ④ press Connect.</p>
+          <div class="redirectbox"><code id="yt-redirect">checking…</code>
+            <button class="btn ghost small" id="yt-copy">copy</button></div>
+          <div class="row" style="margin:8px 0">
+            <button class="btn ghost small" id="yt-gcloud">☁️ Open Google Cloud Console</button>
+            <button class="btn ghost small" id="yt-gapi">🔌 Enable YouTube Data API</button>
+            <button class="btn ghost small" id="yt-gcreds">🔑 Create OAuth credentials</button>
+            <button class="btn ghost small" id="yt-gredirect">↩︎ Redirect URI settings</button>
+          </div>
+        <div class="platstatus" id="yt-detail"></div>
+        <div class="diagbox" id="yt-diag" hidden></div>
+        <div class="row">
+          <button class="btn small" id="yt-connect">Connect YouTube</button>
+          <button class="btn ghost small" id="yt-diagnose">🔍 Diagnose</button>
+          <button class="btn ghost small" id="yt-disconnect">Disconnect</button>
+        </div>
+        </div>
+
+        <div class="glass platcard">
+          <div class="picon">🎵</div>
+          <h3>TikTok <span class="chip">assisted one-click</span></h3>
+          <p class="pdesc">Renders finish → caption package (title + description + hashtags) is <b>auto-copied to
+          your clipboard</b> and the TikTok upload page opens. Full automation arrives when your TikTok developer
+          app is approved.</p>
+          <div class="platstatus" id="tt-detail"></div>
+          <button class="btn ghost small" id="tt-test">Open TikTok upload</button>
+        </div>
+
+        <div class="glass platcard">
+          <div class="picon">📸</div>
+          <h3>Instagram <span class="chip">assisted one-click</span></h3>
+          <p class="pdesc">Same assisted flow — clip + caption package ready for Reels.</p>
+          <button class="btn ghost small" id="ig-test">Open Instagram</button>
+        </div>
+
+        <div class="glass platcard">
+          <div class="picon">🔁</div>
+          <h3>More platforms</h3>
+          <p class="pdesc">Facebook and X are one click away on every clip card. Add a <b>CB_POST_KEY</b>
+          (Blotato / Ayrshare) to <b>.env</b> later and every platform becomes fully automatic.</p>
+        </div>
+      </div>
+
+      <div class="glass jobbox" style="margin-top:16px">
+        <div class="jobhead"><b>📡 Post queue</b><span class="chip" id="queue-count">0 clips</span></div>
+        <div id="queue" class="note">Nothing queued yet — clips you send to platforms appear here with live status.</div>
+      </div>
+    </section>
+    </div>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

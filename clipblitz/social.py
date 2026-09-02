@@ -117,9 +117,25 @@ def youtube_diagnose():
             except Exception as e:
                 steps["upload_quota"] = {"ok": False, "detail": str(e)[:120], "fix": "See SETUP-YOUTUBE.md."}
     overall_ok = all(s["ok"] for s in steps.values())
+    known = []
+    if not youtube_connected() and bool(cid and sec):
+        # The two Google-side errors the owner can actually hit, with exact fixes.
+        known.append({
+            "error": "Error 403: org_internal (Google consent page)",
+            "cause": "your OAuth consent screen audience is set to INTERNAL (org-only)",
+            "fix": ("Google Cloud → APIs & Services → OAuth consent screen (Google Auth Platform → "
+                    "Audience) → User type: EXTERNAL → Create/Save. Then add your own Gmail as a "
+                    "TEST USER (Audience → Test users). Press Connect again — no restart."),
+        })
+        known.append({
+            "error": "Error 400: redirect_uri_mismatch",
+            "cause": "the registered redirect URI doesn't match",
+            "fix": f"Credentials → your OAuth client → Authorized redirect URIs → add EXACTLY: {redirect}",
+        })
     return {
         "ready": overall_ok,
         "steps": steps,
+        "known_errors": known,
         "next_action": ("All green — post any clip with Post → YouTube." if overall_ok else
                         next((s["fix"] for s in steps.values() if s["fix"]), "")),
     }

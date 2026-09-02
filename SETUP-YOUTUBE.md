@@ -28,7 +28,7 @@ description and hashtags — completely automatically.
 Open `E:\clipping\clipblitz\.env` and fill:
 ```
 CB_YT_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
-CB_YT_CLIENT_SECRET=GOCSPX-example-placeholder
+CB_YT_CLIENT_SECRET=GOCSPX-xxxxxxxx
 ```
 Restart ClipBlitz (close the window, run `python run.py` again).
 

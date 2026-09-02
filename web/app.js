@@ -683,7 +683,13 @@ function renderDiag(diag) {
       <span class="diagdot ${s.ok ? 'ok' : 'bad'}">${s.ok ? '✓' : '✗'}</span>
       <div><b>${esc(name.replace(/_/g, ' '))}</b> — ${esc(s.detail)}${s.fix ? `<div class="dim">fix: ${esc(s.fix)}</div>` : ''}</div>
     </div>`).join('');
+  const known = (diag.known_errors || []).map(k => `
+    <div class="diagrow">
+      <span class="diagdot bad">!</span>
+      <div><b>${esc(k.error)}</b> — ${esc(k.cause)}<div class="dim">fix: ${esc(k.fix)}</div></div>
+    </div>`).join('');
   box.innerHTML = `<div class="diaghead">Auto-post chain — live check</div>${rows}
+    ${known ? `<div class="diaghead" style="margin-top:10px">If Google blocked you with one of these</div>${known}` : ''}
     <div class="diagrow"><span class="diagdot ${diag.ready ? 'ok' : 'bad'}">→</span><div><b>next:</b> ${esc(diag.next_action || '—')}</div></div>`;
 }
 

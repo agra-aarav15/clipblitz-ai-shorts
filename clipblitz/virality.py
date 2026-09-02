@@ -29,15 +29,32 @@ from .config import CONFIG
 from .brains import ai_chat  # dual-brain chat with failover
 from .ffmpeg_tools import laughter_score  # measured audience-laughter scoring
 
-WEIGHTS = {"hook": 0.26, "story": 0.26, "payoff": 0.18, "energy": 0.16, "pacing": 0.14}
+# Weights reflect the owner's taste, learned from feedback on real renders (2026-09-02):
+# the ENDING decides everything. A clip that lands is great even with a cold open
+# (the owner's favourite cut "started random but ended just fine"); a clip with a dead
+# ending is worthless no matter how clean the opening is.
+WEIGHTS = {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14}
 WEIGHT_PROFILES = {
-    "comedy":    {"hook": 0.24, "story": 0.22, "payoff": 0.16, "energy": 0.22, "pacing": 0.16},
-    "podcast":   {"hook": 0.24, "story": 0.24, "payoff": 0.16, "energy": 0.20, "pacing": 0.16},
-    "interview": {"hook": 0.24, "story": 0.24, "payoff": 0.16, "energy": 0.20, "pacing": 0.16},
-    "speech":    {"hook": 0.26, "story": 0.26, "payoff": 0.18, "energy": 0.16, "pacing": 0.14},
-    "tutorial":  {"hook": 0.24, "story": 0.30, "payoff": 0.16, "energy": 0.12, "pacing": 0.18},
-    "vlog":      {"hook": 0.26, "story": 0.22, "payoff": 0.16, "energy": 0.20, "pacing": 0.16},
+    "comedy":    {"hook": 0.09, "story": 0.20, "payoff": 0.38, "energy": 0.18, "pacing": 0.15},
+    "podcast":   {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14},
+    "interview": {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14},
+    "speech":    {"hook": 0.12, "story": 0.24, "payoff": 0.36, "energy": 0.14, "pacing": 0.14},
+    "tutorial":  {"hook": 0.12, "story": 0.30, "payoff": 0.34, "energy": 0.10, "pacing": 0.14},
+    "vlog":      {"hook": 0.12, "story": 0.22, "payoff": 0.36, "energy": 0.16, "pacing": 0.14},
 }
+
+# The hype class: intros/greetings/shoutouts feel "random" to a viewer who came for
+# content — the owner flagged exactly these as the worst clips. Banned at mining.
+HYPE_MARKERS = [
+    "welcome", "welcome back", "make some noise", "give it up", "shout out", "shoutout",
+    "sponsor", "sponsored by", "subscribe", "like and subscribe", "hit the like",
+    "intro", "today's guest", "our guest today", "let's get started", "let's get into it",
+    "before we start", "before we begin", "check the description", "link in the description",
+    "patreon", "merch", "code at checkout", "thank you for watching", "see you in the next",
+]
+
+MIN_CLIP_S = 18.0   # nothing shorter than a real beat (snippets feel random)
+MAX_CLIP_S = 75.0   # past this it's a scene, not a short
 
 
 def _weights(content_type):
@@ -48,9 +65,10 @@ STORY_PROMPT = """You are a long-form video editor watching a {content_hint} vid
 Below is a timestamped transcript CHUNK ({chunk_no}/{chunks}) of a {duration:.0f}s video.
 
 Segment THIS CHUNK into self-contained STORIES: a moment with a beginning, a development,
-and an ending — a joke and its laugh, a question and its answer, a claim and its payoff.
-Stories must NOT overlap and must cover the interesting parts of the chunk. Prefer moments
-with emotion, tension, punchlines, laughs, surprises. 10-120s each.
+and an ENDING THAT LANDS — a joke and its laugh, a question and its answer, a claim and its
+payoff, a reveal and the reaction. Stories must NOT overlap and must cover the interesting
+parts of the chunk. EXCLUDE all channel/sponsor/greeting material (welcomes, shout-outs,
+subscribe plugs, intros) — only real content moments. 20-90s each.
 
 Transcript chunk:
 {transcript}
@@ -66,9 +84,12 @@ DRAFT_PROMPT = """You are a short-form editor. Below are stories from one video 
 verbatim transcript with per-sentence timestamps, a summary, and how it pays off).
 
 For EACH story draft the tightest possible vertical-short cut:
-- 15-60 seconds, cutting INSIDE the story only
-- start exactly where the hook thought begins (never mid-answer, never on filler like "um/so/like/yeah")
-- end right after the payoff (or right where the reaction/laugh peaks)
+- 20-75 seconds, cutting INSIDE the story only
+- the ENDING is everything: end exactly where the payoff completes — right after the punchline,
+  the answer, the reveal, or the peak of the reaction/laugh. If the payoff needs a later moment
+  from the story, extend the cut to include it. A clip that ends before the payoff is a failure.
+- the opening may be a cold open (start mid-energy on a strong line) — the hook matters less
+  than the landing. Just never open on filler like "um/so/like/yeah" or on greetings/hype.
 - prefer cutting slow warm-up lines; keep the exchange that carries the story
 
 Stories:
@@ -82,16 +103,21 @@ Return ONLY compact JSON, no markdown:
 JUDGE_PROMPT = """You are the strict QC judge for finished vertical shorts. For EACH clip below you
 get the EXACT transcript the viewer will see — nothing else. Judge it as a standalone short.
 
+THE ENDING IS THE PRODUCT: a short that lands its ending is a success even if it opens cold;
+a short that stops before the payoff is a failure no matter how good the opening was.
+
 Clips:
 {clips}
 
 For each clip return:
 - "alone": can this exact text be understood with NO other context? (true/false)
-- "starts_abrupt": does it open mid-thought / answering an unheard question? (true/false)
-- "ends_abrupt": does it stop before the thought or payoff completes? (true/false)
+- "starts_abrupt": does it open mid-thought? (a cold open on a strong line is FINE — only
+  flag it if the opening is confusing filler or an unanswered half-question)
+- "ends_abrupt": does it stop before the payoff/reaction completes? (true/false — this is the
+  single most important field)
 - "coherence": 0-10 as a standalone story
-- "hook": 0-10 for the first ~2 lines stopping a scroll
-- "payoff": 0-10 for the ending landing
+- "hook": 0-10 for the opening
+- "payoff": 0-10 for the ending landing (this dominates the final score)
 - "verdict": one short line for the creator (what makes it work / what hurts it)
 
 Return ONLY compact JSON, no markdown:
@@ -212,12 +238,15 @@ def segment_stories(segments, duration):
                 continue
             a, b = max(0.0, a), min(duration, b)
             if 8 <= b - a <= 130:
-                stories.append({
+                entry = {
                     "start": a, "end": b,
                     "summary": (st.get("summary") or "")[:120],
                     "hook_line": (st.get("hook_line") or "")[:120],
                     "payoff": (st.get("payoff") or "")[:120],
-                })
+                }
+                if _is_hype(entry["summary"] + " " + entry["hook_line"]):
+                    continue  # the banned hype class never becomes a candidate
+                stories.append(entry)
     content_type = max(votes, key=votes.get) if votes else "other"
     return stories, content_type
 
@@ -306,7 +335,14 @@ def snap(candidate, segments, duration, pad=3.0):
     return candidate
 
 
-def extend_through_laughter(cands, laughs, duration, segments, pad=2.0, max_ext=12.0):
+def _is_hype(text):
+    """The banned class: intros, greetings, sponsor shoutouts, plugs — the owner's
+    'worst clips'. Matched case-insensitively against the story's own words."""
+    t = " ".join((text or "").lower().split())
+    return any(m in t for m in HYPE_MARKERS)
+
+
+def extend_through_laughter(cands, laughs, duration, segments, pad=2.0, max_ext=20.0):
     """Land the ending ON the laugh: stretch through the burst, then re-snap."""
     if not laughs:
         return
@@ -376,12 +412,15 @@ def draft_cuts(stories, segments, laughs, energy, content_type, duration):
                 continue
             a = max(a, max(st["start"] - 20, 0.0))
             b = min(b, min(st["end"] + 20, duration))
-            if not (8 <= b - a <= 95):
+            if not (MIN_CLIP_S <= b - a <= MAX_CLIP_S):
                 continue
-            cuts.append({"start": a, "end": b,
-                         "title": (c.get("title") or st["summary"])[:80],
-                         "hook": (c.get("hook_line") or st["hook_line"])[:120],
-                         "story_summary": st["summary"]})
+            cut = {"start": a, "end": b,
+                   "title": (c.get("title") or st["summary"])[:80],
+                   "hook": (c.get("hook_line") or st["hook_line"])[:120],
+                   "story_summary": st["summary"]}
+            if _is_hype(cut["title"] + " " + cut["story_summary"]):
+                continue  # double-check: hype never reaches the podium
+            cuts.append(cut)
     return cuts
 
 
@@ -407,18 +446,22 @@ def _pacing(segments, a, b):
 
 
 def measure(cands, segments, energy, laughs):
-    """Deterministic factors per cut (no AI): energy (laugh-boosted), pacing, laughter."""
+    """Deterministic factors per cut (no AI): energy (laugh-boosted), pacing, laughter,
+    and the tail laugh — how hard the ENDING lands (the owner's #1 criterion)."""
     series, mean_db = energy if energy else ([], -30.0)
     for c in cands:
         if not isinstance(c, dict):
             continue
         a, b = c["start"], c["end"]
         laugh = laughter_score(laughs or [], a, b) if laughs else 0.0
+        tail_laugh = laughter_score(laughs or [], max(a, b - 8.0), b + 1.5) if laughs else 0.0
         energy_f = _energy_in(series, mean_db, a, b)
         if laughs:
             energy_f = min(1.0, 0.35 * energy_f + 0.65 * laugh)
         c["laugh"] = laugh
-        c["measured"] = {"energy": energy_f, "pacing": _pacing(segments, a, b), "laughter": laugh}
+        c["tail_laugh"] = tail_laugh
+        c["measured"] = {"energy": energy_f, "pacing": _pacing(segments, a, b),
+                         "laughter": laugh, "tail_laugh": tail_laugh}
     return cands
 
 
@@ -455,10 +498,14 @@ def judge_cuts(cands, segments):
 
 
 def judge_fail(j):
+    """The gate. A cold open is fine (starts_abrupt alone never fails) — the owner's
+    taste. What fails: not standalone, coherence < 7, a dead ending, or no payoff."""
     if not isinstance(j, dict):
         return True
-    return (not j.get("alone", True)) or bool(j.get("starts_abrupt")) or bool(j.get("ends_abrupt")) \
-        or int(j.get("coherence", 0) if isinstance(j.get("coherence"), (int, float)) else 0) < 7
+    payoff = j.get("payoff") if isinstance(j.get("payoff"), (int, float)) else 5
+    coherence = j.get("coherence") if isinstance(j.get("coherence"), (int, float)) else 5
+    return (not j.get("alone", True)) or bool(j.get("ends_abrupt")) \
+        or coherence < 7 or payoff < 5
 
 
 def repair_cut(cand, complaint, segments, duration):
@@ -484,6 +531,13 @@ def repair_cut(cand, complaint, segments, duration):
 
 # ---------------------------------------------------------------- 5. score v2
 
+def _score10(x, default=5):
+    """Judge scores arrive as 0-10 ints, floats, or junk — always a safe 0-10 float."""
+    if isinstance(x, (int, float)) and not isinstance(x, bool):
+        return max(0, min(10, float(x)))
+    return default
+
+
 def _verdict_reason(j, c):
     def _n(x):
         return int(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else 0
@@ -501,13 +555,9 @@ def _verdict_reason(j, c):
 
 
 def score_v2(cand, j, content_type):
-    """Score from the judge's ratings of the exact cut + measured factors."""
-
-    def _score10(x, default=5):
-        if isinstance(x, (int, float)) and not isinstance(x, bool):
-            return max(0, min(10, float(x)))
-        return default
-
+    """Score from the judge's ratings of the exact cut + measured factors.
+    Payoff (the ending) dominates — the owner's taste, learned from real renders.
+    A dead ending also caps the whole score: nothing random survives at the top."""
     w = _weights(content_type)
     factors = {
         "hook": max(0.0, min(1.0, _score10(j.get("hook")) / 10.0)),
@@ -516,8 +566,15 @@ def score_v2(cand, j, content_type):
         "energy": cand["measured"]["energy"],
         "pacing": cand["measured"]["pacing"],
     }
+    # tail laugh is a measured payoff signal: fold it into payoff (max wins, both count)
+    if cand["measured"].get("tail_laugh", 0) > 0:
+        factors["payoff"] = max(factors["payoff"], 0.35 + 0.65 * cand["measured"]["tail_laugh"])
     blend = sum(w[k] * v for k, v in factors.items())
     score = int(round(30 + 69 * (blend ** 1.15)))
+    if j.get("ends_abrupt"):            # hard cap: a dead ending can never score high
+        score = min(score, 55)
+    if not j.get("alone", True):
+        score = min(score, 45)
     cand["factors"] = {k: int(round(v * 100)) for k, v in factors.items()}
     cand["factors"]["laughter"] = int(round(cand["measured"]["laughter"] * 100))
     cand["score"] = max(1, min(99, score))
@@ -594,12 +651,18 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
                 continue
             j = judgements.get(i)
             if j and judge_fail(j):
+                dead_ending = bool(j.get("ends_abrupt")) or _score10(j.get("payoff")) < 6
                 complaint = j.get("verdict") or (
-                    "starts mid-thought" if j.get("starts_abrupt") else "ends before the payoff") if isinstance(j, dict) else "failed judgement"
-                if repair_cut(c, complaint, segments, duration):
-                    snap(c, segments, duration)
-                    extend_through_laughter([c], laughs, duration, segments)
+                    "starts mid-thought" if j.get("starts_abrupt") else "ends before the payoff")
+                # ending failures get the deterministic fix first: ride the next laugh out
+                if dead_ending:
+                    extend_through_laughter([c], laughs, duration, segments, max_ext=20.0)
                     measure(c, segments, energy, laughs)
+                if judge_fail(j) or not dead_ending:
+                    if repair_cut(c, complaint, segments, duration):
+                        snap(c, segments, duration)
+                        extend_through_laughter([c], laughs, duration, segments)
+                        measure(c, segments, energy, laughs)
         try:  # re-judge (windows may have moved)
             judgements = judge_cuts(top_pool, segments)
         except Exception:
@@ -617,9 +680,15 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
             score_v2(c, _OFFLINE_J, content_type)
         top_pool.sort(key=lambda c: -c["score"])
 
-    # final pick: judge-passed cuts first, spaced across the episode
-    passing = [c for c in top_pool if c.get("qc") == "verified"]
-    rest = [c for c in top_pool if c.get("qc") != "verified"]
+    # final pick: the ENDING GATE decides the podium. Only cuts whose ending actually
+    # lands (judge-passed, or a measured tail laugh) fill the podium — the owner would
+    # rather see 1 great clip than 3 random ones. Runner-ups stay in the lab.
+    def _ends_well(c):
+        return c.get("qc") == "verified" or c["measured"].get("tail_laugh", 0) >= 0.25
+
+    passing = [c for c in top_pool if _ends_well(c)]
+    rest = [c for c in top_pool if not _ends_well(c)]
+    rest.sort(key=lambda c: -(c["measured"].get("tail_laugh", 0) + c["measured"].get("laughter", 0)))
     picked = []
     for c in passing + rest:
         if len(picked) >= count:
@@ -631,8 +700,11 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
             break
         if c not in picked:
             picked.append(c)
-    for c in picked:
+    for n, c in enumerate(picked):
         c["selected"] = True
+        if not _ends_well(c):
+            c["qc"] = c.get("qc") or "unverified"
+            c["reason"] = (c.get("reason") or "") + " — best available; the ending doesn't fully land."
     return picked, top_pool[:10], picker, content_type
 
 

@@ -42,3 +42,22 @@ The tab says "✅ YouTube connected!" — done. The status chip shows your chann
   To lift it later: publish the OAuth app (verification) or request more quota.
 - Videos upload with the privacy you pick in the Studio (Public / Unlisted / Private).
 - Your token lives only in `data/social/youtube.json` on your machine (gitignored).
+
+## Troubleshooting — the two errors you can actually hit
+
+**Error 403: `org_internal`** (on Google's consent page)
+Your OAuth consent screen audience is **Internal** (org-only). Fix:
+1. Google Cloud → **APIs & Services → OAuth consent screen** (now "Google Auth Platform")
+2. **Audience** tab → User type: **External** → save
+3. **Audience → Test users** → **+ Add users** → add your own Gmail
+4. Press Connect again (no restart needed).
+
+**Error 400: `redirect_uri_mismatch`**
+The registered redirect URI doesn't match. Fix: Credentials → your OAuth client →
+**Authorized redirect URIs** → add exactly `http://localhost:4301/oauth/youtube/callback`
+(copy it from the Connect tab's copy button).
+
+**Other gotchas**
+- Client type must be **Web application** or **Desktop app** (not TV/Restricted).
+- Enable **YouTube Data API v3** for the same project, or uploads 403 with `youtubeSignupRequired`.
+- The consent code is single-use and expires in ~10 min — re-press Connect rather than reusing an old tab.

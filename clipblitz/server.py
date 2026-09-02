@@ -179,11 +179,15 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def _success_page(self, msg):
-        return ("<!doctype html><html><head><meta charset='utf-8'><title>ClipBlitz</title>"
+        return ("<!doctype html><html><head><meta charset='utf-8'>"
+                "<meta http-equiv='refresh' content='4;url=/'>"
+                "<title>ClipBlitz</title>"
                 "<style>body{background:#050505;color:#f7f7f8;font-family:Segoe UI,sans-serif;"
                 "display:grid;place-items:center;height:100vh}div{background:rgba(255,255,255,.05);"
                 "border:1px solid rgba(255,255,255,.25);padding:40px 60px;border-radius:20px;"
-                "font-size:20px}</style></head><body><div>" + msg + "</div></body></html>").encode("utf-8")
+                "font-size:20px;text-align:center}small{color:#9ba0a6;font-size:13px;display:block;"
+                "margin-top:14px}</style></head><body><div>" + msg +
+                "<small>returning to ClipBlitz…</small></div></body></html>").encode("utf-8")
 
     # ---------- POST ----------
 
@@ -225,6 +229,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._custom(body)
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
+        if path == "/api/social/youtube/start":
+            # the UI may POST this from the Connect tab — accept both verbs
+            if not social.youtube_configured():
+                return self._json(400, {"error": "CB_YT_CLIENT_ID / CB_YT_CLIENT_SECRET missing in .env — see SETUP-YOUTUBE.md"})
+            return self._json(200, {"url": social.youtube_auth_url()})
 
         self._json(404, {"error": "not found"})
 

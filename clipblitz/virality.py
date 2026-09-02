@@ -360,6 +360,32 @@ def extend_through_laughter(cands, laughs, duration, segments, pad=2.0, max_ext=
                 snap(c, segments, duration)
 
 
+def reaction_post_roll(cands, laughs, duration, segments, look_ahead=8.0, max_ext=20.0):
+    """Post-roll for reactions: any clip whose tail laugh is weak but that has a
+    laughter region starting shortly AFTER its end gets extended through that region —
+    the 'incomplete ending' fix (the joke lands, but the cut stopped before the reaction)."""
+    if not laughs:
+        return 0
+    fixed = 0
+    for c in cands:
+        if c["measured"].get("tail_laugh", 0) >= 0.25:
+            continue
+        best = None
+        for s, e, _peak in laughs:
+            if c["end"] < s <= c["end"] + look_ahead and e > c["end"]:
+                if best is None or e > best[1]:
+                    best = (s, e)
+        if best:
+            new_end = min(duration, best[1] + 0.3, c["end"] + max_ext)
+            if new_end - c["start"] <= 90 and new_end > c["end"] + 1:
+                c["end"] = round(new_end, 2)
+                c["laugh_ending"] = True
+                c["post_rolled"] = True
+                snap(c, segments, duration)
+                fixed += 1
+    return fixed
+
+
 # ---------------------------------------------------------------- 2. draft pass
 
 def draft_cuts(stories, segments, laughs, energy, content_type, duration):
@@ -667,6 +693,14 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
             judgements = judge_cuts(top_pool, segments)
         except Exception:
             pass
+
+        # reaction post-roll: weak-tail clips get the laughter that follows their cut,
+        # so endings feel complete (the middle-reel fix). Then everything is re-scored.
+        if reaction_post_roll(top_pool, laughs, duration, segments):
+            try:
+                judgements = judge_cuts(top_pool, segments)
+            except Exception:
+                pass
         for i, c in enumerate(top_pool):
             if not isinstance(c, dict):
                 continue

@@ -715,7 +715,11 @@ function renderQueue() {
 $('yt-connect').addEventListener('click', async () => {
   try {
     const { url } = await post('/api/social/youtube/start', '{}');
-    window.open(url, '_blank');
+    if (!url) throw new Error('keys missing — see the diagnose checklist below');
+    // open synchronously within the click gesture — popups after `await` get blocked
+    const win = window.open('', '_blank');
+    if (win) { win.opener = null; win.location = url; }
+    else { location.href = url; toast('popup blocked — navigating this tab to Google…', true); }
   } catch (e) { toast(String(e.message || e), true); }
 });
 $('yt-disconnect').addEventListener('click', async () => {
@@ -736,3 +740,25 @@ if (wanted) {
     if ((job.clips || []).length) showScreen('clips');  // deep link straight to the podium
   }).catch(() => toast('that job no longer exists — run a new one', true));
 }
+
+/* ---------- Clips screen: offer the most recent finished job, not a blank wall ---------- */
+(async function latestJobResume() {
+  try {
+    const jobs = await (await fetch('/api/jobs')).json();
+    const latest = jobs.find(j => j.status === 'done' && j.clips > 0);
+    if (!latest) return;
+    const empty = document.getElementById('clips-empty');
+    if (!empty) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.style.marginTop = '4px';
+    btn.textContent = `🎞️ Show the latest clips (${latest.name || latest.id})`;
+    btn.addEventListener('click', () => {
+      fetch(`/api/job/${latest.id}?light=1`).then(r => r.json()).then(job => {
+        watch(job.id, job.name || job.id);
+        showScreen('clips');
+      });
+    });
+    empty.appendChild(btn);
+  } catch { /* best effort */ }
+})();

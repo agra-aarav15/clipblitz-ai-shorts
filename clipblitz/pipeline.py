@@ -95,7 +95,18 @@ def _words_for_window(segments, w0, w1):
 
 
 def _render_clip(job, src_path, m, base, clips_dir):
-    """Cut + caption one moment. Returns the clip dict (appended by caller)."""
+    """Cut + caption one moment. Returns the clip dict (appended by caller).
+    THE LANDING RULE: every cut renders with one extra second after its last word —
+    the final beat of the payoff needs room to breathe (a clip that stops on the
+    exact last millisecond of speech feels chopped). Render-level only: engine
+    windows and scores are untouched."""
+    landing_pad = 1.0
+    end = m["end"]
+    src_dur = job.get("duration") or 0
+    if src_dur and end > 0:
+        end = min(end + landing_pad, src_dur - 0.05)
+    else:
+        end = end + landing_pad
     words = _words_for_window(job["segments"], m["start"], m["end"])
     if not words and job.get("demo"):
         span = max(1.0, m["end"] - m["start"])
@@ -108,7 +119,7 @@ def _render_clip(job, src_path, m, base, clips_dir):
         captions.build_ass(words, (m["start"], m["end"]),
                            job["style"], job["size_scale"], job["position"], ass_path)
         ass_name = base + ".ass"  # relative → ffmpeg runs with cwd=clips_dir (path-safe)
-    note = ffmpeg_tools.cut_clip(src_path, m["start"], m["end"],
+    note = ffmpeg_tools.cut_clip(src_path, m["start"], end,
                                  os.path.join(clips_dir, base + ".mp4"), ass_name,
                                  cwd=clips_dir, framing=job.get("framing", "blur"))
     return {
@@ -123,8 +134,8 @@ def _render_clip(job, src_path, m, base, clips_dir):
         "topic": m.get("topic", ""),
         "score": m.get("score", 50),
         "factors": m.get("factors", {}),
-        "start": round(m["start"], 1), "end": round(m["end"], 1),
-        "duration": round(m["end"] - m["start"], 1),
+        "start": round(m["start"], 1), "end": round(end, 1),
+        "duration": round(end - m["start"], 1),
         "style": job["style"],
         "rank": m.get("rank"),
         "custom": bool(m.get("custom")),

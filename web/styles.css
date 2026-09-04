@@ -1,4 +1,5 @@
-/* ClipBlitz v3 — black & white glassmorphism: frosted cards, white type, zero color noise */
+/* ClipBlitz v3.2 — cinematic black & white glass: liquid light field, GSAP motion,
+   Space Grotesk display type. Zero color noise — depth comes from light, blur and grain. */
 :root {
   --bg: #050505;
   --glass: rgba(255, 255, 255, 0.045);
@@ -10,30 +11,73 @@
   --grad: linear-gradient(135deg, #ffffff 0%, #d9d9de 55%, #a8a8ae 100%);
   --ok: #e8e8ea;
   --err: #ff8a8a;
+  --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', monospace;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh;
-  background-image:
-    radial-gradient(900px 480px at 85% -10%, rgba(255, 255, 255, 0.07), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(255, 255, 255, 0.05), transparent 60%),
-    radial-gradient(800px 500px at 50% 110%, rgba(255, 255, 255, 0.04), transparent 60%);
-  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 26px 26px 80px; }
+
+/* ---------- the liquid light field (the space the glass refracts) ---------- */
+.liquid { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.liquid .orb {
+  position: absolute; border-radius: 50%;
+  filter: blur(90px); will-change: transform;
+}
+.orb-a {
+  width: 62vw; height: 62vw; left: -18vw; top: -24vw;
+  background: radial-gradient(circle at 40% 40%, rgba(255,255,255,0.09), rgba(255,255,255,0.028) 45%, transparent 70%);
+  animation: drift-a 46s ease-in-out infinite alternate;
+}
+.orb-b {
+  width: 48vw; height: 48vw; right: -16vw; top: 22vh;
+  background: radial-gradient(circle at 55% 45%, rgba(255,255,255,0.07), rgba(255,255,255,0.02) 50%, transparent 72%);
+  animation: drift-b 58s ease-in-out infinite alternate;
+}
+.orb-c {
+  width: 40vw; height: 40vw; left: 26vw; bottom: -26vw;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.055), transparent 70%);
+  animation: drift-c 70s ease-in-out infinite alternate;
+}
+@keyframes drift-a { from { transform: translate(0, 0) scale(1); } to { transform: translate(9vw, 7vh) scale(1.12); } }
+@keyframes drift-b { from { transform: translate(0, 0) scale(1.05); } to { transform: translate(-8vw, -9vh) scale(0.94); } }
+@keyframes drift-c { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(6vw, -6vh) scale(1.1); } }
+.grain {
+  position: absolute; inset: -50%;
+  opacity: 0.05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid .orb { animation: none; }
+  .screen { animation: none !important; }
+}
+.app { position: relative; z-index: 1; }
 
 /* ---------- glass primitives ---------- */
 .glass {
   background: var(--glass);
   border: 1px solid var(--line-soft);
   border-radius: 22px;
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(26px) saturate(1.1);
+  -webkit-backdrop-filter: blur(26px) saturate(1.1);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  position: relative;
+}
+/* specular top edge — the light catches the glass rim */
+.glass::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 1px;
+  background: linear-gradient(90deg, transparent 4%, rgba(255,255,255,0.28) 50%, transparent 96%);
+  border-radius: 22px 22px 0 0; pointer-events: none; z-index: 1;
 }
 .glass.gold-edge { border-color: var(--line); }
 
@@ -475,3 +519,87 @@ a { color: var(--text); }
 .diagdot { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 900; margin-top: 2px; }
 .diagdot.ok { background: #ffffff; color: #0a0a0a; }
 .diagdot.bad { background: rgba(255,138,138,0.15); color: #ffb4b4; border: 1px solid rgba(255,138,138,0.5); }
+
+/* ================= cinematic pass (v3.2) ================= */
+
+/* display type where it carries identity; mono where it carries measurement */
+.logo, .jobtitle, .emptystate .big, .platcard h3, .uploadzone .big {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+.logo { font-size: 22px; font-weight: 700; }
+.jobtitle { font-size: 21px; font-weight: 700; }
+.clipcard .rank { font-family: var(--font-display); font-weight: 700; font-size: 32px; }
+.dial-num { font-family: var(--font-display); font-size: 17px; }
+.cliptitle { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.01em; }
+.frow b, .clipmeta, .labtop, .cutinfo .chip, .lm, .qrow, .diagrow, .stage, .tstep, code {
+  font-family: var(--font-mono);
+}
+.frow b { font-size: 10.5px; }
+.metahead { letter-spacing: 1.8px; font-family: var(--font-mono); font-weight: 500; }
+
+/* buttons: specular sheen sweep + press physics */
+.btn { position: relative; overflow: hidden; }
+.btn::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.btn:hover::after { transform: translateX(120%); transition: transform 0.7s var(--ease-out); }
+.btn:not(.ghost)::after { mix-blend-mode: overlay; }
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn.ghost { transition: transform 0.15s var(--ease-out), border-color 0.15s, background 0.15s; }
+.btn.ghost:hover { background: rgba(255,255,255,0.08); }
+
+/* focus: visible, premium */
+:focus-visible { outline: 2px solid rgba(255,255,255,0.75); outline-offset: 2px; border-radius: 8px; }
+
+/* selection + scrollbars */
+::selection { background: rgba(255,255,255,0.9); color: #050505; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.26); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* dial: thinner, brighter, mono count */
+.dial-bg { stroke: rgba(255,255,255,0.07); stroke-width: 4; }
+.dial-fg { stroke-width: 4; filter: drop-shadow(0 0 8px rgba(255,255,255,0.4)); }
+.clipcard:first-child .dial-fg { filter: drop-shadow(0 0 10px rgba(255,255,255,0.55)); }
+
+/* clip cards: lift + rim light on hover */
+.clipcard { transition: transform 0.35s var(--ease-out), border-color 0.35s, box-shadow 0.35s var(--ease-out); }
+.clipcard:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: 0 30px 70px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.clipcard video { transition: filter 0.35s; }
+.clipcard video:hover { filter: brightness(1.04); }
+
+/* sidebar nav: sliding feel */
+.snavbtn { position: relative; transition: color 0.18s, background 0.18s, transform 0.18s var(--ease-out); }
+.snavbtn:active { transform: scale(0.98); }
+.snavbtn.active { position: relative; }
+
+/* topbar live chip: breathing glow while a job runs */
+@keyframes breathe { 0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } 50% { box-shadow: 0 0 18px 0 rgba(255,255,255,0.18); } }
+.chip.live { animation: breathe 2.4s ease-in-out infinite; border-color: var(--line); color: var(--text); }
+
+/* progress bar: gradient flows while running */
+#jobbar { position: relative; overflow: hidden; }
+#jobbar::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.45) 50%, transparent 70%);
+  animation: shimmer 1.6s infinite;
+}
+
+/* screens: softer entrance fallback (GSAP handles the real choreography) */
+.screen { animation: screenin 0.45s var(--ease-out); }
+@keyframes screenin { from { opacity: 0; transform: translateY(10px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn::after, #jobbar::after { animation: none; display: none; }
+  .chip.live { animation: none; }
+  .clipcard, .btn { transition: none; }
+}

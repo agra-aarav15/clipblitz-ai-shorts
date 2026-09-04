@@ -12,15 +12,54 @@ let lastFailToast = 0;
 
 const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
-/* ---------- app-shell views ---------- */
+/* ---------- cinematic motion layer (GSAP; every call degrades gracefully offline) ---------- */
+const G = window.gsap || null;
+const EASE = 'power3.out';
+
+function revealScreen(name) {
+  if (!G) return;
+  const el = $(`screen-${name}`);
+  if (el) G.fromTo(el, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: EASE, clearProps: 'transform' });
+}
+
+/* app-shell views */
 const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'connect'];
 function showScreen(name) {
   SCREENS.forEach((s) => { $(`screen-${s}`).hidden = s !== name; });
   document.querySelectorAll('.snavbtn').forEach((b) =>
     b.classList.toggle('active', b.dataset.screen === name));
   const titles = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', connect: 'Connect' };
-  $('jobtitle').textContent = titles[name] || 'ClipBlitz';
+  const titleEl = $('jobtitle');
+  if (G && titleEl.textContent !== titles[name]) {
+    G.fromTo(titleEl, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.35, ease: EASE });
+  }
+  titleEl.textContent = titles[name] || 'ClipBlitz';
+  revealScreen(name);
   if (name === 'connect') { refreshSocial(); renderQueue(); }
+}
+
+/* first-load choreography: the shell assembles itself */
+(function intro() {
+  if (!G) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  G.timeline({ defaults: { ease: EASE } })
+    .from('.sidebar', { x: -28, opacity: 0, duration: 0.7 }, 0.05)
+    .from('.sidebar .snavbtn', { x: -14, opacity: 0, duration: 0.4, stagger: 0.05 }, 0.25)
+    .from('.topbar', { y: -14, opacity: 0, duration: 0.5 }, 0.35)
+    .from('#screen-studio .glass', { y: 22, opacity: 0, duration: 0.6, clearProps: 'transform' }, 0.45);
+})();
+
+/* magnetic buttons + specular follow */
+if (G) {
+  document.addEventListener('mousemove', (e) => {
+    const btn = e.target.closest && e.target.closest('.btn');
+    document.querySelectorAll('.btn.magnet').forEach(b => { if (b !== btn) { b.classList.remove('magnet'); G.to(b, { x: 0, y: 0, duration: 0.5, ease: EASE }); } });
+    if (!btn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = btn.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    btn.classList.add('magnet');
+    G.to(btn, { x: dx * 0.12, y: dy * 0.18, duration: 0.4, ease: EASE });
+  });
 }
 document.querySelectorAll('.snavbtn').forEach((b) =>
   b.addEventListener('click', () => showScreen(b.dataset.screen)));
@@ -400,12 +439,18 @@ function ensureClipCard(job, c, i) {
   let el = document.querySelector(`#clips .clipcard[data-clip="${i}"]`);
   if (!el) {
     el = document.createElement('article');
-    el.className = 'glass clipcard enter';
     el.dataset.clip = i;
     el.innerHTML = clipCardHTML(job, c, i);
     $('clips').appendChild(el);
-    setTimeout(() => el.classList.add('in'), 60);
     bindClipCard(el, job.id);
+    if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      el.className = 'glass clipcard';
+      G.fromTo(el, { autoAlpha: 0, y: 26, scale: 0.985 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.65, ease: EASE, delay: Math.min(i * 0.12, 0.5), clearProps: 'transform' });
+    } else {
+      el.className = 'glass clipcard enter';
+      setTimeout(() => el.classList.add('in'), 60);
+    }
     animateDial(el, c.score || 0);
     animateBars(el);
   } else {
@@ -426,8 +471,20 @@ function ensureClipCard(job, c, i) {
 function animateDial(el, score) {
   const fg = el.querySelector('.dial-fg'), num = el.querySelector('.dial-num');
   const C = 2 * Math.PI * 26;
+  const target = C * (1 - score / 100);
+  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    fg.style.strokeDashoffset = C;
+    G.to(fg, { strokeDashoffset: target, duration: 1.35, ease: 'power3.out' });
+    const counter = { v: 0 };
+    G.to(counter, {
+      v: score, duration: 1.35, ease: 'power3.out',
+      onUpdate: () => { num.textContent = Math.round(counter.v); },
+    });
+    setTimeout(() => { num.textContent = score; fg.style.strokeDashoffset = target; }, 1600); // must land regardless
+    return;
+  }
   requestAnimationFrame(() => {
-    fg.style.strokeDashoffset = (C * (1 - score / 100)).toFixed(1);
+    fg.style.strokeDashoffset = target.toFixed(1);
   });
   const t0 = performance.now(), dur = 1100;
   let done = false;
@@ -442,8 +499,17 @@ function animateDial(el, score) {
 }
 
 function animateBars(el) {
+  const bars = el.querySelectorAll('.fbar i');
+  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    G.to(bars, {
+      width: (idx, b) => (b.dataset.w || 0) + '%',
+      duration: 1.0, ease: 'power3.out', stagger: 0.07, delay: 0.25,
+    });
+    setTimeout(() => bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; }), 2200); // must land
+    return;
+  }
   setTimeout(() => {
-    el.querySelectorAll('.fbar i').forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; });
+    bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; });
   }, 120);
 }
 

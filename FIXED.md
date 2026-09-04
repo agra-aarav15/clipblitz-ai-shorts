@@ -179,3 +179,20 @@ with event weight 0.20):**
 | 3 | 67 | ◐ | 323–367s | Hamilton vs Perez mid-race story (honest unverified badge) |
 
 The battle that used to be invisible is now the #1 verified clip.
+
+---
+
+## Round 7 — the landing second + the cinematic shell
+
+**"The ending is just a millisecond missing"** — heard. New hard rule, engine untouched:
+
+| Change | What it does |
+|---|---|
+| **Landing pad (+1.0s)** | Every rendered clip now carries one extra second after its final word (`pipeline._render_clip`) — the payoff's last beat gets room to breathe. Verified live: 57.0s window → **58.04s render**. |
+| **Liquid light field** | Three slow-drifting blurred light orbs + film grain behind the glass — the space the panels refract (the "liquid" depth Apple-grade UIs have). Pure black/white, no color added. |
+| **GSAP choreography** | App-shell assembles itself on load (sidebar → nav → topbar → panels), screen transitions fade+rise, podium cards stagger in, score dials count up with eased arcs, factor bars cascade, buttons are magnetic with a specular sheen sweep. Everything respects `prefers-reduced-motion` and lands its final values even if rAF/GSAP is throttled in a background tab. |
+| **Type identity** | Space Grotesk (display: logo, titles, rank numerals, dial), Inter (body), IBM Plex Mono (every measurement: factor bars, timecodes, chips, diagnostics). |
+| **Premium detail** | Specular top-edge rim on every glass panel, hover lift + rim light on clip cards, breathing glow on the live chip, shimmer inside the progress bar, white-selection + rounded scrollbars, visible focus rings. |
+
+GSAP loads from CDN with full graceful degradation — no network, no motion, same function.
+The engine (moments/stories/judge/scores) is **byte-identical** to Round 6's verified state.

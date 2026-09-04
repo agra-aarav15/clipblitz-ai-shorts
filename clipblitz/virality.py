@@ -33,14 +33,16 @@ from .ffmpeg_tools import laughter_score  # measured audience-laughter scoring
 # the ENDING decides everything. A clip that lands is great even with a cold open
 # (the owner's favourite cut "started random but ended just fine"); a clip with a dead
 # ending is worthless no matter how clean the opening is.
-WEIGHTS = {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14}
+WEIGHTS = {"hook": 0.10, "story": 0.22, "payoff": 0.34, "energy": 0.14, "pacing": 0.12,
+           "event": 0.08}
 WEIGHT_PROFILES = {
-    "comedy":    {"hook": 0.09, "story": 0.20, "payoff": 0.38, "energy": 0.18, "pacing": 0.15},
-    "podcast":   {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14},
-    "interview": {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.16, "pacing": 0.14},
-    "speech":    {"hook": 0.12, "story": 0.24, "payoff": 0.36, "energy": 0.14, "pacing": 0.14},
-    "tutorial":  {"hook": 0.12, "story": 0.30, "payoff": 0.34, "energy": 0.10, "pacing": 0.14},
-    "vlog":      {"hook": 0.12, "story": 0.22, "payoff": 0.36, "energy": 0.16, "pacing": 0.14},
+    "comedy":    {"hook": 0.09, "story": 0.20, "payoff": 0.38, "energy": 0.18, "pacing": 0.15, "event": 0.00},
+    "podcast":   {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.14, "pacing": 0.12, "event": 0.04},
+    "interview": {"hook": 0.10, "story": 0.22, "payoff": 0.38, "energy": 0.14, "pacing": 0.12, "event": 0.04},
+    "speech":    {"hook": 0.12, "story": 0.24, "payoff": 0.36, "energy": 0.12, "pacing": 0.12, "event": 0.04},
+    "tutorial":  {"hook": 0.12, "story": 0.30, "payoff": 0.34, "energy": 0.10, "pacing": 0.14, "event": 0.00},
+    "vlog":      {"hook": 0.12, "story": 0.22, "payoff": 0.34, "energy": 0.16, "pacing": 0.12, "event": 0.04},
+    "sports":    {"hook": 0.08, "story": 0.16, "payoff": 0.34, "energy": 0.14, "pacing": 0.08, "event": 0.20},
 }
 
 # The hype class: intros/greetings/shoutouts feel "random" to a viewer who came for
@@ -57,24 +59,107 @@ MIN_CLIP_S = 18.0   # nothing shorter than a real beat (snippets feel random)
 MAX_CLIP_S = 75.0   # past this it's a scene, not a short
 
 
+def mine_moments(segments, duration, energy, laughs, scenes=None, want=12):
+    """MOMENT_PASS — find the video's PEAK EVENTS before any story mapping.
+    Signal = audio roar (crowd/engine/emotion) + scene-cut bursts + transcript heat
+    (superlatives, drama words, numbers). These become the anchors every later pass
+    must cover. Returns [{start, end, heat, roar, cuts, lines, heatwords}]."""
+    scenes = scenes or []
+    series, mean_db = energy if energy else ([], -30.0)
+
+    def _heat_words(text):
+        t = " ".join((text or "").lower().split())
+        n = 0
+        for w in ("win", "wins", "won", "title", "champion", "record", "history", "first",
+                  "last", "final", "battle", "fight", "against", "overtake", "overtakes",
+                  "crash", "huge", "incredible", "amazing", "unbelievable", "drama",
+                  "clash", "steals", "beats", "beaten", "beast", "legend", "greatest",
+                  "goes", "gone", "moment", "night", "decided", "decides", "dream"):
+            if w in t:
+                n += 1
+        return n
+
+    # per-segment heat from all three senses
+    scored = []
+    for idx, s in enumerate(segments):
+        if not (s.get("text") or s.get("words")) or s["end"] <= s["start"]:
+            continue
+        vals = [db for t, db in series if s["start"] <= t <= s["end"]]
+        roar = ((sum(vals) / len(vals)) - mean_db) if vals else 0.0
+        cuts = sum(1 for t in scenes if s["start"] <= t < s["end"])
+        heat = _heat_words(s.get("text", ""))
+        scored.append({"i": idx, "start": s["start"], "end": s["end"],
+                       "roar": roar, "cuts": cuts, "heat": heat})
+
+    # MOMENT grammar: dominant peak + its supporting context (before and after)
+    # — the payoff usually FOLLOWS the buildup, so the window is center-weighted forward.
+    scored.sort(key=lambda x: -(0.55 * max(0.0, x["roar"]) / 10.0 + 0.25 * x["cuts"]
+                                + 0.30 * x["heat"]))
+    picked = []
+    for seed in scored:
+        if all(abs(seed["start"] - p["start"]) > 75 for p in picked):
+            picked.append(seed)
+        if len(picked) >= want:
+            break
+    picked.sort(key=lambda x: x["i"])
+
+    moments = []
+    for p in picked:
+        # context: 1/3 before the seed, 2/3 after (payoff lives after the buildup)
+        pre = 25.0
+        post = 50.0
+        a = max(0.0, p["start"] - pre)
+        b = min(duration, p["end"] + post)
+        # extend forward to swallow the next roar peak if it starts within 25s
+        for s2 in segments:
+            if p["end"] < s2["start"] <= p["end"] + 25:
+                vals = [db for t, db in series if s2["start"] <= t <= s2["end"]]
+                if vals and (sum(vals) / len(vals)) - mean_db > 4.0:
+                    b = min(duration, max(b, s2["end"] + 4))
+                break
+        idxs = [q["i"] for q in scored if a <= q["start"] < b]
+        moments.append({
+            "start": round(a, 2), "end": round(b, 2), "seed": p["start"],
+            "heat": round(sum(q["heat"] for q in scored if a <= q["start"] < b), 1),
+            "roar": round(max((q["roar"] for q in scored if a <= q["start"] < b), default=0.0), 2),
+            "cuts": sum(q["cuts"] for q in scored if a <= q["start"] < b),
+            "lines": len(idxs),
+            "heatwords": _heat_words(" ".join(
+                s.get("text", "") for s in segments[p["i"]:p["i"] + 6])),
+        })
+    return moments
+
+
 def _weights(content_type):
     return WEIGHT_PROFILES.get((content_type or "").lower(), WEIGHTS)
+
+
+def has_brain():
+    """Live brain check — a key pasted into .env works on the very next job
+    (the old import-time CONFIG check silently disabled AI until a restart)."""
+    from .brains import brains
+    return bool(brains())
 
 
 STORY_PROMPT = """You are a long-form video editor watching a {content_hint} video via its transcript.
 Below is a timestamped transcript CHUNK ({chunk_no}/{chunks}) of a {duration:.0f}s video.
 
+MEASURED EXCITEMENT MAP (audio roar + camera-cut bursts, strongest first):
+{events_hint}
+These peaks are WHY the viewer is here. Every one of the strongest peaks must be covered
+by (or extend into) a story whose payoff IS that peak.
+
 Segment THIS CHUNK into self-contained STORIES: a moment with a beginning, a development,
 and an ENDING THAT LANDS — a joke and its laugh, a question and its answer, a claim and its
-payoff, a reveal and the reaction. Stories must NOT overlap and must cover the interesting
-parts of the chunk. EXCLUDE all channel/sponsor/greeting material (welcomes, shout-outs,
-subscribe plugs, intros) — only real content moments. 20-90s each.
+payoff, a reveal and the reaction, a battle and its winner. Stories must NOT overlap and
+must cover the interesting parts of the chunk. EXCLUDE all channel/sponsor/greeting material
+(welcomes, shout-outs, subscribe plugs, intros) — only real content moments. 20-90s each.
 
 Transcript chunk:
 {transcript}
 
 Return ONLY compact JSON, no markdown:
-{{"content_type": "podcast|tutorial|vlog|interview|speech|comedy|other",
+{{"content_type": "podcast|tutorial|vlog|interview|speech|comedy|sports|other",
 "stories": [{{"start": 12.5, "end": 48.0, "summary": "one line: what happens",
 "hook_line": "the spoken line that should open the short, <= 12 words",
 "payoff": "one line: how it lands/ends"}}]}}
@@ -208,14 +293,21 @@ def _sentences(segments, a=None, b=None):
 
 # ---------------------------------------------------------------- 1. story pass
 
-def segment_stories(segments, duration):
-    """LLM segments the whole episode into self-contained stories (chunked, merged)."""
+def segment_stories(segments, duration, moments=None):
+    """LLM segments the whole episode into self-contained stories (chunked, merged).
+    The measured moment map is injected so no story mapping can 'forget' the peaks."""
     stories, votes = [], {}
+    moments = moments or []
+    hot = sorted(moments, key=lambda m: -(m["heat"] + m["roar"] + m["cuts"] * 0.4))
+    events_hint = "\n".join(
+        f"- {m['start']:.0f}-{m['end']:.0f}s (roar +{m['roar']:.0f}dB, {m['cuts']} camera cuts)"
+        for m in hot[:6]) or "(no measured peaks)"
     chunks = _chunks(segments)
     for i, chunk in enumerate(chunks):
         prompt = STORY_PROMPT.format(
             content_hint="long-form" if len(chunks) > 1 else "short-form",
             chunk_no=i + 1, chunks=len(chunks), duration=duration,
+            events_hint=events_hint,
             transcript=_transcript(chunk)[:8500],
         )
         try:
@@ -251,39 +343,40 @@ def segment_stories(segments, duration):
     return stories, content_type
 
 
-def stories_offline(segments, duration, energy, laughs, want=14):
-    """No LLM: sentence-aligned windows ranked by measured laughter+energy."""
-    series, mean_db = energy if energy else ([], -30.0)
+def stories_offline(segments, duration, energy, laughs, moments=None, want=14):
+    """No LLM: windows ANCHORED ON measured peak moments (roar/cuts/heat) — center on
+    the peak with forward context (the payoff follows the buildup) instead of the old
+    consecutive-sentence slicing that produced random windows."""
+    moments = moments or []
     sents = [s for s in segments if (s.get("text") or s.get("words")) and s["end"] > s["start"]]
     if not sents:
         return []
-    out, i = [], 0
-    while i < len(sents):
-        a = sents[i]["start"]
-        j = i
-        while j < len(sents) - 1 and sents[j]["end"] - a < 30:
-            j += 1
-        b = max(sents[j]["end"], a + 12)
-        b = min(b, a + 90, duration)
-        if b - a >= 10:
-            laugh = laughter_score(laughs or [], a, b)
-            vals = [db for t, db in series if a <= t <= b]
-            energy_f = 1.0 / (1.0 + math.exp(-((sum(vals) / len(vals)) - mean_db) / 3.0)) if vals else 0.45
-            out.append({"start": a, "end": b,
-                        "summary": _text_in(segments, a, b, 90),
-                        "hook_line": " ".join(w["word"] for w in _words_in(segments, a, a + 4)[:10]),
-                        "payoff": "",
-                        "_signal": 0.6 * laugh + 0.4 * energy_f})
-        i = j + 1
-    out.sort(key=lambda s: -s["_signal"])
+
+    seeds = []
+    for m in moments:
+        if m["end"] - m["start"] >= 6 or m.get("roar", 0) > 2 or m.get("heat", 0) > 0:
+            seeds.append(m["seed"])
+    if not seeds:  # no measured peaks either: fall back to transcript-gap boundaries
+        seeds = [s["start"] for s in sents[::max(1, len(sents) // 14)]]
+
     picked = []
-    for st in out:
-        if all(abs(st["start"] - p["start"]) > 90 for p in picked):
-            picked.append(st)
+    for seed in sorted(seeds):
+        a = max(0.0, seed - 22.0)
+        # end: the last sentence ending within 48s of the seed (the payoff tail)
+        tail = [s["end"] for s in sents if seed <= s["end"] <= seed + 48]
+        b = min(duration, max(tail) if tail else seed + 30)
+        if b - a < MIN_CLIP_S:
+            b = min(duration, a + MIN_CLIP_S + 4)
+        if b - a > 90:
+            ok = [s["end"] for s in sents if a + MIN_CLIP_S <= s["end"] <= a + 90]
+            b = max(ok) if ok else a + 90
+        if b - a >= 10:
+            picked.append({"start": a, "end": b,
+                           "summary": _text_in(segments, a, b, 90),
+                           "hook_line": " ".join(w["word"] for w in _words_in(segments, a, a + 4)[:10]),
+                           "payoff": ""})
         if len(picked) >= want:
             break
-    for st in picked:
-        st.pop("_signal", None)
     return picked
 
 
@@ -388,15 +481,17 @@ def reaction_post_roll(cands, laughs, duration, segments, look_ahead=8.0, max_ex
 
 # ---------------------------------------------------------------- 2. draft pass
 
-def draft_cuts(stories, segments, laughs, energy, content_type, duration):
-    """Pre-rank stories by measured signal, then batched LLM calls drafting the
-    tightest cut inside each — with the full story transcript in context."""
+def draft_cuts(stories, segments, laughs, energy, content_type, duration, moments=None):
+    """Pre-rank stories by measured signal (laughter, energy, AND peak-moment coverage),
+    then batched LLM calls drafting the tightest cut inside each, with the full story
+    transcript in context."""
     series, mean_db = energy if energy else ([], -30.0)
     for st in stories:
         laugh = laughter_score(laughs or [], st["start"], st["end"])
         vals = [db for t, db in series if st["start"] <= t <= st["end"]]
         energy_f = 1.0 / (1.0 + math.exp(-((sum(vals) / len(vals)) - mean_db) / 3.0)) if vals else 0.45
-        st["_signal"] = 0.45 * laugh + 0.55 * energy_f
+        st["_signal"] = (0.30 * laugh + 0.30 * energy_f
+                         + 0.40 * _event_factor(moments or [], st["start"], st["end"]))
     stories.sort(key=lambda s: -s["_signal"])
     shortlist = []
     for st in stories:  # keep spread: min 90s apart
@@ -411,11 +506,17 @@ def draft_cuts(stories, segments, laughs, energy, content_type, duration):
         payload = []
         for k, st in enumerate(batch):
             sents = _sentences(segments, st["start"], st["end"])
-            payload.append({
+            entry = {
                 "index": k, "summary": st["summary"], "payoff": st["payoff"],
                 "hook_line": st["hook_line"],
                 "transcript": "\n".join(f"[{s['start']:.1f}] {s['text']}" for s in sents)[:1800],
-            })
+            }
+            hit = _event_factor(moments or [], st["start"], st["end"])
+            if hit >= 0.3:
+                entry["measured_peak_inside"] = (
+                    "the video's audio/camera energy peaks here — the payoff of your cut "
+                    "SHOULD be this peak")
+            payload.append(entry)
         try:
             data = _parse_json(ai_chat({
                 "model": CONFIG["ai_model"],
@@ -471,9 +572,28 @@ def _pacing(segments, a, b):
     return math.exp(-((wps - 2.8) ** 2) / (2 * 0.9 ** 2))
 
 
-def measure(cands, segments, energy, laughs):
+def _event_factor(moments, a, b):
+    """0-1: how much of the video's measured peak excitement (roar/cuts/heat) falls
+    inside the cut — 'does this clip contain THE moment'."""
+    if not moments:
+        return 0.0
+    best = 0.0
+    for m in moments:
+        ms, me = m["start"], m["end"]
+        overlap = min(b, me) - max(a, ms)
+        if overlap <= 0:
+            continue
+        cover = overlap / max(1.0, me - ms)          # how much of the moment we hold
+        contains_seed = (ms <= m.get("seed", ms) <= b)  # the peak instant itself inside
+        strength = min(1.0, (m["heat"] + m["roar"] + 0.5 * m["cuts"]) / 8.0)
+        best = max(best, min(1.0, (0.65 if contains_seed else 0.4) * cover + 0.35 * strength))
+    return best
+
+
+def measure(cands, segments, energy, laughs, moments=None):
     """Deterministic factors per cut (no AI): energy (laugh-boosted), pacing, laughter,
-    and the tail laugh — how hard the ENDING lands (the owner's #1 criterion)."""
+    the tail laugh — how hard the ENDING lands — and event coverage (the measured peak
+    moments of the video this cut actually contains)."""
     series, mean_db = energy if energy else ([], -30.0)
     for c in cands:
         if not isinstance(c, dict):
@@ -487,7 +607,8 @@ def measure(cands, segments, energy, laughs):
         c["laugh"] = laugh
         c["tail_laugh"] = tail_laugh
         c["measured"] = {"energy": energy_f, "pacing": _pacing(segments, a, b),
-                         "laughter": laugh, "tail_laugh": tail_laugh}
+                         "laughter": laugh, "tail_laugh": tail_laugh,
+                         "event": _event_factor(moments or [], a, b)}
     return cands
 
 
@@ -583,7 +704,9 @@ def _verdict_reason(j, c):
 def score_v2(cand, j, content_type):
     """Score from the judge's ratings of the exact cut + measured factors.
     Payoff (the ending) dominates — the owner's taste, learned from real renders.
-    A dead ending also caps the whole score: nothing random survives at the top."""
+    A dead ending also caps the whole score: nothing random survives at the top.
+    The event factor keeps a cut that contains the video's peak moment ranked even
+    when the commentary transcript is sparse (races, gaming, vlogs)."""
     w = _weights(content_type)
     factors = {
         "hook": max(0.0, min(1.0, _score10(j.get("hook")) / 10.0)),
@@ -591,16 +714,21 @@ def score_v2(cand, j, content_type):
         "payoff": max(0.0, min(1.0, _score10(j.get("payoff")) / 10.0)),
         "energy": cand["measured"]["energy"],
         "pacing": cand["measured"]["pacing"],
+        "event": cand["measured"].get("event", 0.0),
     }
     # tail laugh is a measured payoff signal: fold it into payoff (max wins, both count)
     if cand["measured"].get("tail_laugh", 0) > 0:
         factors["payoff"] = max(factors["payoff"], 0.35 + 0.65 * cand["measured"]["tail_laugh"])
-    blend = sum(w[k] * v for k, v in factors.items())
+    blend = sum(w.get(k, 0.0) * v for k, v in factors.items())
+    wsum = sum(w.get(k, 0.0) for k in factors) or 1.0
+    blend = blend / wsum  # profiles may skip a factor — keep the blend on the 0-1 scale
     score = int(round(30 + 69 * (blend ** 1.15)))
     if j.get("ends_abrupt"):            # hard cap: a dead ending can never score high
         score = min(score, 55)
     if not j.get("alone", True):
         score = min(score, 45)
+    if factors["event"] >= 0.7:         # contains the video's measured peak event
+        score = min(99, score + 4)
     cand["factors"] = {k: int(round(v * 100)) for k, v in factors.items()}
     cand["factors"]["laughter"] = int(round(cand["measured"]["laughter"] * 100))
     cand["score"] = max(1, min(99, score))
@@ -631,21 +759,27 @@ def rejudge(clips, segments, content_type):
     return verified
 
 
-def rank(segments, duration, count=3, energy=None, laughs=None):
+def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None):
     """Full ProX v5 pass. Returns (final_moments, all_candidates, picker, content_type)."""
-    ai_ok = bool(CONFIG["ai_key"])
+    from .brains import brains  # live check: a key pasted mid-session works without restart
+    ai_ok = bool(brains())
     content_type, picker = "other", "prox-offline"
+
+    # 0) MOMENT PASS — measure the video's peak events first. Every later pass
+    #    (stories, drafts, scoring) is anchored to these; a clip that misses them
+    #    cannot win, no matter how neat its transcript reads.
+    moments = mine_moments(segments, duration, energy, laughs, scenes)
 
     # 1) stories
     stories = []
     if ai_ok:
         try:
-            stories, content_type = segment_stories(segments, duration)
+            stories, content_type = segment_stories(segments, duration, moments)
             picker = "prox-editor"
         except Exception:
             stories = []
     if not stories:
-        stories = stories_offline(segments, duration, energy, laughs)
+        stories = stories_offline(segments, duration, energy, laughs, moments=moments)
     if not stories:
         return _even_windows(duration, count), [], "prox-windows", content_type
 
@@ -660,7 +794,7 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
     for c in cands:
         snap(c, segments, duration)
     extend_through_laughter(cands, laughs, duration, segments)
-    measure(cands, segments, energy, laughs)
+    measure(cands, segments, energy, laughs, moments)
     cands.sort(key=lambda c: -(0.5 * c["measured"]["laughter"] + 0.3 * c["measured"]["energy"]
                                + 0.2 * c["measured"]["pacing"]))
 
@@ -683,12 +817,12 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
                 # ending failures get the deterministic fix first: ride the next laugh out
                 if dead_ending:
                     extend_through_laughter([c], laughs, duration, segments, max_ext=20.0)
-                    measure(c, segments, energy, laughs)
+                    measure(c, segments, energy, laughs, moments)
                 if judge_fail(j) or not dead_ending:
                     if repair_cut(c, complaint, segments, duration):
                         snap(c, segments, duration)
                         extend_through_laughter([c], laughs, duration, segments)
-                        measure(c, segments, energy, laughs)
+                        measure(c, segments, energy, laughs, moments)
         try:  # re-judge (windows may have moved)
             judgements = judge_cuts(top_pool, segments)
         except Exception:
@@ -722,7 +856,12 @@ def rank(segments, duration, count=3, energy=None, laughs=None):
 
     passing = [c for c in top_pool if _ends_well(c)]
     rest = [c for c in top_pool if not _ends_well(c)]
-    rest.sort(key=lambda c: -(c["measured"].get("tail_laugh", 0) + c["measured"].get("laughter", 0)))
+    # event-first ordering: a cut that contains a measured peak moment beats an
+    # equally-scoring cut that doesn't (this is what used to bury the F1 battle)
+    passing.sort(key=lambda c: -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6)))
+    rest.sort(key=lambda c: -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6)
+                              + c["measured"].get("tail_laugh", 0)
+                              + c["measured"].get("laughter", 0)))
     picked = []
     for c in passing + rest:
         if len(picked) >= count:
@@ -760,7 +899,7 @@ def rank_single(segments, duration, energy, start, end):
             "hook": "", "reason": "your manual selection"}
     snap(cand, segments, duration)
     measure([cand], segments, energy, None)
-    if CONFIG["ai_key"]:
+    if has_brain():
         try:
             j = judge_cuts([cand], segments)[0]
             score_v2(cand, j, "custom")
@@ -787,7 +926,7 @@ Return ONLY compact JSON, no markdown. For each clip, matching by index:
     payload_clips = [{"index": i, "title": c.get("title", ""), "hook": c.get("hook", ""),
                       "verbatim": _clip_verbatim(segments, c["start"], c["end"], 600)}
                      for i, c in enumerate(clips)]
-    if CONFIG["ai_key"]:
+    if has_brain():
         try:
             out = _as_list(_parse_json(ai_chat({
                 "model": CONFIG["ai_model"],

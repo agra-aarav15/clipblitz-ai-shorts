@@ -72,6 +72,21 @@ def speech_segments(wav):
     return segments or [{"start": 0.0, "end": round(total, 2)}]
 
 
+def scene_cuts(video, threshold=0.30):
+    """Camera/scene change timestamps — the visual second pair of eyes. Peaks in
+    cut-rate coincide with action (battles, goals, reveals) even when the transcript
+    is sparse commentary. Returns sorted [t, ...]."""
+    try:
+        proc = subprocess.run(
+            [ffmpeg(), "-i", video, "-vf",
+             f"scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
+             "-an", "-f", "null", "-"],
+            capture_output=True, text=True, errors="replace", timeout=900)
+        return sorted(float(m) for m in re.findall(r"pts_time:([\d.]+)", proc.stdout))
+    except Exception:
+        return []
+
+
 def loudness_profile(wav, bucket=0.5):
     """Per-bucket RMS loudness (dBFS) for the virality engine's energy factor.
     Returns (series, mean_db): series is a list of (t_mid, rms_db) samples."""
@@ -206,6 +221,39 @@ def _demo_voice(wav_path):
         return os.path.isfile(wav_path) and os.path.getsize(wav_path) > 100000
     except Exception:
         return False
+
+
+def excitement_peaks(series, mean_db, top_frac=0.30, merge_gap=6.0):
+    """Crowd/engine ROAR peaks: where loudness runs hot well above the video's own
+    baseline. For a race this is the battle, the overtake, the win — commentary is
+    sparse there, but the audio never lies. Returns [(start, end, heat)] regions,
+    strongest last."""
+    if len(series) < 8:
+        return []
+    dbs = sorted(db for _, db in series)
+    thresh = dbs[max(0, int(len(dbs) * (1.0 - top_frac)))]
+    raw, cur = [], None
+    for t, db in series:
+        if db >= thresh:
+            if cur is None:
+                cur = [t, t, db - mean_db]
+            else:
+                cur[1] = t
+                cur[2] = max(cur[2], db - mean_db)
+        else:
+            if cur:
+                raw.append(cur)
+            cur = None
+    if cur:
+        raw.append(cur)
+    merged = []
+    for r in raw:
+        if merged and r[0] - merged[-1][1] <= merge_gap:
+            merged[-1][1] = r[1]
+            merged[-1][2] = max(merged[-1][2], r[2])
+        else:
+            merged.append(r)
+    return [(round(a, 2), round(b, 2), round(h, 2)) for a, b, h in merged if b - a >= 4.0]
 
 
 def laughter_regions(wav, base_wav=None):

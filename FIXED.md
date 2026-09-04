@@ -151,3 +151,31 @@ The full engine rewrite (your verdict: clips started/ended randomly, told no sto
 scores 76/68/66 follow the verdicts, laugh coverage 100/100/61, honest `unverified` badges on
 clips the judge didn't fully clear (Groq free-tier daily quota ran low during testing — paste a
 free Gemini key in .env and the judge stops getting rate-limited).
+
+---
+
+## Round 6 — MOMENT_PASS: the engine finds the peak event (F1 test)
+
+Your test: the Abu Dhabi 2021 short film. Verdict then: random clips, random starts, and the
+**Verstappen–Hamilton last-lap battle + win — the entire point of the video — was nowhere on the podium.**
+
+Root causes found, in order of discovery:
+
+| # | Problem | Fix |
+|---|---|---|
+| 1 | **`.env` was wiped** in the system restart (3 bytes left) → `brains: []` → every job silently ran in offline mode → random windows | Restored the Groq key; **live brain checks** replace the stale import-time check (a key pasted into .env now works on the very next job, no restart) |
+| 2 | **Transcript-first blindness**: a race's money moment is crowd roar + camera churn, not narration | New **MOMENT_PASS** (`mine_moments`): scores every transcript block by audio roar vs baseline + camera-cut bursts + drama-words heat; peaks become anchors every later pass must cover. Story prompt now carries the excitement map; story/draft/podium ranking all event-weighted; **new `event` factor** shown in the UI |
+| 3 | STT **413** on 14-min audio: race audio never drops below -30dB, so the chunk planner picked ffmpeg's **EOF marker as a "silence"** and shipped the whole file in one request | `_plan_chunks` filters false EOF silences + clamps every part ≤700s (verified: 27.7MB → 22.4+2.3MB parts) |
+| 4 | STT **404**: `whisper-1` is OpenAI's model name; Groq serves `whisper-large-v3(-turbo)` (both deprecated today: llama-3.1-8b too) | STT model resolved **per provider base** (groq → `whisper-large-v3-turbo`), plus a 404 self-heal retry on the known alternate name |
+| 5 | Offline fallback produced consecutive-sentence windows | `stories_offline` now **moment-snapped**: windows anchor on measured peaks with forward context (payoff follows buildup) |
+
+**Verified on the same F1 film (job e54d3c0e, picker `prox-editor`, auto-detected `sports` profile
+with event weight 0.20):**
+
+| rank | score | qc | window | content |
+|---|---|---|---|---|
+| 1 | **81** | ✓ verified | 594–651s | "Final Lap Drama: Verstappen Snatches Championship" — the battle, the lunge, **"takes the lead of the race"** as the ending |
+| 2 | 74 | ✓ verified | 694–721s | the title-winning aftermath — "Mercedes not happy, Red Bull will be delighted" |
+| 3 | 67 | ◐ | 323–367s | Hamilton vs Perez mid-race story (honest unverified badge) |
+
+The battle that used to be invisible is now the #1 verified clip.

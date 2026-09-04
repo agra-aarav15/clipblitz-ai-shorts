@@ -319,7 +319,7 @@ async function loadFull(jobLight) {
 }
 
 /* ---------- surgical clip rendering ---------- */
-const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing' };
+const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing', event: 'Event' };
 const PLATFORM_LABEL = { youtube: '▶️ YouTube', tiktok: '🎵 TikTok', instagram: '📸 Instagram', facebook: '👤 Facebook', x: '𝕏 Post' };
 const PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook', 'x'];
 

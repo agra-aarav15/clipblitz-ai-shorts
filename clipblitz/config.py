@@ -28,6 +28,7 @@ CONFIG = {
     "ai_model": os.environ.get("CB_AI_MODEL", "gpt-4o-mini"),
     # speech-to-text: auto | api | local | heuristic
     "stt": os.environ.get("CB_STT", "auto"),
+    # whisper-1 is OpenAI's name; Groq serves whisper-large-v3 — resolved per base below
     "stt_model": os.environ.get("CB_STT_MODEL", "whisper-1"),
     "whisper_model": os.environ.get("CB_WHISPER_MODEL", "tiny"),
     # v2: clips + social
@@ -36,6 +37,12 @@ CONFIG = {
     "yt_client_id": os.environ.get("CB_YT_CLIENT_ID", ""),
     "yt_client_secret": os.environ.get("CB_YT_CLIENT_SECRET", ""),
 }
+
+# The whisper model name depends on the provider: OpenAI = whisper-1,
+# Groq = whisper-large-v3(-turbo). Resolve the default from the base URL.
+if os.environ.get("CB_STT_MODEL", "").strip() == "":
+    CONFIG["stt_model"] = ("whisper-large-v3-turbo" if "groq" in CONFIG["ai_base"]
+                           else "whisper-1")
 
 # locate ffmpeg: env dir → repo bin/ portable download → PATH
 _ffdir = os.environ.get("CB_FFMPEG_DIR") or ""

@@ -20,6 +20,7 @@ from .config import CONFIG, ffmpeg
 
 # 16 kHz mono 16-bit WAV = 32 000 bytes/sec; providers cap uploads at 25 MB.
 MAX_PART_SECS = 700  # ~22.4 MB per part, safely under the cap
+_FALLBACK_STT_MODEL = "whisper-large-v3"  # if the configured name 404s (provider churn)
 
 
 def _multipart(wav, model, word_granularity):
@@ -109,13 +110,19 @@ def _api_one(wav):
     """One provider call for one (already size-safe) wav file."""
     url = f"{CONFIG['ai_base'].rstrip('/')}/audio/transcriptions"
 
-    def call(word_granularity):
-        body, boundary = _multipart(wav, CONFIG["stt_model"], word_granularity)
+    def call(word_granularity, model=None):
+        body, boundary = _multipart(wav, model or CONFIG["stt_model"], word_granularity)
         return _post(url, body, boundary)
 
     try:
         data = call(True)          # word timings if the provider supports them
     except urllib.error.HTTPError as e:
+        if e.code == 404:          # model name the provider retired — try the known one
+            try:
+                data = call(True, model=_FALLBACK_STT_MODEL)
+                return _api_segments(data, wav)
+            except urllib.error.HTTPError:
+                pass               # fall through to the plain-granularity retries below
         if e.code not in (400, 422):
             raise
         data = call(False)         # provider rejected word granularity — retry plain
@@ -135,14 +142,33 @@ def _api_one(wav):
     return []
 
 
+def _api_segments(data, wav):
+    """Shared shape-tolerant conversion of a provider transcription response."""
+    words = [w for w in (data.get("words") or []) if (w.get("word") or "").strip()
+             and w.get("end", 0) > w.get("start", 0)]
+    segments = data.get("segments") or []
+    if segments:
+        out = [{"start": s["start"], "end": s["end"], "text": s["text"].strip()}
+               for s in segments if s.get("text", "").strip()]
+        return _attach_words(out, words)
+    if words:
+        return _segments_from_words(words)
+    if data.get("text"):
+        return [{"start": 0.0, "end": ffmpeg_tools.duration_of(wav),
+                 "text": data["text"], "words": []}]
+    return []
+
+
 def _plan_chunks(wav, total):
-    """Split a long wav into <MAX_PART_SECS parts, cutting at silence midpoints."""
-    silences = []
+    """Split a long wav into <MAX_PART_SECS parts, cutting at silence midpoints.
+    Silence midpoints that sit at the very end of the file are ffmpeg's EOF marker,
+    not real pauses (race/engine audio never drops below -30dB) — they must never
+    be chosen as a cut, or the whole file goes out as one oversized request (413)."""
     proc = ffmpeg_tools.run([ffmpeg(), "-i", wav, "-af", "silencedetect=noise=-30dB:d=0.5",
                              "-f", "null", "-"], timeout=600)
     starts = [float(m) for m in re.findall(r"silence_start: ([\d.]+)", proc.stderr)]
     ends = [float(m) for m in re.findall(r"silence_end: ([\d.]+)", proc.stderr)]
-    silences = list(zip(starts, ends))
+    silences = [(s, e) for s, e in zip(starts, ends) if s < total * 0.98 and e <= total * 0.995]
 
     chunks, cursor = [], 0.0
     while total - cursor > MAX_PART_SECS:
@@ -150,7 +176,7 @@ def _plan_chunks(wav, total):
         cut = None
         for s, e in silences:  # nearest silence midpoint around the target
             mid = (s + e) / 2
-            if cut is None or abs(mid - target) < abs(cut - target):
+            if cursor + 60 < mid < total - 30 and (cut is None or abs(mid - target) < abs(cut - target)):
                 cut = mid
         if cut is None or cut <= cursor + 60:
             cut = cursor + MAX_PART_SECS  # no usable silence — hard split

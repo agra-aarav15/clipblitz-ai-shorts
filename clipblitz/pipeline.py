@@ -151,9 +151,12 @@ def process(job_id, src_path):
 
         _set(job_, stage="reading the audio's energy profile", progress=12)
         energy = ffmpeg_tools.loudness_profile(wav)
-        _set(job_, stage="detecting audience laughter (acoustic)", progress=16)
+        _set(job_, stage="detecting audience laughter (acoustic)", progress=14)
         laughs = ffmpeg_tools.laughter_regions(wav)
         _set(job_, laughs=len(laughs))
+        _set(job_, stage="finding the peak moments (audio + camera cuts)", progress=17)
+        scenes = ffmpeg_tools.scene_cuts(src_path)
+        _set(job_, scenes=len(scenes))
 
         _set(job_, stage="transcribing", progress=20)
         mode = stt_mode()
@@ -163,7 +166,8 @@ def process(job_id, src_path):
 
         _set(job_, stage=f"ProX engine: mining + measuring candidates", progress=52)
         moments, candidates, picker, content_type = virality.rank(
-            segments, duration, count=CONFIG["top_n"], energy=energy, laughs=laughs)
+            segments, duration, count=CONFIG["top_n"], energy=energy, laughs=laughs,
+            scenes=scenes)
         _set(job_, mode=f"{mode}+{picker}", content_type=content_type, picker=picker,
              candidates=[{k: c[k] for k in c if k != "meta"} for c in candidates])
         if not moments:
@@ -197,7 +201,7 @@ def process(job_id, src_path):
 
         # QC re-check: if the judge was rate-limited during the run, cool down and retry
         # — verdicts/scores refresh without re-rendering (windows never change here).
-        if CONFIG["ai_key"] and any(c.get("qc") != "verified" for c in job_["clips"]):
+        if virality.has_brain() and any(c.get("qc") != "verified" for c in job_["clips"]):
             _set(job_, status="running", progress=98, stage="QC judge re-check (rate-limit cooldown)")
             time.sleep(40)
             try:

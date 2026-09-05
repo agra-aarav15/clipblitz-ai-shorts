@@ -112,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 yt_ok = social.youtube_channel() is not None  # real token check
             from .brains import brains
             return self._json(200, {
-                "ok": True, "name": "ClipBlitz", "version": "3.3.0",
+                "ok": True, "name": "ClipBlitz", "version": "3.4.0",
                 "engine": "ProX v5", "ffmpeg": ffmpeg_available(), "stt": stt_mode(),
                 "ai_picker": bool(brains()), "top_n": CONFIG["top_n"],
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,

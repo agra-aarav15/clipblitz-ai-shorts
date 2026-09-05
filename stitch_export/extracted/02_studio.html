@@ -1,0 +1,187 @@
+<aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside><div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full">
+<div class="relative w-full max-w-6xl mx-auto px-4 py-8 flex flex-col items-center">
+<!-- Ambient Lighting Halo behind Cockpit Input Zone -->
+<div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[320px] bg-primary/[0.04] rounded-full blur-[140px] pointer-events-none -z-10"></div>
+<!-- Header Cockpit Typography -->
+<div class="w-full text-center flex flex-col items-center mt-2 mb-10">
+<div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.03] backdrop-blur-xl mb-6 shadow-sm">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Autonomous Processing Array</span>
+</div>
+<h1 class="font-display-xl text-display-xl text-primary font-semibold tracking-[-0.025em] max-w-4xl text-center leading-none mb-4">
+        Any video in. Shorts that land.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl text-center font-normal">
+        The ProX v5 AI editor finds the peak moments, cuts complete stories, and judges every ending.
+      </p>
+</div>
+<!-- Massive YouTube Input Liquid Capsule -->
+<div class="w-full max-w-4xl group relative mb-5">
+<div class="h-20 bg-white/[0.04] backdrop-blur-2xl rounded-[28px] px-6 flex items-center justify-between shadow-2xl transition-all duration-300 group-hover:bg-white/[0.06] group-focus-within:bg-white/[0.07] group-focus-within:shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+<div class="flex items-center gap-4 flex-1 mr-4">
+<div class="w-10 h-10 rounded-full bg-white/[0.05] flex items-center justify-center text-primary/70 group-focus-within:text-primary transition-colors shrink-0">
+<span class="material-symbols-outlined text-[22px]">link</span>
+</div>
+<input autocomplete="off" class="font-body-md text-body-md text-primary bg-transparent outline-none w-full placeholder:text-on-surface-variant/40 focus:placeholder:text-on-surface-variant/20 tracking-normal" id="url-input" placeholder="Paste a YouTube link — youtu.be/…" spellcheck="false" type="text"/>
+</div>
+<button class="bg-primary text-on-primary font-semibold font-body-sm text-body-sm tracking-wider px-8 py-4 rounded-full transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center gap-2.5 cursor-pointer shrink-0" id="make-clips-btn">
+<span>MAKE CLIPS</span>
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+</button>
+</div>
+</div>
+<!-- Dashed Glass Dropzone -->
+<div class="w-full max-w-4xl relative mb-6">
+<div class="w-full bg-white/[0.02] backdrop-blur-md rounded-[24px] py-9 px-8 flex flex-col items-center justify-center text-center transition-all duration-300 hover:bg-white/[0.04] cursor-pointer group" id="dropzone">
+<div class="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center text-primary/30 group-hover:text-primary/70 group-hover:scale-110 transition-all duration-300 mb-3">
+<span class="material-symbols-outlined text-[26px]">upload_file</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-on-surface-variant/60 group-hover:text-on-surface-variant transition-colors">or drop an MP4 here</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">up to 2 GB</span>
+</div>
+</div>
+</div>
+<!-- Option Chips Interactive Bar -->
+<div class="flex flex-wrap items-center justify-center gap-3 mb-16 w-full max-w-4xl">
+<div class="relative group/chip">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Clips</span>
+<span class="text-primary font-medium">3</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative group/chip">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Captions</span>
+<span class="text-primary font-medium">wordpop</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative group/chip">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Framing</span>
+<span class="text-primary font-medium">blur-pad 9:16</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative group/chip">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Language</span>
+<span class="text-primary font-medium">auto</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Recent Jobs Glass Rail Section -->
+<div class="w-full max-w-5xl flex flex-col">
+<div class="flex items-center justify-between mb-4 px-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary/40 text-[16px]">history</span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant/60">RECENT JOBS</span>
+</div>
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant/40">
+<span>PIPELINE</span>
+<span class="text-primary">3 READY</span>
+</div>
+</div>
+<!-- 3 Glass Card Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+<!-- Job Card 1 -->
+<div class="bg-white/[0.03] backdrop-blur-2xl rounded-[22px] p-4 flex items-center justify-between hover:bg-white/[0.06] transition-all duration-300 group cursor-pointer shadow-lg">
+<div class="flex items-center gap-3.5 min-w-0">
+<!-- 9:16 Miniature Vertical Preview Frame -->
+<div class="w-11 h-16 rounded-[10px] overflow-hidden relative bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="A dramatic high-speed Formula 1 night race in Abu Dhabi with neon circuit lights reflecting on asphalt, cinematic shallow depth of field, high contrast monochrome film grain atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATlAlFbxoZMaFfxolNAr3zhPwV0tBGQOzqqZ0-GtqmMgqdsd_KLEM4vnSbdelySVedA18ATg8CQyh58dBnCDLq14-F97u6D1zpx_qxXMCSVDEaw-CgRVbpgiCIduMbDRIX-Y2upgrhrii_ltluoAguq0Ni9b-UF5hdeJ28oL9PQHT-E19kTNKKlIH10mq3LBsta0YUl6bGno91PoLGG50ZJU4CIKcOIPEqxVSBq1hHnRjTYbSm3yr52Q"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[9px] text-primary/90 leading-none">9:16</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[15px] font-semibold text-primary truncate group-hover:text-primary transition-colors">
+                That Night in Abu Dhabi
+              </span>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60">14:26</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">2m ago</span>
+</div>
+</div>
+</div>
+<!-- Circular Score Ring Badge (Score 81) -->
+<div class="relative w-12 h-12 flex items-center justify-center shrink-0 ml-2">
+<svg class="w-12 h-12 -rotate-90" viewbox="0 0 44 44">
+<circle cx="22" cy="22" fill="none" r="18" stroke="rgba(255, 255, 255, 0.08)" stroke-width="3"></circle>
+<circle class="drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" cx="22" cy="22" fill="none" r="18" stroke="#ffffff" stroke-dasharray="113.1" stroke-dashoffset="21.5" stroke-linecap="round" stroke-width="3"></circle>
+</svg>
+<div class="absolute flex flex-col items-center justify-center">
+<span class="font-headline-sm text-sm font-bold text-primary leading-none">81</span>
+</div>
+</div>
+</div>
+<!-- Job Card 2 -->
+<div class="bg-white/[0.03] backdrop-blur-2xl rounded-[22px] p-4 flex items-center justify-between hover:bg-white/[0.06] transition-all duration-300 group cursor-pointer shadow-lg">
+<div class="flex items-center gap-3.5 min-w-0">
+<!-- 9:16 Miniature Vertical Preview Frame -->
+<div class="w-11 h-16 rounded-[10px] overflow-hidden relative bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Intense high-focus esports streamer gaming desk setup with glowing keyboard, sleek monitor reflections, minimal dark aesthetic with subtle edge lights and smoke atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAEvG41nn0AGLghpyOScBG3y1syZbw2yTq6dPNli6_EN6Ewm1P9o_LSkHZYgmWR0nre3qdklAlsJQBWZJhR0s5K2kEG3eTwmlUYEBszMKf7m-H-DWOEYAoL9Rii6IJWteSwlpa1oSGbY433lpHeB0xU9s0_o_4I1UpTah0MPs2EPBu6UeI9LrT0eGJMW1Dmbv3cyEX5Q4hVyHP9prhrHH1uwYyfNlTPxqvZHqq-raK2iEHthcfbuXIMlw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[9px] text-primary/90 leading-none">9:16</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[15px] font-semibold text-primary truncate group-hover:text-primary transition-colors">
+                Gaming Vlog
+              </span>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60">28:10</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">Yesterday</span>
+</div>
+</div>
+</div>
+<!-- Circular Score Ring Badge (Score 55) -->
+<div class="relative w-12 h-12 flex items-center justify-center shrink-0 ml-2">
+<svg class="w-12 h-12 -rotate-90" viewbox="0 0 44 44">
+<circle cx="22" cy="22" fill="none" r="18" stroke="rgba(255, 255, 255, 0.08)" stroke-width="3"></circle>
+<circle class="drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" cx="22" cy="22" fill="none" r="18" stroke="#ffffff" stroke-dasharray="113.1" stroke-dashoffset="50.9" stroke-linecap="round" stroke-width="3"></circle>
+</svg>
+<div class="absolute flex flex-col items-center justify-center">
+<span class="font-headline-sm text-sm font-bold text-primary leading-none">55</span>
+</div>
+</div>
+</div>
+<!-- Job Card 3 -->
+<div class="bg-white/[0.03] backdrop-blur-2xl rounded-[22px] p-4 flex items-center justify-between hover:bg-white/[0.06] transition-all duration-300 group cursor-pointer shadow-lg">
+<div class="flex items-center gap-3.5 min-w-0">
+<!-- 9:16 Miniature Vertical Preview Frame -->
+<div class="w-11 h-16 rounded-[10px] overflow-hidden relative bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Keynote presentation auditorium stage illuminated by a massive frosted glass circular luminaire, ultra minimal architectural aesthetic, deep blacks and gleaming silver specular highlights" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDZuWP8ERKcJwtegHWvpesXdTWfucWRr_1wFwiHFCZs7LdbYuuCqPHN99uiCRsEiDiYPgY6-lFMGbWnPLi2nG-8jCBMGGlGaI9Ql43QvK_3owtukUQuplXw9xmd_aB7fmFYbeT9I7lAPrEldyoKi3A1x6E_cS059VcUfgSjG64An6qgqgyOlbvXFC-ho4kGkI4YISjCiyub_JTHqO4jpH1kcSSNE2la7VYmZ01YzfJ2B1Cqhr0KIo2eAw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[9px] text-primary/90 leading-none">9:16</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[15px] font-semibold text-primary truncate group-hover:text-primary transition-colors">
+                Demo 96s
+              </span>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60">01:36</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">3 days ago</span>
+</div>
+</div>
+</div>
+<!-- Circular Score Ring Badge (Score 76) -->
+<div class="relative w-12 h-12 flex items-center justify-center shrink-0 ml-2">
+<svg class="w-12 h-12 -rotate-90" viewbox="0 0 44 44">
+<circle cx="22" cy="22" fill="none" r="18" stroke="rgba(255, 255, 255, 0.08)" stroke-width="3"></circle>
+<circle class="drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" cx="22" cy="22" fill="none" r="18" stroke="#ffffff" stroke-dasharray="113.1" stroke-dashoffset="27.1" stroke-linecap="round" stroke-width="3"></circle>
+</svg>
+<div class="absolute flex flex-col items-center justify-center">
+<span class="font-headline-sm text-sm font-bold text-primary leading-none">76</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>

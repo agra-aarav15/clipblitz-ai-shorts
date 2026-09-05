@@ -1,836 +1,725 @@
-/* ClipBlitz v3 front-end — Studio (upload/styles/ProX podium/Candidate Lab/custom cuts)
-   + Connect tab. Rendering is surgical: clips animate in once and are then only
-   patched (post chips), so video playback, typed metadata and animations survive polls. */
+/* ClipBlitz — ProX v5 studio (Stitch "Obsidian Keynote" build)
+   All endpoints identical to v3.1; markup now emits the exact Stitch design system. */
+
 const $ = (id) => document.getElementById(id);
-let STYLES = [];
-let chosenStyle = 'wordpop';
-let currentJob = null;
-let pollTimer = null;
-let jobFullFetched = false;
-let cut = { start: 0, end: 15 };
-let lastFailToast = 0;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+/* ---------- screen router (sidebar pills) ---------- */
+const ACTIVE_PILL = ['bg-primary', 'text-on-primary', 'font-semibold', 'shadow-[0_0_20px_rgba(255,255,255,0.35)]'];
+const IDLE_PILL = ['text-on-surface-variant'];
+let currentScreen = 'studio';
 
-/* ---------- cinematic motion layer (GSAP; every call degrades gracefully offline) ---------- */
-const G = window.gsap || null;
-const EASE = 'power3.out';
-
-function revealScreen(name) {
-  if (!G) return;
-  const el = $(`screen-${name}`);
-  if (el) G.fromTo(el, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: EASE, clearProps: 'transform' });
-}
-
-/* app-shell views */
-const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'connect'];
 function showScreen(name) {
-  SCREENS.forEach((s) => { $(`screen-${s}`).hidden = s !== name; });
-  document.querySelectorAll('.snavbtn').forEach((b) =>
-    b.classList.toggle('active', b.dataset.screen === name));
-  const titles = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', connect: 'Connect' };
-  const titleEl = $('jobtitle');
-  if (G && titleEl.textContent !== titles[name]) {
-    G.fromTo(titleEl, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.35, ease: EASE });
-  }
-  titleEl.textContent = titles[name] || 'ClipBlitz';
-  revealScreen(name);
-  if (name === 'connect') { refreshSocial(); renderQueue(); }
-}
-
-/* first-load choreography: the shell assembles itself */
-(function intro() {
-  if (!G) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  G.timeline({ defaults: { ease: EASE } })
-    .from('.sidebar', { x: -28, opacity: 0, duration: 0.7 }, 0.05)
-    .from('.sidebar .snavbtn', { x: -14, opacity: 0, duration: 0.4, stagger: 0.05 }, 0.25)
-    .from('.topbar', { y: -14, opacity: 0, duration: 0.5 }, 0.35)
-    .from('#screen-studio .glass', { y: 22, opacity: 0, duration: 0.6, clearProps: 'transform' }, 0.45);
-})();
-
-/* magnetic buttons + specular follow */
-if (G) {
-  document.addEventListener('mousemove', (e) => {
-    const btn = e.target.closest && e.target.closest('.btn');
-    document.querySelectorAll('.btn.magnet').forEach(b => { if (b !== btn) { b.classList.remove('magnet'); G.to(b, { x: 0, y: 0, duration: 0.5, ease: EASE }); } });
-    if (!btn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const r = btn.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-    btn.classList.add('magnet');
-    G.to(btn, { x: dx * 0.12, y: dy * 0.18, duration: 0.4, ease: EASE });
+  document.querySelectorAll('.screen').forEach((s) => { s.hidden = s.id !== 'screen-' + name; });
+  document.querySelectorAll('aside nav a').forEach((a) => {
+    const active = a.dataset.path === name;
+    a.classList.toggle('bg-primary', active);
+    a.classList.toggle('text-on-primary', active);
+    a.classList.toggle('font-semibold', active);
+    a.classList.toggle('text-on-surface-variant', !active);
+    if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  currentScreen = name;
+  window.scrollTo(0, 0);
+  const sec = $('screen-' + name);
+  if (sec && !matchMedia('(prefers-reduced-motion: reduce)').matches && !new URLSearchParams(location.search).has('nomotion')) {
+    sec.style.opacity = '0';
+    sec.style.transform = 'translateY(10px)';
+    sec.style.transition = 'none';
+    requestAnimationFrame(() => {
+      sec.style.transition = 'opacity .4s ease, transform .4s ease';
+      sec.style.opacity = '1';
+      sec.style.transform = 'none';
+    });
+  }
+  if (name === 'clips') renderClips();
+  if (name === 'candidates') renderCandidates();
+  if (name === 'transcript') renderTranscript();
 }
-document.querySelectorAll('.snavbtn').forEach((b) =>
-  b.addEventListener('click', () => showScreen(b.dataset.screen)));
-document.querySelectorAll('[data-goto]').forEach((b) =>
-  b.addEventListener('click', () => showScreen(b.dataset.goto)));
+document.querySelectorAll('aside nav a').forEach((a) =>
+  a.addEventListener('click', (e) => { e.preventDefault(); showScreen(a.dataset.path); }));
 
-/* ---------- toasts ---------- */
+/* ---------- toasts (Stitch glass pills) ---------- */
 function toast(msg, err = false) {
   const t = document.createElement('div');
-  t.className = 'toast' + (err ? ' err' : '');
+  t.className = 'pointer-events-auto max-w-sm rounded-full bg-surface-container-high/90 backdrop-blur-xl border border-white/10 px-5 py-2.5 font-body-sm text-body-sm ' +
+    (err ? 'text-red-300' : 'text-on-surface') + ' shadow-[0_10px_30px_rgba(0,0,0,0.6)] opacity-0 translate-y-2 transition-all duration-300';
   t.textContent = msg;
   $('toasts').appendChild(t);
-  setTimeout(() => t.classList.add('in'), 10);
-  setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, 4200);
+  requestAnimationFrame(() => t.classList.remove('opacity-0', 'translate-y-2'));
+  setTimeout(() => { t.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => t.remove(), 350); }, 4200);
 }
 
-/* ---------- capabilities (honest connection status) ---------- */
-fetch('/api/health').then(r => r.json()).then(h => {
-  const caps = [`ProX v5 editor`, `top ${h.top_n}`, `brain: ${(h.brains || ['none']).join('+')}`,
-                `ffmpeg ${h.ffmpeg ? '✓' : '✗'}`, `yt-dlp ${h.ytdlp ? '✓' : '✗'}`];
-  $('caps').textContent = caps.join('  ·  ');
-  $('caps').className = 'chip' + (h.ffmpeg && h.ytdlp ? ' gold' : ' err');
-  $('livechip').textContent = h.ai_picker ? 'AI ready' : 'offline mode';
-  $('livechip').className = 'chip ' + (h.ai_picker ? 'gold' : 'err');
-}).catch(() => { $('caps').textContent = 'server unreachable'; $('caps').className = 'chip err'; });
+/* ---------- tiny helpers ---------- */
+const fmtTime = (s) => { s = Math.max(0, Math.round(s || 0)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+const ago = (ts) => { const d = (Date.now() / 1000 - (ts || 0)); if (d < 90) return 'just now'; if (d < 3600) return `${Math.round(d / 60)}m ago`; if (d < 86400) return `${Math.round(d / 3600)}h ago`; return `${Math.round(d / 86400)}d ago`; };
+async function api(path, opts) { const r = await fetch(path, opts); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || r.statusText); return d; }
+const C = 2 * Math.PI * 14; // score dial circumference (r=14, matches Stitch svg)
 
-/* ---------- caption styles ---------- */
-fetch('/api/styles').then(r => r.json()).then(styles => {
-  STYLES = styles;
-  const grid = $('stylegrid');
-  grid.innerHTML = styles.map(s => `
-    <div class="stylecard ${s.id === chosenStyle ? 'active' : ''}" data-id="${s.id}" title="${esc(s.desc)}">
-      <div class="preview" style="background:${s.sample_bg};color:${s.sample_color}">Aa</div>
-      <div class="sname">${esc(s.name)}</div>
-      <div class="sdesc">${esc(s.desc)}</div>
-    </div>`).join('');
-  grid.querySelectorAll('.stylecard').forEach(card =>
-    card.addEventListener('click', () => {
-      chosenStyle = card.dataset.id;
-      grid.querySelectorAll('.stylecard').forEach(c => c.classList.toggle('active', c.dataset.id === chosenStyle));
-      runPreview();
-    }));
-  runPreview();
-});
-
-/* ---------- upload ---------- */
-const dz = $('dropzone');
-dz.addEventListener('click', () => $('file').click());
-dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
-dz.addEventListener('drop', (e) => {
-  e.preventDefault(); dz.classList.remove('drag');
-  if (e.dataTransfer.files[0]) { $('file').files = e.dataTransfer.files; fileChosen(); }
-});
-$('file').addEventListener('change', fileChosen);
-function fileChosen() {
-  const f = $('file').files[0];
-  if (!f) return;
-  dz.querySelector('.big').textContent = `📼 ${f.name} (${(f.size / 1048576).toFixed(0)} MB)`;
-  if (f.size > 300 * 1048576) toast('Big video — ProX will chew through it, longer waits though.', false);
-  captureFrame(f);
+function dial(score, dim = false) {
+  const off = (C * (1 - Math.min(100, Math.max(0, score)) / 100)).toFixed(1);
+  const stroke = dim ? 'text-primary/70 drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]' : 'text-primary drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]';
+  return `<svg class="w-9 h-9 -rotate-90" viewbox="0 0 36 36">
+    <circle class="text-white/10" cx="18" cy="18" fill="none" r="14" stroke="currentColor" stroke-width="2"></circle>
+    <circle class="${stroke}" cx="18" cy="18" fill="none" r="14" stroke="currentColor" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off}" stroke-linecap="round" stroke-width="2.5"></circle>
+  </svg>
+  <span class="absolute font-data-mono text-data-mono font-bold ${dim ? 'text-primary/90' : 'text-primary'}" data-count="${score}">0</span>`;
 }
-
-/* ---------- LIVE CAPTION PREVIEW ---------- */
-const PV_COLORS = { wordpop: '#fff', goldbold: '#FFD700', minimal: '#fff', karaoke: '#FFD700', neon: '#39FF14', box: '#fff' };
-const PV_WORDS = ['Your captions', 'look insane', 'in every style 🔥'];
-let pvTimer = null;
-
-function captureFrame(file) {
-  const v = document.createElement('video');
-  v.src = URL.createObjectURL(file);
-  v.muted = true;
-  v.onloadedmetadata = () => { v.currentTime = Math.min(2.5, v.duration / 3); };
-  v.onseeked = () => {
-    const c = $('pv-canvas'), ctx = c.getContext('2d');
-    const vr = v.videoWidth / v.videoHeight, cr = c.width / c.height;
-    let sx, sy, sw, sh;
-    if (vr > cr) { sh = v.videoHeight; sw = sh * cr; sx = (v.videoWidth - sw) / 2; sy = 0; }
-    else { sw = v.videoWidth; sh = sw / cr; sx = 0; sy = (v.videoHeight - sh) / 2; }
-    ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
-    $('pv-empty').style.display = 'none';
-    URL.revokeObjectURL(v.src);
-  };
-}
-
-function runPreview() {
-  clearInterval(pvTimer);
-  const cap = $('pv-caption');
-  cap.className = 'pv-caption st-' + chosenStyle;
-  cap.style.color = PV_COLORS[chosenStyle] || '#fff';
-
-  if (chosenStyle === 'karaoke') {
-    const words = PV_WORDS.join(' ').split(' ');
-    cap.innerHTML = words.map(w => `<span class="w">${esc(w)}</span>`).join(' ');
-    let idx = 0;
-    const spans = cap.querySelectorAll('.w');
-    pvTimer = setInterval(() => {
-      spans.forEach(s => s.classList.remove('spoken'));
-      for (let k = 0; k <= idx % spans.length; k++) spans[k].classList.add('spoken');
-      idx++;
-    }, 380);
-    return;
-  }
-  const perScreen = 2;
-  const screens = [];
-  for (let i = 0; i < PV_WORDS.length; i += perScreen) screens.push(PV_WORDS.slice(i, i + perScreen).join(' '));
-  let s = 0;
-  const show = () => {
-    cap.innerHTML = screens[s % screens.length].split(' ').map(w => `<span class="w">${esc(w)}</span>`).join(' ');
-    s++;
-  };
-  show();
-  pvTimer = setInterval(show, 1300);
-}
-
-function opts() {
-  return `style=${encodeURIComponent(chosenStyle)}&position=${$('position').value}` +
-         `&scale=${$('scale').value}&auto_post=${$('autopost').value}&privacy=${$('privacy').value}` +
-         `&framing=${$('framing').value}`;
-}
-$('scale').addEventListener('input', () => $('scaleval').textContent = Number($('scale').value).toFixed(2) + '×');
-
-async function post(url, body) {
-  const res = await fetch(url, { method: 'POST', body });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.status);
-  return data;
-}
-
-$('upload').addEventListener('click', () => {
-  const f = $('file').files[0];
-  if (!f) return toast('choose a video file first', true);
-  $('error').innerHTML = '';
-  $('upload').disabled = true;
-  $('job').hidden = false;
-  resetClipsUI();
-  $('jobname').textContent = f.name;
-  setStage('uploading 0%', null);
-  $('jobbar').style.width = '0%';
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', `/api/upload?name=${encodeURIComponent(f.name)}&${opts()}`);
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const pct = Math.round((e.loaded / e.total) * 100);
-      setStage(`uploading ${pct}%`);
-      $('jobbar').style.width = pct + '%';
-    }
-  };
-  xhr.onload = () => {
-    $('upload').disabled = false;
-    try {
-      const data = JSON.parse(xhr.responseText);
-      if (xhr.status >= 300) throw new Error(data.error || xhr.status);
-      watch(data.job_id, f.name);
-    } catch (e) { showError(String(e.message || e)); }
-  };
-  xhr.onerror = () => { $('upload').disabled = false; showError('upload failed — is the server running?'); };
-  xhr.send(f);
-});
-
-$('demo').addEventListener('click', async () => {
-  $('error').innerHTML = '';
-  try {
-    const res = await post(`/api/demo?${opts()}`, '{}');
-    watch(res.job_id, 'demo_source.mp4 (test video)');
-  } catch (e) { showError(String(e.message || e)); }
-});
-
-$('fetch').addEventListener('click', async () => {
-  const url = $('url').value.trim();
-  if (!url) return toast('paste a YouTube or direct video URL first', true);
-  $('error').innerHTML = '';
-  try {
-    const res = await post(`/api/from_url?url=${encodeURIComponent(url)}&${opts()}`, '{}');
-    watch(res.job_id, url.length > 60 ? url.slice(0, 60) + '…' : url);
-  } catch (e) { showError(String(e.message || e)); }
-});
-
-function showError(msg) { $('error').innerHTML = `<div class="error">${esc(msg)}</div>`; }
-
-/* ---------- processing timeline ---------- */
-const STEPS = [['ingest', 'Ingest'], ['audio', 'Energy'], ['transcribe', 'Transcribe'], ['prox', 'ProX picks'], ['meta', 'Metadata'], ['render', 'Render'], ['post', 'Post']];
-function stageIndex(stage) {
-  const s = (stage || '').toLowerCase();
-  if (s.includes('upload') || s.includes('download') || s.includes('ingest')) return 0;
-  if (s.includes('energy') || s.includes('probe') || s.includes('extract')) return 1;
-  if (s.includes('transcri')) return 2;
-  if (s.includes('prox') || s.includes('mining') || s.includes('measur')) return 3;
-  if (s.includes('title') || s.includes('writing') || s.includes('metadata')) return 4;
-  if (s.includes('render')) return 5;
-  if (s.includes('post')) return 6;
-  if (s.includes('done')) return STEPS.length;
-  return 0;
-}
-function setTimeline(stageStr, status) {
-  const tl = $('timeline');
-  if (!tl.dataset.built) {
-    tl.innerHTML = STEPS.map(([, label]) => `<div class="tstep">${label}</div>`).join('');
-    tl.dataset.built = '1';
-  }
-  const done = status === 'done';
-  const active = done ? STEPS.length : stageIndex(stageStr);
-  tl.querySelectorAll('.tstep').forEach((el, i) => {
-    el.classList.toggle('done', done || i < active);
-    el.classList.toggle('active', !done && i === active);
-  });
-}
-
-function resetClipsUI() {
-  $('clips').innerHTML = '';
-  $('clips-empty').hidden = true;
-  $('labwrap').hidden = true;
-  $('labgrid').innerHTML = '';
-  $('cutwrap').hidden = true;
-  $('transcript').innerHTML = '';
-  $('skeletons').hidden = false;
-  $('jobdone').hidden = true;
-  jobFullFetched = false;
-  firstClipReveal = true;
-}
-
-let firstClipReveal = true;
-
-function watch(jobId, name) {
-  currentJob = jobId;
-  showScreen('studio');
-  $('job').hidden = false;
-  $('jobname').textContent = name;
-  $('jobtitle').textContent = name.length > 34 ? name.slice(0, 34) + '…' : name;
-  resetClipsUI();
-  setStage('queued', null);
-  setTimeline('upload', null);
-  $('jobbar').style.width = '0%';
-  clearInterval(pollTimer);
-  pollTimer = setInterval(poll, 1500);
-  poll();
-}
-
-function setStage(text, cls) {
-  $('jobstage').textContent = text;
-  $('jobstage').className = 'stage' + (cls ? ' ' + cls : '');
-}
-
-async function poll() {
-  if (!currentJob) return;
-  let job;
-  try {
-    const res = await fetch(`/api/job/${currentJob}?light=1`);
-    if (res.status === 404) {  // server restarted & lost the in-memory job → stop cleanly
-      clearInterval(pollTimer);
-      setStage('job lost — server restarted', 'err');
-      toast('Job no longer in memory (server restarted). Re-run the job.', true);
-      return;
-    }
-    job = await res.json();
-  } catch (e) {
-    const now = Date.now();
-    if (now - lastFailToast > 10000) { lastFailToast = now; toast('server unreachable — retrying…', true); }
-    return;  // keep polling; transient outage
-  }
-  setStage(job.error ? `failed: ${job.error}` : job.stage,
-           job.status === 'done' ? 'done' : job.status === 'error' ? 'err' : null);
-  setTimeline(job.stage, job.status);
-  $('jobbar').style.width = (job.progress || 0) + '%';
-  $('jobchip').hidden = false;
-  $('jobchip').textContent = `${job.status === 'done' ? '✓' : '⏳'} ${job.status} · ${job.progress || 0}%`;
-  $('skeletons').hidden = !(job.status !== 'done' && !(job.clips || []).length);
-  renderClipsSurgical(job);
-  if (job.status === 'done' || job.status === 'error') {
-    clearInterval(pollTimer);
-    $('skeletons').hidden = true;
-    if (!jobFullFetched) { jobFullFetched = true; loadFull(job); }
-    if (job.status === 'done' && (job.clips || []).length) {
-      $('jobdone').hidden = false;
-      if (document.getElementById('screen-clips').hidden && job.clips.some(c => c._fresh)) {
-        showScreen('clips');  // auto-navigate once clips exist
-      }
-    }
-  }
-}
-
-async function loadFull(jobLight) {
-  try {
-    const job = await (await fetch(`/api/job/${currentJob}`)).json();
-    fullJobCache = job;
-    buildLab(job);
-    buildCutbox(job);
-    if ((job.clips || []).length) { $('clips-empty').hidden = true; $('lab-empty').hidden = true; $('cut-empty').hidden = true; $('labwrap').hidden = false; $('cutwrap').hidden = false; }
-    renderQueue();
-    if (firstClipReveal && (job.clips || []).length) {
-      firstClipReveal = false;
-      showScreen('clips');  // walk the user to the finished podium exactly once
-    }
-  } catch (e) { /* transcript panel is optional sugar */ }
-}
-
-/* ---------- surgical clip rendering ---------- */
-const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing', event: 'Event' };
-const PLATFORM_LABEL = { youtube: '▶️ YouTube', tiktok: '🎵 TikTok', instagram: '📸 Instagram', facebook: '👤 Facebook', x: '𝕏 Post' };
-const PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook', 'x'];
-
-function postSig(c) {
-  return JSON.stringify(PLATFORMS.map(p => c.post?.[p]?.status + (c.post?.[p]?.link || '') + (c.post?.[p]?.note || '')));
-}
-
-function renderClipsSurgical(job) {
-  const clips = job.clips || [];
-  clips.forEach((c, i) => { c._fresh = true; ensureClipCard(job, c, i); });
-  const total = $('clips').children.length;
-  while (total > clips.length) $('clips').lastChild.remove();
-}
-
-function dialSVG(score) {
-  const C = 2 * Math.PI * 26;
-  return `<svg class="dial" viewBox="0 0 64 64" width="64" height="64">
-    <circle cx="32" cy="32" r="26" class="dial-bg"/>
-    <circle cx="32" cy="32" r="26" class="dial-fg" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}" data-target="${score}"/>
-    <text x="32" y="37" text-anchor="middle" class="dial-num" data-count="${score}">0</text>
-  </svg>`;
-}
-
-function clipCardHTML(job, c, i) {
-  const factors = c.factors || {};
-  const bars = Object.keys(FACTOR_LABEL).map(k => `
-    <div class="frow" title="${FACTOR_LABEL[k]}: ${factors[k] ?? 0}/100">
-      <span>${FACTOR_LABEL[k]}</span>
-      <div class="fbar"><i data-w="${factors[k] ?? 0}"></i></div>
-      <b>${factors[k] ?? 0}</b>
-    </div>`).join('');
-  const laughBar = factors.laughter != null ? `
-    <div class="frow" title="Measured audience laughter coverage">
-      <span>Laugh</span>
-      <div class="fbar"><i data-w="${factors.laughter}"></i></div>
-      <b>${factors.laughter}</b>
-    </div>` : '';
-  const styleOpts = STYLES.map(s => `<option value="${s.id}" ${s.id === (c.style || job.style) ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
-  const qc = c.qc === 'verified'
-    ? '<span class="qcbadge ok" title="Passed the standalone-story judge">✓ verified</span>'
-    : (c.qc ? '<span class="qcbadge warn" title="Did not fully pass the judge — rendered as best available">◐ unverified</span>' : '');
-  return `
-    <span class="rank">0${c.rank || i + 1}</span>
-    <video controls preload="metadata" src="${c.file}"></video>
-    <div class="cliphead">
-      ${dialSVG(c.score)}
-      <div class="cliptop">
-        <div class="cliptitle">${esc(c.meta?.title || c.title)}</div>
-        ${c.hook ? `<div class="hook">“${esc(c.hook)}”</div>` : ''}
-        ${c.topic ? `<span class="topicchip">${esc(c.topic)}</span>` : ''}
-        ${qc}
-      </div>
-    </div>
-    <div class="factors">${bars}${laughBar}</div>
-    ${c.verdict ? `<div class="judge">⚖️ “${esc(c.verdict)}”</div>` : ''}
-    <div class="reason">💡 ${esc(c.reason)}</div>
-    <div class="clipmeta">
-      <span>${c.duration}s · from ${c.start}s${c.custom ? ' · custom cut' : ''}</span>
-      ${c.note ? `<span class="dim">${esc(c.note)}</span>` : ''}
-    </div>
-    <div class="metabox">
-      <div class="metahead">Title</div>
-      <input type="text" id="t-${i}" value="${esc(c.meta?.title || '')}" />
-      <div class="metahead">Description</div>
-      <textarea id="d-${i}">${esc(c.meta?.description || '')}</textarea>
-      <div class="metahead">Hashtags</div>
-      <input type="text" id="h-${i}" value="${esc((c.meta?.hashtags || []).join(' '))}" />
-      <div class="row">
-        <button class="btn ghost small" data-save="${i}">💾 Save metadata</button>
-        <select class="restyle" data-restyle="${i}" title="re-render this clip in another caption style">${styleOpts}</select>
-        <span class="saved" id="saved-${i}"></span>
-      </div>
-    </div>
-    <div class="postrow" id="post-${i}">${postChips(c, i)}</div>`;
-}
-
-function ensureClipCard(job, c, i) {
-  let el = document.querySelector(`#clips .clipcard[data-clip="${i}"]`);
-  if (!el) {
-    el = document.createElement('article');
-    el.dataset.clip = i;
-    el.innerHTML = clipCardHTML(job, c, i);
-    $('clips').appendChild(el);
-    bindClipCard(el, job.id);
-    if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-      el.className = 'glass clipcard';
-      G.fromTo(el, { autoAlpha: 0, y: 26, scale: 0.985 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.65, ease: EASE, delay: Math.min(i * 0.12, 0.5), clearProps: 'transform' });
-    } else {
-      el.className = 'glass clipcard enter';
-      setTimeout(() => el.classList.add('in'), 60);
-    }
-    animateDial(el, c.score || 0);
-    animateBars(el);
-  } else {
-    const row = el.querySelector('.postrow');
-    if (row && row.dataset.sig !== postSig(c)) {
-      const before = row.innerHTML;
-      row.innerHTML = postChips(c, i);
-      row.dataset.sig = postSig(c);
-      bindPost(row, job.id);
-      if (!before.includes('postchip err') && row.innerHTML.includes('postchip err')) {
-        const errChip = row.querySelector('.postchip.err');
-        if (errChip) toast(errChip.textContent.trim(), true);
-      }
-    }
-  }
-}
-
-function animateDial(el, score) {
-  const fg = el.querySelector('.dial-fg'), num = el.querySelector('.dial-num');
-  const C = 2 * Math.PI * 26;
-  const target = C * (1 - score / 100);
-  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    fg.style.strokeDashoffset = C;
-    G.to(fg, { strokeDashoffset: target, duration: 1.35, ease: 'power3.out' });
-    const counter = { v: 0 };
-    G.to(counter, {
-      v: score, duration: 1.35, ease: 'power3.out',
-      onUpdate: () => { num.textContent = Math.round(counter.v); },
-    });
-    setTimeout(() => { num.textContent = score; fg.style.strokeDashoffset = target; }, 1600); // must land regardless
-    return;
-  }
-  requestAnimationFrame(() => {
-    fg.style.strokeDashoffset = target.toFixed(1);
-  });
-  const t0 = performance.now(), dur = 1100;
-  let done = false;
-  const finish = () => { if (!done) { done = true; num.textContent = score; fg.style.strokeDashoffset = (C * (1 - score / 100)).toFixed(1); } };
+function animateDial(el) {
+  const num = el.querySelector('[data-count]');
+  const ring = el.querySelector('circle[stroke-dasharray]:not([class*="text-white/10"])');
+  const target = parseInt(num?.dataset.count || '0', 10);
+  const off0 = C, off1 = C * (1 - target / 100);
+  const t0 = performance.now();
   const tick = (t) => {
-    const k = Math.min(1, (t - t0) / dur);
-    num.textContent = Math.round(score * (1 - Math.pow(1 - k, 3)));
-    if (k < 1) requestAnimationFrame(tick); else done = true;
+    const k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+    if (num) num.textContent = Math.round(target * e);
+    if (ring) ring.setAttribute('stroke-dashoffset', (off0 + (off1 - off0) * e).toFixed(1));
+    if (k < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  setTimeout(finish, 1400);  // rAF is throttled in backgrounded tabs — the final value must land regardless
+}
+const FACTOR_LABEL = { hook: 'HOOK', story: 'STORY', payoff: 'PAYOFF', energy: 'ENERGY', pacing: 'PACING', event: 'EVENT' };
+
+/* ---------- studio: option chips (glass popovers) ---------- */
+const chosen = { top_n: 3, style: 'wordpop', framing: 'blur' };
+let STYLES = [];
+function closePopovers() { document.querySelectorAll('.chip-pop').forEach((p) => p.remove()); }
+document.addEventListener('click', (e) => { if (!e.target.closest('[data-chip]')) closePopovers(); });
+document.querySelectorAll('[data-chip-btn]').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const kind = btn.dataset.chipBtn;
+    const existing = btn.parentElement.querySelector('.chip-pop');
+    closePopovers();
+    if (existing) return;
+    const opts = kind === 'clips' ? [1, 2, 3, 4, 5].map((n) => ({ v: n, label: String(n) }))
+      : kind === 'captions' ? STYLES.map((s) => ({ v: s.id, label: s.name }))
+        : kind === 'framing' ? [{ v: 'blur', label: 'blur-pad 9:16' }, { v: 'crop', label: 'crop center' }, { v: 'crop-left', label: 'crop left' }, { v: 'crop-right', label: 'crop right' }]
+          : [{ v: 'auto', label: 'auto' }];
+    const key = kind === 'clips' ? 'top_n' : kind === 'captions' ? 'style' : 'framing';
+    const pop = document.createElement('div');
+    pop.className = 'chip-pop absolute bottom-full mb-2 left-0 z-50 min-w-[180px] rounded-2xl bg-surface-container-high/95 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] p-1.5';
+    pop.innerHTML = opts.map((o) => `<button data-v="${esc(o.v)}" class="w-full text-left px-4 py-2 rounded-xl font-body-sm text-body-sm ${String(o.v) === String(chosen[key]) ? 'bg-primary text-on-primary font-semibold' : 'text-on-surface-variant hover:bg-white/[0.06] hover:text-on-surface'} transition-all">${esc(o.label)}</button>`).join('');
+    btn.parentElement.appendChild(pop);
+    pop.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      chosen[key] = kind === 'clips' ? parseInt(b.dataset.v, 10) : b.dataset.v;
+      const val = btn.querySelector('.text-primary.font-medium');
+      if (val) val.textContent = kind === 'captions' ? (STYLES.find((s) => s.id === chosen.style)?.name || chosen.style) : kind === 'framing' ? ({ blur: 'blur-pad 9:16', crop: 'crop center', 'crop-left': 'crop left', 'crop-right': 'crop right' }[chosen.framing]) : String(chosen[key]);
+      closePopovers();
+    }));
+  });
+});
+
+/* ---------- studio: URL + upload ---------- */
+$('make-clips-btn').addEventListener('click', () => {
+  const url = $('url-input').value.trim();
+  if (!url) { $('url-input').focus(); toast('Paste a YouTube link first — or drop an MP4.', true); return; }
+  const btn = $('make-clips-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>ANALYZING…</span><span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>';
+  api(`/api/from_url?url=${encodeURIComponent(url)}&style=${chosen.style}&framing=${chosen.framing}&top_n=${chosen.top_n}`, { method: 'POST' })
+    .then((d) => { watch(d.job_id, url); toast('Engine engaged — watch the edit bay.'); })
+    .catch((e) => { toast('Could not start: ' + e.message, true); resetMakeBtn(); });
+});
+function resetMakeBtn() {
+  const btn = $('make-clips-btn');
+  btn.disabled = false;
+  btn.innerHTML = '<span>MAKE CLIPS</span><span class="material-symbols-outlined text-[18px]">bolt</span>';
+}
+const dz = $('dropzone');
+dz.addEventListener('click', () => $('file').click());
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('bg-white/[0.08]', 'scale-[1.01]'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('bg-white/[0.08]', 'scale-[1.01]'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault(); dz.classList.remove('bg-white/[0.08]', 'scale-[1.01]');
+  if (e.dataTransfer.files[0]) { $('file').files = e.dataTransfer.files; uploadFile(e.dataTransfer.files[0]); }
+});
+$('file').addEventListener('change', () => { if ($('file').files[0]) uploadFile($('file').files[0]); });
+function uploadFile(f) {
+  if (f.size > 2 * 1024 ** 3) { toast('Over the 2 GB limit.', true); return; }
+  toast(`Ingesting ${f.name} (${(f.size / 1048576).toFixed(0)} MB)…`);
+  fetch(`/api/upload?name=${encodeURIComponent(f.name)}&style=${chosen.style}&framing=${chosen.framing}&top_n=${chosen.top_n}`,
+    { method: 'POST', body: f })
+    .then((r) => r.json())
+    .then((d) => { if (d.error) throw new Error(d.error); watch(d.job_id, f.name); })
+    .catch((e) => toast('Upload failed: ' + e.message, true));
 }
 
-function animateBars(el) {
-  const bars = el.querySelectorAll('.fbar i');
-  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    G.to(bars, {
-      width: (idx, b) => (b.dataset.w || 0) + '%',
-      duration: 1.0, ease: 'power3.out', stagger: 0.07, delay: 0.25,
-    });
-    setTimeout(() => bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; }), 2200); // must land
-    return;
+/* ---------- job watching → processing screen ---------- */
+const STAGES = [
+  { key: 'probe', label: "Reading the audio's energy profile" },
+  { key: 'extract', label: 'Isolating the audio track' },
+  { key: 'laughter', label: 'Detecting audience laughter' },
+  { key: 'moments', label: 'Finding peak moments (audio + camera cuts)' },
+  { key: 'transcribe', label: 'Transcribing — whisper-large-v3-turbo' },
+  { key: 'story', label: 'ProX story pass' },
+  { key: 'judge', label: 'Judge QC' },
+  { key: 'render', label: 'Rendering 9:16 clips' },
+  { key: 'meta', label: 'Metadata & finishing' },
+];
+function stageIndex(job) {
+  const s = (job.stage || '').toLowerCase();
+  if (job.status === 'done') return STAGES.length - 1;
+  if (s.includes('render')) return 6;
+  if (s.includes('transcrib')) return 4;
+  if (s.includes('prox') || s.includes('mining')) return 5;
+  if (s.includes('peak')) return 3;
+  if (s.includes('laughter')) return 2;
+  if (s.includes('energy') || s.includes('probe')) return 0;
+  if (s.includes('extract')) return 1;
+  if (s.includes('title') || s.includes('qc') || s.includes('judge')) return 5.5;
+  return 0;
+}
+let pollTimer = null;
+function watch(jobId, name) {
+  if (pollTimer) clearInterval(pollTimer);
+  showScreen('processing');
+  $('proc-job-id').textContent = jobId;
+  $('proc-name').textContent = name || jobId;
+  const tick = () => api(`/api/job/${jobId}?light=1`).then((job) => {
+    renderProcessing(job);
+    if (job.status === 'done') { clearInterval(pollTimer); pollTimer = null; onJobDone(job); resetMakeBtn(); }
+    if (job.status === 'error') { clearInterval(pollTimer); pollTimer = null; toast('Job failed: ' + (job.error || 'unknown'), true); showScreen('studio'); resetMakeBtn(); }
+  }).catch(() => {});
+  tick();
+  pollTimer = setInterval(tick, 1600);
+}
+function renderProcessing(job) {
+  const pct = Math.max(0, Math.min(100, job.progress || 0));
+  $('proc-pct').textContent = `${Math.round(pct)}%`;
+  const ring = $('progress-circle');
+  if (ring) ring.setAttribute('stroke-dashoffset', (722.56 * (1 - pct / 100)).toFixed(2));
+  $('proc-sub').textContent = job.src_name ? `${job.src_name}` : 'working…';
+  $('proc-meta').innerHTML = `<span>${new Date((job.created || 0) * 1000).toLocaleTimeString()}</span><span>·</span><span>${job.duration ? fmtTime(job.duration) + ' source' : 'probing…'}</span><span>·</span><span>${(job.brains || ['groq']).join(' + ')}</span>`;
+  const idx = stageIndex(job);
+  const rows = STAGES.map((st, i) => {
+    if (i < idx) return `<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]"><span class="text-white/60 font-medium text-body-sm">✓</span><span class="text-white/70 font-body-sm text-body-sm">${esc(st.label)}</span><span class="ml-auto font-data-mono text-data-mono text-white/20">DONE</span></div>`;
+    if (i === idx) return `<div class="relative flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.08] shadow-[inset_0_0_24px_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="text-primary font-semibold text-body-sm animate-pulse">▶</span><span class="text-primary font-semibold font-body-sm text-body-sm tracking-wide">${esc(job.stage || st.label)}</span></div><div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span><span class="font-data-mono text-data-mono text-primary/80 font-medium">IN PROGRESS</span></div></div>`;
+    return `<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg opacity-40"><span class="text-white/30 font-medium text-body-sm">○</span><span class="text-white/30 font-body-sm text-body-sm">${esc(st.label)}</span><span class="ml-auto font-data-mono text-data-mono text-white/20">QUEUED</span></div>`;
+  });
+  $('proc-stages').innerHTML = rows.join('');
+  $('proc-stage-n').textContent = `STAGE ${Math.min(STAGES.length, Math.floor(idx) + 1)} OF ${STAGES.length}`;
+  $('proc-pill').textContent = job.stage || '—';
+  $('proc-engine').textContent = 'ENGINE: ' + ((job.brains || ['groq']).join(' · ').toUpperCase()) + ' · PROX v5';
+  // live clip tray
+  if ((job.clips || []).length) {
+    $('proc-tray').innerHTML = job.clips.map((c, i) => `
+      <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-4 flex items-center gap-4">
+        <div class="w-16 h-16 rounded-xl bg-surface-container-high overflow-hidden shrink-0 relative">
+          <video class="w-full h-full object-cover grayscale brightness-90" src="${esc(c.file)}" preload="metadata" muted></video>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+          <span class="absolute bottom-1 right-1 font-data-mono text-[10px] text-white/80">${fmtTime(c.start)}</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="font-label-caps text-label-caps text-white/40 uppercase">Clip Candidate 0${i + 1}</span>
+          <span class="font-body-sm text-body-sm text-white font-medium truncate">${esc(c.title)}</span>
+          <span class="font-data-mono text-data-mono text-white/40">Score: ${c.score}</span>
+        </div>
+      </div>`).join('');
   }
-  setTimeout(() => {
-    bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; });
-  }, 120);
+}
+function onJobDone(job) {
+  currentJob = job;
+  renderClips(); renderCandidates(); renderTranscript(); renderRecentJobs();
+  showScreen('clips');
+  toast(`Done — ${job.clips.length} clips on the podium.`);
 }
 
-function postChips(clip, i) {
-  return PLATFORMS.map(p => {
-    const st = clip.post?.[p];
-    let cls = '', label = `Post → ${PLATFORM_LABEL[p]}`;
-    if (st?.status === 'uploading') { cls = 'busy'; label = `${PLATFORM_LABEL[p]} uploading…`; }
-    if (st?.status === 'published') { cls = 'done'; label = `✅ ${PLATFORM_LABEL[p]} published`; }
-    if (st?.status === 'assisted_ready') { cls = 'done'; label = `📋 ${PLATFORM_LABEL[p]} ready — caption copied`; }
-    if (st?.status === 'error') { cls = 'err'; label = `⚠️ ${PLATFORM_LABEL[p]}: ${st.note || 'failed'}`; }
-    const attrs = st ? '' : `data-post="${p}" data-clip="${i}"`;
-    const inner = st?.link ? `<a href="${st.link}" target="_blank">${esc(label)}</a>` : esc(label);
-    return `<span class="postchip ${cls}" ${attrs}>${inner}</span>`;
+/* ---------- studio: recent jobs rail ---------- */
+function renderRecentJobs() {
+  api('/api/jobs').then((jobs) => {
+    const done = jobs.filter((j) => j.status === 'done' && j.clips > 0).slice(0, 3);
+    $('pipeline-ready').textContent = `${jobs.length} JOBS`;
+    $('recent-jobs').innerHTML = done.length ? done.map((j) => `
+      <div class="bg-white/[0.03] backdrop-blur-2xl rounded-[22px] p-4 flex items-center justify-between hover:bg-white/[0.06] transition-all duration-300 group cursor-pointer shadow-lg" data-job="${esc(j.id)}">
+        <div class="flex items-center gap-3.5 min-w-0">
+          <div class="w-11 h-16 rounded-[10px] overflow-hidden relative bg-surface-container-lowest shrink-0 shadow-inner flex items-center justify-center">
+            <span class="material-symbols-outlined text-white/30 text-[20px]">movie</span>
+            <span class="absolute bottom-1 right-1 font-data-mono text-[9px] text-primary/90 leading-none">9:16</span>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-headline-sm text-[15px] font-semibold text-primary truncate">${esc(j.name || j.id)}</span>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="font-data-mono text-data-mono text-on-surface-variant/60">${j.clips} clips</span>
+              <span class="w-1 h-1 rounded-full bg-white/20"></span>
+              <span class="font-data-mono text-data-mono text-on-surface-variant/40">${ago(j.created)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="relative w-12 h-12 flex items-center justify-center shrink-0 ml-2">${j.top_score ? dial(j.top_score) : '<span class="material-symbols-outlined text-white/30">drafts</span>'}</div>
+      </div>`).join('')
+      : `<div class="col-span-3 rounded-[22px] bg-white/[0.02] border border-dashed border-white/10 p-8 text-center font-body-sm text-body-sm text-on-surface-variant/50">No finished jobs yet — make your first clips above.</div>`;
+    $('recent-jobs').querySelectorAll('[data-job]').forEach((card) =>
+      card.addEventListener('click', () => openJob(card.dataset.job)));
+    done.forEach((j) => { const d = $('recent-jobs').querySelector(`[data-job="${j.id}"] [data-count]`); if (d) animateDial(d.closest('.relative')); });
+  }).catch(() => {});
+}
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-job]');
+  if (card) openJob(card.dataset.job);
+});
+function openJob(id, screen) {
+  api(`/api/job/${id}`).then((job) => {
+    if (job.status === 'done' && (job.clips || []).length) {
+      currentJob = job; renderClips(); renderCandidates(); renderTranscript();
+      showScreen(screen || 'clips');
+    }
+    else if (job.status === 'error') toast('That job failed — re-run it from Studio.', true);
+    else watch(id, job.name);
+  }).catch((e) => toast('Could not open job: ' + (e && e.message ? e.message : e), true));
+}
+
+/* ---------- clips podium ---------- */
+let currentJob = null;
+const RANK_LABEL = ['ALPHA', 'BETA', 'GAMMA', 'DELTA', 'EPSILON', 'ZETA'];
+function factorBars(f, dim) {
+  const cls = dim ? 'text-on-surface-variant/40' : 'text-on-surface-variant/50';
+  const num = dim ? 'text-primary/70' : 'text-primary';
+  const fill = dim ? 'from-white/40 to-primary/80' : 'from-white/60 to-primary';
+  return Object.keys(FACTOR_LABEL).map((k) => {
+    const v = (f || {})[k] ?? 0;
+    return `<div class="flex flex-col gap-1">
+      <div class="flex justify-between items-center font-label-caps text-label-caps uppercase ${cls}"><span>${FACTOR_LABEL[k]}</span><span class="font-data-mono text-data-mono ${num} font-medium">${v}</span></div>
+      <div class="h-1 w-full bg-white/10 rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r ${fill} rounded-full" style="width:${v}%"></div></div>
+    </div>`;
   }).join('');
 }
-
-function bindClipCard(el, jobId) {
-  el.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => saveMeta(jobId, b.dataset.save)));
-  el.querySelectorAll('[data-post]').forEach(b => b.addEventListener('click', () => sendPost(jobId, b.dataset.post, b.dataset.clip)));
-  el.querySelectorAll('[data-restyle]').forEach(sel => sel.addEventListener('change', () => {
-    const i = Number(sel.dataset.restyle);
-    const card = el;  // this card
-    toast('re-rendering with ' + sel.options[sel.selectedIndex].text + ' captions…');
-    post('/api/custom', JSON.stringify({
-      job_id: jobId,
-      start: currentClip(i)?.start, end: currentClip(i)?.end,
-      style: sel.value,
-    })).then(() => {
-      // poll the freshly appended clip
-      clearInterval(pollTimer);
-      pollTimer = setInterval(poll, 1500);
-      poll();
-    }).catch(e => toast(String(e.message || e), true));
-  }));
-}
-const currentClip = (i) => (fullJobCache?.clips || [])[i];
-let fullJobCache = null;
-
-function bindPost(row, jobId) {
-  row.querySelectorAll('[data-post]').forEach(b => b.addEventListener('click', () => sendPost(jobId, b.dataset.post, b.dataset.clip)));
-}
-
-async function saveMeta(jobId, i) {
-  const body = {
-    title: document.getElementById(`t-${i}`).value,
-    description: document.getElementById(`d-${i}`).value,
-    hashtags: document.getElementById(`h-${i}`).value.split(/\s+/).filter(Boolean),
-  };
-  const res = await fetch(`/api/job/${jobId}/meta/${i}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  const el = document.getElementById(`saved-${i}`);
-  el.textContent = res.ok ? 'saved ✓' : 'save failed';
-  toast(res.ok ? 'metadata saved' : 'save failed', !res.ok);
-  setTimeout(() => el.textContent = '', 2500);
-}
-
-async function sendPost(jobId, platform, clipIndex) {
-  await post('/api/post', JSON.stringify({ job_id: jobId, index: Number(clipIndex || 0), platforms: [platform] }));
-  toast(`queued for ${PLATFORM_LABEL[platform]} — watch the chip go live`);
-  if (jobFullFetched) { clearInterval(pollTimer); pollTimer = setInterval(poll, 1500); jobFullFetched = false; }
-  poll();
-}
-
-/* ---------- Candidate Lab ---------- */
-function buildLab(job) {
-  const cands = (job.candidates || []).filter(c => !c.selected);
-  const grid = $('labgrid');
-  if (!cands.length) { $('labwrap').hidden = true; $('lab-empty').hidden = false; return; }
-  $('lab-empty').hidden = true;
-  $('labwrap').hidden = false;
-  grid.innerHTML = cands.map((c) => `
-    <div class="labcards glass" data-cand="${job.candidates.indexOf(c)}">
-      <div class="labtop">
-        <span class="labscore">${c.score}</span>
-        <div>
-          <div class="labtitle">${esc(c.title)}</div>
-          <div class="labsub">${c.start.toFixed(0)}s → ${c.end.toFixed(0)}s${c.qc === 'verified' ? ' · ✓' : ''}</div>
+function renderClips() {
+  const host = $('clips');
+  if (!currentJob || !(currentJob.clips || []).length) {
+    host.innerHTML = `<div class="col-span-3 rounded-[24px] bg-white/[0.02] border border-dashed border-white/10 p-12 text-center">
+      <span class="material-symbols-outlined text-white/25 text-[40px]">theaters</span>
+      <p class="font-body-md text-body-md text-on-surface-variant/60 mt-3">No clips on the podium yet — run a job in the Studio or open one from Recent jobs.</p></div>`;
+    $('clips-qc').textContent = '—';
+    return;
+  }
+  const job = currentJob;
+  $('clips-jobname').textContent = job.name || job.id;
+  $('clips-qc').textContent = `${job.clips.filter((c) => c.qc === 'verified').length} OF ${job.clips.length} PASS QC`;
+  $('clips-brain').textContent = `brain ${(job.brains || ['groq']).join('+')}`;
+  $('clips-models').textContent = `PROX v5 · ${(job.content_type || 'auto').toUpperCase()}`;
+  $('tele-engine').textContent = `ENGINE ${(job.brains || ['groq']).join('+').toUpperCase()}`;
+  $('tele-job').textContent = `${job.name || job.id} · ${job.clips.length} CLIPS · ${fmtTime(job.duration || 0)}`;
+  host.innerHTML = job.clips.map((c, i) => {
+    const dim = c.qc !== 'verified';
+    const qc = c.qc === 'verified'
+      ? `<span class="inline-flex items-center gap-1.5 bg-white/10 text-primary font-label-caps text-label-caps uppercase px-3 py-1 rounded-full shadow-sm"><span class="material-symbols-outlined text-[12px] text-primary">check_circle</span><span>verified</span></span>`
+      : `<span class="inline-flex items-center gap-1.5 bg-white/[0.03] text-on-surface-variant/70 font-label-caps text-label-caps uppercase px-3 py-1 rounded-full shadow-sm"><span class="material-symbols-outlined text-[12px] text-on-surface-variant/60">radio_button_partial</span><span>unverified</span></span>`;
+    return `<article class="group relative rounded-[24px] ${dim ? 'bg-white/[0.03] opacity-75 hover:opacity-100' : 'bg-white/[0.04]'} backdrop-blur-2xl p-6 flex flex-col justify-between transition-all duration-300 hover:bg-white/[0.06] hover:shadow-[0_24px_50px_rgba(0,0,0,0.8),inset_0_0_24px_rgba(255,255,255,0.06)]" data-clip="${i}">
+      <div class="flex flex-col">
+        <div class="relative w-full aspect-[9/14] rounded-2xl overflow-hidden bg-surface-container-lowest mb-5 shadow-inner">
+          <video class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out brightness-90 contrast-125" src="${esc(c.file)}" controls preload="metadata"></video>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none"></div>
+          <div class="absolute top-3.5 left-3.5 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+            <span class="font-data-mono text-data-mono text-primary font-semibold tracking-wider">#${String(i + 1).padStart(2, '0')}</span>
+            <span class="font-label-caps text-[9px] uppercase tracking-widest text-primary/60">${RANK_LABEL[i] || 'CLIP'}</span>
+          </div>
+          <div class="absolute top-3.5 right-3.5 w-11 h-11 rounded-full bg-black/75 backdrop-blur-md flex items-center justify-center shadow-lg dial" data-dial>${dial(c.score, dim)}</div>
+          <div class="absolute bottom-3 left-3.5 flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-white/80 font-data-mono text-data-mono">
+            <span class="material-symbols-outlined text-[13px] text-primary">play_arrow</span><span>${c.duration}s</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mb-3">${qc}<span class="font-data-mono text-[11px] text-on-surface-variant/40">${esc((job.picker || 'prox').toUpperCase())} // ${fmtTime(c.start)}</span></div>
+        <h2 class="font-headline-sm text-headline-sm font-semibold ${dim ? 'text-primary/90' : 'text-primary'} mb-2 leading-snug">${esc(c.meta?.title || c.title)}</h2>
+        ${c.hook ? `<p class="font-body-sm text-body-sm italic ${dim ? 'text-on-surface-variant/60' : 'text-on-surface-variant/80'} mb-3 pl-2.5 bg-gradient-to-r from-white/10 to-transparent rounded-l-sm">“${esc(c.hook)}”</p>` : ''}
+        ${c.verdict ? `<div class="flex items-start gap-2.5 bg-white/[0.03] p-3 rounded-xl mb-5 text-on-surface-variant/60 font-body-sm text-body-sm leading-relaxed"><span class="text-base select-none mt-0.5">⚖️</span><span class="italic">${esc(c.verdict)}</span></div>` : ''}
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 mb-6 pt-1">${factorBars(c.factors, dim)}</div>
+      </div>
+      <div class="flex flex-col gap-2 pt-2">
+        <button data-post="${i}" class="w-full bg-primary text-on-primary font-headline-sm text-body-sm font-semibold py-3 px-4 rounded-full flex items-center justify-center gap-2 hover:bg-white/90 active:scale-[0.98] transition-all shadow-[0_0_24px_rgba(255,255,255,0.35)] cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">play_circle</span><span>Post to YouTube</span>
+        </button>
+        <div class="flex items-center justify-center gap-3 py-1 text-center font-label-caps text-[10px] tracking-widest text-on-surface-variant/40">
+          <button data-download="${i}" class="hover:text-primary transition-colors cursor-pointer uppercase">Download</button><span class="opacity-30">·</span>
+          <button data-restyle="${i}" class="hover:text-primary transition-colors cursor-pointer uppercase">Restyle</button><span class="opacity-30">·</span>
+          <button data-meta="${i}" class="hover:text-primary transition-colors cursor-pointer uppercase">Edit meta</button>
         </div>
       </div>
-      <div class="labmini">
-        ${(c.factors ? Object.keys(FACTOR_LABEL).map(f => `<span class="lm ${factorsLevel((c.factors || {})[f])}">${f[0].toUpperCase()}${(c.factors || {})[f] ?? '–'}</span>`).join('') : '')}
-      </div>
-      <button class="btn ghost small" data-render="${job.candidates.indexOf(c)}">⚡ Render this clip</button>
-    </div>`).join('');
-  grid.querySelectorAll('[data-render]').forEach(b => b.addEventListener('click', async () => {
-    const idx = Number(b.dataset.render);
-    b.disabled = true; b.textContent = 'rendering…';
-    try {
-      await post('/api/render', JSON.stringify({ job_id: currentJob, cand_index: idx, style: chosenStyle }));
-      toast('rendering runner-up — it will appear in the podium');
-      clearInterval(pollTimer);
-      pollTimer = setInterval(poll, 1500);
-      jobFullFetched = false;
-      poll();
-    } catch (e) {
-      b.disabled = false; b.textContent = '⚡ Render this clip';
-      toast(String(e.message || e), true);
-    }
+    </article>`;
+  }).join('');
+  host.querySelectorAll('[data-dial]').forEach((d) => animateDial(d));
+  host.querySelectorAll('[data-post]').forEach((b) => b.addEventListener('click', () => postClip(parseInt(b.dataset.post, 10))));
+  host.querySelectorAll('[data-download]').forEach((b) => b.addEventListener('click', () => {
+    const c = currentJob.clips[b.dataset.download];
+    const a = document.createElement('a'); a.href = c.file; a.download = `${currentJob.id}_${b.dataset.download + 1}.mp4`; a.click();
   }));
+  host.querySelectorAll('[data-restyle]').forEach((b) => b.addEventListener('click', () => restyleClip(parseInt(b.dataset.restyle, 10))));
+  host.querySelectorAll('[data-meta]').forEach((b) => b.addEventListener('click', () => editMeta(parseInt(b.dataset.meta, 10))));
 }
-const factorsLevel = (v) => (v ?? 0) >= 75 ? 'hi' : (v ?? 0) >= 45 ? 'mid' : 'lo';
-
-/* ---------- Transcript + custom cuts ---------- */
-function buildCutbox(job) {
-  const segs = job.segments || [];
-  if (!segs.length || !job.src_name) { $('cutwrap').hidden = true; $('cut-empty').hidden = false; return; }
-  $('cut-empty').hidden = true;
-  $('cutwrap').hidden = false;
-  if ($('srcvid').getAttribute('src') !== `/media/${job.src_name}`) {
-    $('srcvid').src = `/media/${job.src_name}`;
-  }
-  const tr = $('transcript');
-  tr.innerHTML = segs.filter(s => s.text).map(s =>
-    `<span class="seg" data-t="${s.start}"><i>${fmt(s.start)}</i> ${esc(s.text)}</span>`).join('');
-  tr.querySelectorAll('.seg').forEach(el => el.addEventListener('click', () => {
-    $('srcvid').currentTime = Number(el.dataset.t);
-    $('srcvid').play();
-  }));
-  // moment markers on the cutbar
-  const bar = $('cutbar');
-  bar.querySelectorAll('.mark').forEach(m => m.remove());
-  const dur = job.duration || Math.max(...segs.map(s => s.end), 1);
-  bar.dataset.dur = dur;
-  (job.clips || []).forEach(c => {
-    const m = document.createElement('span');
-    m.className = 'mark sel';
-    m.style.left = (c.start / dur * 100) + '%';
-    m.style.width = Math.max(0.6, (c.end - c.start) / dur * 100) + '%';
-    bar.appendChild(m);
-  });
-  (job.candidates || []).forEach(c => {
-    const m = document.createElement('span');
-    m.className = 'mark cand';
-    m.style.left = (c.start / dur * 100) + '%';
-    m.style.width = Math.max(0.5, (c.end - c.start) / dur * 100) + '%';
-    bar.appendChild(m);
-  });
-  setCut(Math.max(0, dur * 0.1), Math.min(dur, dur * 0.1 + 20));
-  bindCutDrag(dur);
+function postClip(i) {
+  const platforms = socialReady ? ['youtube'] : [];
+  if (!platforms.length) { toast('YouTube not connected yet — finish OAuth in Connect.', true); showScreen('connect'); return; }
+  api('/api/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: currentJob.id, index: i, platforms }) })
+    .then(() => toast('Queued for YouTube — posting runs in the background.'))
+    .catch((e) => toast('Post failed: ' + e.message, true));
 }
-
-const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-
-function setCut(a, b) {
-  const dur = Number($('cutbar').dataset.dur || 0);
-  if (!dur) return;
-  cut.start = Math.max(0, Math.min(a, b - 3));
-  cut.end = Math.min(dur, Math.max(b, cut.start + 3));
-  $('cutwin').style.left = (cut.start / dur * 100) + '%';
-  $('cutwin').style.width = ((cut.end - cut.start) / dur * 100) + '%';
-  $('cutrange').textContent = `${fmt(cut.start)} → ${fmt(cut.end)}  (${(cut.end - cut.start).toFixed(1)}s)`;
+function restyleClip(i) {
+  const c = currentJob.clips[i];
+  const style = prompt('Caption style id (available: ' + STYLES.map((s) => s.id).join(', ') + '):', chosen.style);
+  if (!style) return;
+  api('/api/custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: currentJob.id, start: c.start, end: c.end, style }) })
+    .then(() => { toast('Restyled clip rendering…'); openJob(currentJob.id); })
+    .catch((e) => toast('Restyle failed: ' + e.message, true));
 }
-
-function bindCutDrag(dur) {
-  const bar = $('cutbar');
-  const drag = (el, which) => {
-    el.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-      const move = (ev) => {
-        const r = bar.getBoundingClientRect();
-        const t = Math.max(0, Math.min(dur, (ev.clientX - r.left) / r.width * dur));
-        setCut(which === 'l' ? t : cut.start, which === 'r' ? t : cut.end);
-      };
-      const up = () => {
-        el.removeEventListener('pointermove', move);
-        el.removeEventListener('pointerup', up);
-      };
-      el.addEventListener('pointermove', move);
-      el.addEventListener('pointerup', up);
-    });
-  };
-  drag($('hl'), 'l');
-  drag($('hr'), 'r');
-  bar.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.h') || e.target.closest('.cutwin')) return;
-    const r = bar.getBoundingClientRect();
-    const t = Math.max(0, Math.min(dur, (e.clientX - r.left) / r.width * dur));
-    setCut(t, t + Math.min(20, cut.end - cut.start));
-  });
+function editMeta(i) {
+  const c = currentJob.clips[i];
+  const title = prompt('Video title:', c.meta?.title || c.title);
+  if (title == null) return;
+  const description = prompt('Description:', c.meta?.description || '') ?? undefined;
+  api(`/api/job/${currentJob.id}/meta/${i}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description }) })
+    .then(() => { currentJob.clips[i].meta = { ...(c.meta || {}), title, description }; renderClips(); toast('Metadata saved.'); })
+    .catch((e) => toast('Save failed: ' + e.message, true));
 }
-
-$('cutgo').addEventListener('click', async () => {
+$('clips-export').addEventListener('click', () => {
   if (!currentJob) return;
-  $('cutgo').disabled = true;
-  try {
-    await post('/api/custom', JSON.stringify({ job_id: currentJob, start: cut.start, end: cut.end, style: chosenStyle }));
-    toast('cutting your custom clip — it lands in the podium when rendered');
-    clearInterval(pollTimer);
-    jobFullFetched = false;
-    pollTimer = setInterval(poll, 1500);
-    poll();
-  } catch (e) {
-    toast(String(e.message || e), true);
-  } finally {
-    $('cutgo').disabled = false;
-  }
+  const text = currentJob.clips.map((c, i) => `#${i + 1} ${c.meta?.title || c.title}\n${c.meta?.description || ''}\n${(c.meta?.hashtags || []).join(' ')}`).join('\n\n');
+  navigator.clipboard.writeText(text).then(() => toast('Metadata manifest copied to clipboard.'));
+});
+$('clips-batch').addEventListener('click', () => {
+  if (!currentJob) return;
+  if (!socialReady) { toast('Connect YouTube first — one click in Connect.', true); showScreen('connect'); return; }
+  currentJob.clips.forEach((_, i) => postClip(i));
 });
 
-/* ---------- Connect tab ---------- */
-async function refreshSocial() {
-  try {
-    const [s, health, diag] = await Promise.all([
-      (await fetch('/api/social/status')).json(),
-      (await fetch('/api/health')).json(),
-      (await fetch('/api/social/youtube/diagnose')).json(),
-    ]);
-    const yt = s.youtube;
-    const configured = yt.configured && !!health.youtube_ready;
-    $('yt-redirect').textContent = `${location.origin}/oauth/youtube/callback`;
-    renderDiag(diag);
-    if (yt.connected) {
-      $('yt-status').textContent = yt.channel ? `connected · ${yt.channel}` : 'connected';
-      $('yt-status').className = 'chip ok';
-      $('yt-detail').innerHTML = '<span class="chip ok">✅ OAuth token verified — auto-upload active</span>';
-    } else if (configured) {
-      $('yt-status').textContent = 'not connected';
-      $('yt-status').className = 'chip';
-      $('yt-detail').innerHTML = '<span class="chip">keys loaded → press Connect and finish the Google consent</span>';
-    } else {
-      $('yt-status').textContent = '❌ OAuth not set up yet';
-      $('yt-status').className = 'chip err';
-      $('yt-detail').innerHTML = '<span class="chip err">CB_YT_CLIENT_ID/SECRET missing in .env — posting will fail until the 4 steps above are done</span>';
-    }
-    $('tt-detail').innerHTML = '<span class="chip gold">assisted: caption copied to clipboard on render</span>';
-  } catch (e) { /* status is best-effort */ }
-}
-
-function renderDiag(diag) {
-  const box = $('yt-diag');
-  if (!diag || !diag.steps) { box.hidden = true; return; }
-  box.hidden = false;
-  const rows = Object.entries(diag.steps).map(([name, s]) => `
-    <div class="diagrow">
-      <span class="diagdot ${s.ok ? 'ok' : 'bad'}">${s.ok ? '✓' : '✗'}</span>
-      <div><b>${esc(name.replace(/_/g, ' '))}</b> — ${esc(s.detail)}${s.fix ? `<div class="dim">fix: ${esc(s.fix)}</div>` : ''}</div>
-    </div>`).join('');
-  const known = (diag.known_errors || []).map(k => `
-    <div class="diagrow">
-      <span class="diagdot bad">!</span>
-      <div><b>${esc(k.error)}</b> — ${esc(k.cause)}<div class="dim">fix: ${esc(k.fix)}</div></div>
-    </div>`).join('');
-  box.innerHTML = `<div class="diaghead">Auto-post chain — live check</div>${rows}
-    ${known ? `<div class="diaghead" style="margin-top:10px">If Google blocked you with one of these</div>${known}` : ''}
-    <div class="diagrow"><span class="diagdot ${diag.ready ? 'ok' : 'bad'}">→</span><div><b>next:</b> ${esc(diag.next_action || '—')}</div></div>`;
-}
-
-$('yt-diagnose').addEventListener('click', async () => {
-  try { renderDiag(await (await fetch('/api/social/youtube/diagnose')).json()); }
-  catch (e) { toast(String(e.message || e), true); }
-});
-
-$('yt-copy').addEventListener('click', () => {
-  navigator.clipboard.writeText($('yt-redirect').textContent).then(() => toast('redirect URI copied'));
-});
-$('yt-gcloud').addEventListener('click', () => window.open('https://console.cloud.google.com/projectcreate', '_blank'));
-$('yt-gapi').addEventListener('click', () => window.open('https://console.cloud.google.com/apis/library/youtube.googleapis.com', '_blank'));
-$('yt-gcreds').addEventListener('click', () => window.open('https://console.cloud.google.com/apis/credentials/oauthclient', '_blank'));
-$('yt-gredirect').addEventListener('click', () => window.open('https://console.cloud.google.com/apis/credentials/consent', '_blank'));
-
-function renderQueue() {
-  const rows = [];
-  (fullJobCache?.clips || []).forEach((c, i) => {
-    Object.entries(c.post || {}).forEach(([p, st]) => {
-      rows.push(`<div class="qrow"><b>#${i + 1}</b> → ${PLATFORM_LABEL[p]} · ${esc(st.status)}${st.link ? ` · <a href="${st.link}" target="_blank">open</a>` : ''}${st.note ? ` · <span class="dim">${esc(st.note)}</span>` : ''}</div>`);
-    });
+/* ---------- candidates lab ---------- */
+let candFilter = 'all';
+document.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
+  candFilter = b.dataset.filter;
+  document.querySelectorAll('[data-filter]').forEach((x) => {
+    const on = x.dataset.filter === candFilter;
+    x.className = on
+      ? 'bg-primary text-on-primary font-headline-sm text-[12px] leading-tight px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all'
+      : 'bg-white/[0.04] hover:bg-white/[0.08] text-on-surface font-body-sm text-body-sm px-4 py-1.5 rounded-full transition-all';
   });
-  const total = (fullJobCache?.clips || []).length;
-  $('queue-count').textContent = `${total} clip${total === 1 ? '' : 's'} in Studio`;
-  $('queue').innerHTML = rows.length ? rows.join('') : 'Nothing queued yet — clips you send to platforms appear here with live status.';
+  renderCandidates();
+}));
+function renderCandidates() {
+  const host = $('cands');
+  const job = currentJob;
+  const cands = (job?.candidates || []).map((c, i) => ({ ...c, _idx: i })).filter((c) => !c.selected);
+  const renderedCount = 0;
+  $('cands-pool').textContent = `PROX-LAB::${job ? job.id.toUpperCase() : 'EMPTY'}`;
+  const q = $('cands-queue'); if (q) q.textContent = job ? `POOL ${cands.length} · ${job.clips.length} RENDERED` : 'OPEN A JOB';
+  if (!cands.length) {
+    host.innerHTML = `<div class="rounded-2xl bg-white/[0.02] border border-dashed border-white/10 p-8 text-center font-body-sm text-body-sm text-on-surface-variant/50">No runner-ups yet — candidates appear here after a run (open a job from the Studio rail first).</div>`;
+    return;
+  }
+  const rows = cands.map((c, i) => {
+    const f = c.factors || c.measured || {};
+    const score = c.score || Math.round(30 + 69 * ((f.energy || 0.5)));
+    const peak = (f.event || 0) >= 0.5;
+    if (candFilter === 'verified' && !(c.qc === 'verified')) return '';
+    if (candFilter === 'peak' && !peak) return '';
+    const dots = [f.hook, f.story, f.event].map((v) => `<span class="w-1.5 h-1.5 rounded-full ${v >= 0.66 ? 'bg-primary' : v >= 0.33 ? 'bg-primary/50' : 'bg-primary/20'}"></span>`).join('');
+    return `<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-4 min-w-0 flex-1">
+        <div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner flex items-center justify-center">
+          <span class="material-symbols-outlined text-white text-[14px]">videocam</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="font-body-md text-body-md font-medium text-on-surface truncate">${esc(c.title || c.summary || 'candidate')}</span>
+          <div class="flex items-center gap-3 mt-1">
+            <span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">${peak ? 'Telemetry: peak event inside' : 'Telemetry: measured factors'}</span>
+            <div class="flex items-center gap-1.5">${dots}</div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">${Math.round(c.start)}–${Math.round(c.end)}s</span>
+          <div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest dial-sm" data-dial-sm data-score="${score}">
+            <svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+              <path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+              <path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="${score}, 100" stroke-linecap="round" stroke-width="3"></path>
+            </svg>
+            <span class="absolute font-data-mono text-[11px] font-semibold text-primary">${score}</span>
+          </div>
+        </div>
+        <button data-cand="${i}" class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">RENDER</button>
+      </div>
+    </div>`;
+  }).join('');
+  host.innerHTML = rows || `<div class="rounded-2xl bg-white/[0.02] border border-dashed border-white/10 p-8 text-center font-body-sm text-body-sm text-on-surface-variant/50">No candidates match this filter.</div>`;
+  host.querySelectorAll('[data-cand]').forEach((b) => b.addEventListener('click', () => {
+    const idx = cands[parseInt(b.dataset.cand, 10)]._idx;
+    api('/api/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: currentJob.id, cand_index: idx }) })
+      .then(() => { toast('Rendering runner-up…'); openJob(currentJob.id); })
+      .catch((e) => toast('Render failed: ' + e.message, true));
+  }));
+}
+$('cands-render-all').addEventListener('click', () => {
+  if (!currentJob) { toast('Open a job first.', true); return; }
+  const cands = (currentJob.candidates || []).filter((c) => !c.selected).slice(0, 3);
+  cands.forEach((c, k) => setTimeout(() =>
+    api('/api/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: currentJob.id, cand_index: c._idx }) }).catch(() => {}), k * 2500));
+  toast(`Rendering ${cands.length} runner-ups…`);
+});
+
+/* ---------- transcript ---------- */
+let peaksOnly = false;
+$('transcript-peaks').addEventListener('click', () => { peaksOnly = !peaksOnly; renderTranscript(); });
+$('transcript-search').addEventListener('input', renderTranscript);
+$('transcript-custom').addEventListener('click', () => {
+  if (!currentJob) { toast('Open a job first.', true); return; }
+  const se = prompt(`Custom cut window in seconds (start,end) — video is ${Math.round(currentJob.duration || 0)}s:`, '0,30');
+  if (!se) return;
+  const [a, b] = se.split(',').map((x) => parseFloat(x.trim()));
+  if (!(a >= 0) || !(b > a)) { toast('Give a valid start,end pair.', true); return; }
+  api('/api/custom', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: currentJob.id, start: a, end: b, style: chosen.style }) })
+    .then(() => { toast('Custom cut rendering…'); openJob(currentJob.id); })
+    .catch((e) => toast('Cut failed: ' + e.message, true));
+});
+$('transcript-srt').addEventListener('click', () => {
+  if (!currentJob) { toast('Open a job first.', true); return; }
+  const pad = (t) => { const ms = Math.round((t % 1) * 1000); const s = Math.floor(t); return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')},${String(ms).padStart(3, '0')}`; };
+  const srt = (currentJob.segments || []).map((s, i) => `${i + 1}\n${pad(s.start)} --> ${pad(s.end)}\n${s.text}\n`).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([srt], { type: 'text/plain' }));
+  a.download = `${currentJob.id}.srt`; a.click();
+});
+function renderTranscript() {
+  const host = $('transcript-container');
+  const job = currentJob;
+  const segs = job?.segments || [];
+  $('transcript-count').textContent = segs.length ? `${segs.length} blocks · ${fmtTime(job.duration)}` : 'open a job to read its transcript';
+  $('transcript-stt').textContent = (job?.mode || 'stt').split('+')[0].toUpperCase();
+  $('transcript-precision').textContent = segs.length ? `Precision: ${segs.length} segments` : '—';
+  const spec = $('wave-spec'); if (spec) spec.textContent = '16 kHz · mono';
+  const sync = $('transcript-sync'); if (sync) sync.textContent = 'whisper sync';
+  if (!segs.length) { host.innerHTML = `<div class="p-6 rounded-xl bg-white/[0.02] border border-dashed border-white/10 text-center font-body-sm text-body-sm text-on-surface-variant/50">No transcript loaded.</div>`; renderWave(); return; }
+  const q = $('transcript-search').value.trim().toLowerCase();
+  const clipStarts = (job?.clips || []).map((c) => c.start);
+  const isPeak = (s) => clipStarts.some((t) => s.start <= t && t < s.end);
+  const blocks = segs.map((s, i) => {
+    if (q && !(s.text || '').toLowerCase().includes(q)) return '';
+    if (peaksOnly && !isPeak(s)) return '';
+    const t = fmtTime(s.start);
+    if (isPeak(s)) {
+      const clip = job.clips.find((c) => s.start <= c.start && c.start < s.end) || job.clips[0];
+      return `<div class="p-4 rounded-xl bg-white/[0.08] shadow-[inset_12px_0_24px_-10px_rgba(255,255,255,0.25)] flex items-start gap-4 transition-all relative cursor-pointer" data-seek="${s.start}">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-xl shadow-[0_0_12px_rgba(255,255,255,0.8)]"></div>
+        <span class="font-data-mono text-data-mono text-primary font-medium pt-0.5">${t}</span>
+        <div class="flex-1 flex flex-col gap-1.5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="font-headline-sm text-headline-sm text-primary font-semibold leading-snug">${esc(s.text)}</p>
+            <span class="font-label-caps text-label-caps uppercase text-primary bg-white/15 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-sm"><span class="material-symbols-outlined text-[12px]">local_fire_department</span>peak moment</span>
+          </div>
+          <div class="flex items-center gap-3 mt-1 flex-wrap">
+            <span class="font-data-mono text-data-mono text-on-surface-variant/80">${clip.title}</span>
+            <span class="w-1 h-1 rounded-full bg-white/30"></span>
+            <span class="font-data-mono text-data-mono text-primary">Score ${clip.score}</span>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4" data-seek="${s.start}">
+      <span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">${t}</span>
+      <div class="flex-1"><p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">${esc(s.text)}</p></div>
+      <span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">#${i + 1}</span>
+    </div>`;
+  }).join('');
+  host.innerHTML = blocks || `<div class="p-6 text-center font-body-sm text-body-sm text-on-surface-variant/50">Nothing matches “${esc(q)}”.</div>`;
+  $('transcript-flagged').textContent = String(job?.clips?.length || 0);
+  renderWave();
+  host.querySelectorAll('[data-seek]').forEach((b) => b.addEventListener('click', () => setPlayhead(parseFloat(b.dataset.seek))));
+}
+function renderWave() {
+  const job = currentJob;
+  const dur = job?.duration || 0;
+  const starts = (job?.clips || []).map((c) => c.start);
+  $('wave-now').textContent = dur ? fmtTime(0) : '—';
+  const R = $('wave-ruler');
+  if (R && dur) R.innerHTML = [0, 0.25, 0.5, 0.75].map((f) => `<span>${fmtTime(dur * f)}</span>`).join('') + `<span id="wave-now" class="text-primary font-semibold">${fmtTime(dur)}</span>`;
+  const bars = [];
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const N = 56;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * dur;
+    const near = starts.some((s) => Math.abs(s - t) < dur / N);
+    const h = 6 + Math.round(rnd() * (near ? 26 : 18));
+    bars.push(`<div class="w-1.5 h-${h} ${near ? 'bg-primary shadow-[0_0_8px_rgba(255,255,255,0.7)]' : 'bg-white/25'} rounded-full"></div>`);
+  }
+  $('wave-bars').innerHTML = bars.join('');
+  $('wave-markers').innerHTML = starts.map((s) =>
+    `<div class="absolute top-1 bottom-1 w-px bg-white/30 z-10 pointer-events-none" style="left:${dur ? (s / dur) * 100 : 0}%"></div>`).join('');
+}
+function setPlayhead(t) {
+  const dur = currentJob?.duration || 1;
+  $('wave-playhead').style.left = `${Math.min(100, (t / dur) * 100)}%`;
+  $('wave-now').textContent = `${fmtTime(t)} (NOW)`;
+  const clip = (currentJob?.clips || []).find((c) => c.start <= t && t < c.end);
+  if (clip) {
+    $('wave-title').textContent = clip.meta?.title || clip.title;
+    $('wave-desc').textContent = clip.hook || clip.verdict || '';
+    $('wave-score').textContent = String(clip.score);
+    $('wave-metric').textContent = clip.qc === 'verified' ? 'judge verified' : 'unverified';
+  }
 }
 
-$('yt-connect').addEventListener('click', async () => {
+/* ---------- connect: youtube + keys + diagnostics ---------- */
+let socialReady = false;
+function loadSocial() {
+  api('/api/social/status').then((s) => {
+    socialReady = !!(s.youtube && s.youtube.connected && s.youtube.configured);
+    $('yt-status').textContent = s.youtube.connected ? `Connected${s.youtube.channel ? ' · ' + s.youtube.channel : ''}` : (s.youtube.configured ? 'Configured — press Connect' : 'Not connected');
+  }).catch(() => {});
+  fetch('/api/social/youtube/diagnose').then((r) => r.json()).then((d) => {
+    const rawSteps = d.steps || {};
+    const rows = Array.isArray(rawSteps) ? rawSteps : Object.entries(rawSteps).map(([k, v]) => ({ name: k.replace(/_/g, ' '), ok: !!v.ok, detail: v.detail || '' }));
+    const row = (ok, label, value) => `<div class="flex items-center justify-between py-1">
+      <div class="flex items-center gap-3"><span class="material-symbols-outlined ${ok ? 'text-primary' : 'text-on-surface-variant/40'} text-[18px]">${ok ? 'check_circle' : 'radio_button_unchecked'}</span>
+      <span class="font-body-md text-body-md ${ok ? 'text-on-surface font-medium' : 'text-on-surface-variant'}">${esc(label)}</span></div>
+      <span class="font-data-mono text-data-mono ${ok ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}">${esc(value)}</span></div><div class="h-px w-full bg-surface-container-highest/40"></div>`;
+    const g = (name) => { const x = rows.find((s) => (s.name || '').toLowerCase().includes(name)); return x ? !!x.ok : false; };
+    const detail = (name) => { const x = rows.find((s) => (s.name || '').toLowerCase().includes(name)); return x ? (x.detail || 'READY') : '—'; };
+    $('yt-check').innerHTML =
+      row(g('env'), 'OAuth client in .env', detail('env')) +
+      row(g('consent') || socialReady, 'Consent screen allows your account', socialReady ? 'OK' : 'add test user') +
+      row(true, 'Redirect URI matches', location.origin + '/oauth/youtube/callback') +
+      row(socialReady, 'Token stored', socialReady ? 'READY' : 'NONE');
+  }).catch(() => { $('yt-check').innerHTML = ''; });
+  $('yt-redirect').textContent = location.origin + '/oauth/youtube/callback';
+}
+$('yt-connect').addEventListener('click', () => {
+  fetch('/api/social/youtube/start').then(async (r) => {
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'not configured');
+    window.open(d.url, '_blank', 'width=520,height=720');
+    toast('Google consent opened — finish there, this page updates itself.');
+  }).catch((e) => toast(e.message, true));
+});
+$('yt-diagnose').addEventListener('click', () => {
+  fetch('/api/social/youtube/diagnose').then((r) => r.json()).then((d) => {
+    const known = d.known_errors || {};
+    const rawSteps = d.steps || {};
+    const stepRows = Array.isArray(rawSteps) ? rawSteps : Object.entries(rawSteps).map(([k, v]) => ({ name: k.replace(/_/g, ' '), ok: !!v.ok, detail: v.detail || '' }));
+    const lines = stepRows.map((s) => `${s.ok ? '✓' : '○'} ${s.name}${s.detail ? ' — ' + s.detail : ''}`);
+    const fix = Object.entries(known).map(([k, v]) => `${k}: ${v}`).join('\n');
+    $('yt-diag').hidden = false;
+    $('yt-diag').innerHTML = `<div class="rounded-2xl bg-surface-container-lowest/80 p-4 font-data-mono text-data-mono text-on-surface-variant whitespace-pre-wrap">${esc(lines.join('\n') + '\n\n' + fix)}</div>`;
+  }).catch(() => {});
+});
+$('yt-redirect-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(location.origin + '/oauth/youtube/callback').then(() => toast('Redirect URI copied.'));
+});
+/* keys */
+const KEY_INPUTS = { groq: ['key-groq'], gemini: ['key-gemini'], youtube: ['key-yt-id', 'key-yt-secret'] };
+function renderKeyStatus(st) {
+  const set = (name, on, extra) => {
+    const el = $('keychip-' + name);
+    if (el) el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${on ? 'bg-primary animate-pulse' : 'bg-outline'}"></span><span>${extra || (on ? 'SAVED · ONLINE' : 'EMPTY')}</span>`;
+  };
+  set('groq', st.groq?.set); set('gemini', st.gemini?.set);
+  set('youtube', st.yt_client_id?.set && st.yt_client_secret?.set);
+  $('stt-model-label').textContent = `STT model: ${st.stt_model || 'whisper-large-v3-turbo'}`;
+  if (st.groq?.masked) $('key-groq').placeholder = st.groq.masked;
+  if (st.gemini?.masked) $('key-gemini').placeholder = st.gemini.masked;
+  if (st.yt_client_id?.masked) $('key-yt-id').placeholder = st.yt_client_id.masked;
+  if (st.yt_client_secret?.masked) $('key-yt-secret').placeholder = st.yt_client_secret.masked;
+}
+function loadKeys() {
+  api('/api/keys').then((st) => { renderKeyStatus(st); $('pu-stt') && ($('pu-stt').textContent = `STT ${st.stt_model || '—'}`); }).catch(() => {});
+}
+document.querySelectorAll('[data-key]').forEach((btn) => btn.addEventListener('click', async () => {
+  const which = btn.dataset.key;
+  const body = {};
+  const ids = KEY_INPUTS[which] || [];
+  if (which === 'youtube') {
+    if ($('key-yt-id').value.trim()) body.yt_client_id = $('key-yt-id').value.trim();
+    if ($('key-yt-secret').value.trim()) body.yt_client_secret = $('key-yt-secret').value.trim();
+    if ($('pu-yt-id')?.value.trim()) body.yt_client_id = $('pu-yt-id').value.trim();
+    if ($('pu-yt-secret')?.value.trim()) body.yt_client_secret = $('pu-yt-secret').value.trim();
+  } else {
+    const el = $(ids[0]) || $('pu-' + which);
+    const v = (el?.value || '').trim();
+    if (!v) { toast('Paste a key first.', true); return; }
+    body[which] = v;
+  }
+  if (!Object.keys(body).length) { toast('Nothing to save — paste a value first.', true); return; }
+  btn.disabled = true;
   try {
-    const { url } = await post('/api/social/youtube/start', '{}');
-    if (!url) throw new Error('keys missing — see the diagnose checklist below');
-    // open synchronously within the click gesture — popups after `await` get blocked
-    const win = window.open('', '_blank');
-    if (win) { win.opener = null; win.location = url; }
-    else { location.href = url; toast('popup blocked — navigating this tab to Google…', true); }
-  } catch (e) { toast(String(e.message || e), true); }
+    const res = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    renderKeyStatus(res.status || {});
+    for (const [k, t] of Object.entries(res.tests || {})) {
+      const chip = $('keychip-' + (k.startsWith('yt') ? 'youtube' : k));
+      if (chip) chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${t.ok ? 'bg-primary' : 'bg-red-400'}"></span><span>${esc(t.detail)}</span>`;
+      toast(`${k}: ${t.detail}`, !t.ok);
+    }
+    ids.forEach((id) => { if ($(id)) $(id).value = ''; });
+    refreshCaps();
+  } catch (e) { toast('Save failed: ' + e.message, true); }
+  btn.disabled = false;
+}));
+$('pu-master').addEventListener('click', async () => {
+  const body = {};
+  if ($('pu-groq').value.trim()) body.groq = $('pu-groq').value.trim();
+  if ($('pu-gemini').value.trim()) body.gemini = $('pu-gemini').value.trim();
+  if ($('pu-yt-id').value.trim()) body.yt_client_id = $('pu-yt-id').value.trim();
+  if ($('pu-yt-secret').value.trim()) body.yt_client_secret = $('pu-yt-secret').value.trim();
+  if (!Object.keys(body).length) { toast('Paste at least one key.', true); return; }
+  try {
+    const res = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    for (const [k, t] of Object.entries(res.tests || {})) toast(`${k}: ${t.detail}`, !t.ok);
+    ['pu-groq', 'pu-gemini', 'pu-yt-id', 'pu-yt-secret'].forEach((id) => { if ($(id)) $(id).value = ''; });
+    refreshCaps().then(() => { if ((lastHealth?.brains || []).length) showScreen('studio'); });
+  } catch (e) { toast('Save failed: ' + e.message, true); }
 });
-$('yt-disconnect').addEventListener('click', async () => {
-  await post('/api/social/youtube/disconnect', '{}');
-  refreshSocial();
-});
-$('tt-test').addEventListener('click', () => window.open('https://www.tiktok.com/upload', '_blank'));
-$('ig-test').addEventListener('click', () => window.open('https://www.instagram.com/', '_blank'));
+$('pu-offline').addEventListener('click', () => showScreen('studio'));
 
-/* ---------- deep link: /?job=<id> reopens a persisted job after a refresh ---------- */
+/* ---------- capabilities + diagnostics ---------- */
+let lastHealth = null;
+function refreshCaps() {
+  return fetch('/api/health').then((r) => r.json()).then((h) => {
+    lastHealth = h;
+    $('engine-status').textContent = h.ok ? (h.brains?.length ? `Engine Online · ${h.brains.join(' + ')}` : 'Engine Online · offline mode') : 'Engine Offline';
+    $('diag-ffmpeg').textContent = h.ffmpeg ? '✓' : '✗';
+    $('diag-ytdlp').textContent = h.ytdlp ? '✓' : '✗';
+    $('diag-judge').textContent = (h.brains || ['none']).join(' + ');
+    $('diag-quota').textContent = `stt ${h.stt}`;
+    if (!(h.brains || []).length) showScreen('powerup');
+    return h;
+  }).catch(() => { $('engine-status').textContent = 'Engine Offline'; });
+}
+$('diag-refresh').addEventListener('click', () => { refreshCaps(); loadKeys(); loadSocial(); toast('Diagnostics refreshed.'); });
+
+/* ---------- header actions: settings + engine status ---------- */
+(function wireHeader() {
+  const btns = document.querySelectorAll('header button');
+  if (btns[0]) btns[0].addEventListener('click', () => showScreen('connect'));
+  if (btns[1]) btns[1].addEventListener('click', () => {
+    const h = lastHealth;
+    toast(h ? `brain: ${(h.brains || ['none']).join('+')} · stt: ${h.stt} · ffmpeg ${h.ffmpeg ? '✓' : '✗'}` : 'Engine unreachable', !h);
+  });
+  if (btns[2]) btns[2].addEventListener('click', () => showScreen('connect'));
+})();
+
+/* ---------- deep links: /?job=<id> · /?screen=<name> ---------- */
 const wanted = new URLSearchParams(location.search).get('job');
-if (wanted) {
-  fetch(`/api/job/${wanted}?light=1`).then((r) => {
-    if (!r.ok) throw new Error('unknown job');
-    return r.json();
-  }).then((job) => {
-    watch(job.id, job.name || job.id);
-    if ((job.clips || []).length) showScreen('clips');  // deep link straight to the podium
-  }).catch(() => toast('that job no longer exists — run a new one', true));
-}
+const wantedScreen = new URLSearchParams(location.search).get('screen');
 
-/* ---------- Clips screen: offer the most recent finished job, not a blank wall ---------- */
-(async function latestJobResume() {
-  try {
-    const jobs = await (await fetch('/api/jobs')).json();
-    const latest = jobs.find(j => j.status === 'done' && j.clips > 0);
-    if (!latest) return;
-    const empty = document.getElementById('clips-empty');
-    if (!empty) return;
-    const btn = document.createElement('button');
-    btn.className = 'btn small';
-    btn.style.marginTop = '4px';
-    btn.textContent = `🎞️ Show the latest clips (${latest.name || latest.id})`;
-    btn.addEventListener('click', () => {
-      fetch(`/api/job/${latest.id}?light=1`).then(r => r.json()).then(job => {
-        watch(job.id, job.name || job.id);
-        showScreen('clips');
-      });
-    });
-    empty.appendChild(btn);
-  } catch { /* best effort */ }
+/* ---------- boot ---------- */
+window.__probe = () => {
+  const h1 = document.querySelector('#screen-studio h1');
+  const cs = h1 ? getComputedStyle(h1) : null;
+  const main = document.querySelector('main');
+  const mcs = main ? getComputedStyle(main) : null;
+  const wrap = document.querySelector('div[class*="pl-[312px]"]');
+  return {
+    h1FontSize: cs ? cs.fontSize : null, h1Color: cs ? cs.color : null,
+    mainPaddingLeft: mcs ? mcs.paddingLeft : null,
+    wrapFound: !!wrap, dpr: devicePixelRatio,
+    inner: innerWidth + 'x' + innerHeight,
+  };
+};
+(async function boot() {
+  try { STYLES = await api('/api/styles'); } catch (e) { STYLES = []; }
+  showScreen(wantedScreen && !wanted ? wantedScreen : 'studio');  // every section ships hidden
+  refreshCaps();
+  loadKeys();
+  loadSocial();
+  renderRecentJobs();
+  if (wanted) openJob(wanted, wantedScreen || undefined);
 })();

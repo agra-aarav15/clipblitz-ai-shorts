@@ -1,255 +1,1077 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ClipBlitz — ProX Editor · AI Clipping Studio</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/styles.css" />
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<!DOCTYPE html>
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><link href="/tailwind.css" rel="stylesheet"/>
+<script src="/gsap.min.js" defer></script>
+<link href="/styles.css" rel="stylesheet"/>
 </head>
-<body>
-<div class="liquid" aria-hidden="true">
-  <div class="orb orb-a"></div>
-  <div class="orb orb-b"></div>
-  <div class="orb orb-c"></div>
-  <div class="grain"></div>
+<body class="bg-[#050505] font-body-md text-body-md text-on-surface min-h-screen relative selection:bg-primary selection:text-on-primary">
+<!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  if (new URLSearchParams(location.search).has('nomotion')) return; // static captures
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
 </div>
-<div class="app">
-
-  <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar glass">
-    <div class="logo"><span class="bolt grad-text">✂️</span><span class="grad-text">ClipBlitz</span></div>
-    <nav class="snav" id="snav">
-      <button class="snavbtn active" data-screen="studio">🎬 <span>Studio</span></button>
-      <button class="snavbtn" data-screen="clips">🎞️ <span>Clips</span></button>
-      <button class="snavbtn" data-screen="lab">⚖️ <span>Candidates</span></button>
-      <button class="snavbtn" data-screen="transcript">📝 <span>Transcript</span></button>
-      <button class="snavbtn" data-screen="connect">🔗 <span>Connect</span></button>
-    </nav>
-    <div class="sstatus">
-      <span class="chip" id="caps">checking…</span>
-    </div>
-  </aside>
-
-  <!-- ============ MAIN ============ -->
-  <div class="main">
-    <header class="topbar">
-      <div class="jobtitle" id="jobtitle">Studio</div>
-      <div class="topchips">
-        <span class="chip" id="jobchip" hidden></span>
-        <span class="chip" id="livechip">checking…</span>
-      </div>
-    </header>
-
-    <div class="screens">
-    <!-- ============ STUDIO ============ -->
-    <section class="screen" id="screen-studio">
-      <div class="glass" style="padding:24px">
-        <div class="row" style="align-items:stretch; gap:20px">
-          <div style="flex:1.15; min-width:300px">
-            <div class="uploadzone" id="dropzone">
-              <div class="big">Drop your long video here, or click to browse</div>
-              <div>The AI editor finds <b style="color:var(--text)">stories, drafts the cut, judges it,</b> and renders the top 3 · 9:16</div>
-              <input type="file" id="file" accept="video/*" />
-            </div>
-            <div class="urlrow">
-              <input type="text" id="url" placeholder="…or paste a YouTube link — https://youtube.com/watch?v=…" />
-              <button class="btn" id="fetch">⬇️ From URL</button>
-            </div>
-            <div class="row" style="margin-top:16px">
-              <div class="field">
-                <label>Size <span id="scaleval">1.0×</span></label>
-                <input type="range" id="scale" min="0.7" max="1.4" step="0.05" value="1" />
-              </div>
-              <div class="field">
-                <label>Framing</label>
-                <select id="framing">
-                  <option value="blur">Blur-pad — full frame, nothing cut (recommended)</option>
-                  <option value="crop">Center crop — cuts sides</option>
-                  <option value="crop-left">Crop left speaker</option>
-                  <option value="crop-right">Crop right speaker</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Position</label>
-                <select id="position">
-                  <option value="bottom">Bottom</option>
-                  <option value="middle">Middle</option>
-                  <option value="top">Top</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>YouTube privacy</label>
-                <select id="privacy">
-                  <option value="public">Public</option>
-                  <option value="unlisted">Unlisted</option>
-                  <option value="private">Private</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Auto-post when ready</label>
-                <select id="autopost">
-                  <option value="0">Manual — I press Post</option>
-                  <option value="1">Automatic</option>
-                </select>
-              </div>
-            </div>
-            <div class="row" style="margin-top:18px">
-              <button class="btn" id="upload">⚡ Edit my video</button>
-              <button class="btn ghost" id="demo">▶ Demo (generated test video)</button>
-            </div>
-          </div>
-
-          <!-- LIVE CAPTION PREVIEW -->
-          <div class="preview-panel glass" style="flex:1; min-width:260px; padding:14px">
-            <div class="metahead" style="margin-bottom:10px">Live caption preview <span id="pv-hint" class="chip gold" style="margin-left:6px">pick a style → watch it move</span></div>
-            <div class="pv-frame" id="pv-frame">
-              <canvas id="pv-canvas" width="270" height="480"></canvas>
-              <div class="pv-caption" id="pv-caption">Your captions <br> look like this</div>
-              <div class="pv-empty" id="pv-empty">drop a video to see<br>your real frame here</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="metahead" style="margin:18px 0 8px">Caption style</div>
-        <div class="stylegrid" id="stylegrid"></div>
-        <p class="note">The <b>ProX editor</b> segments the episode into <b>stories</b>, drafts the tightest cut inside each one,
-        polishes the edges (never starts on filler, lands the ending on the laugh), then a strict <b>QC judge</b> reads the exact
-        clip and scores it — only clips that stand alone make the podium, each with its verdict.</p>
-      </div>
-
-      <div id="error"></div>
-      <div id="toasts"></div>
-
-      <!-- PROCESSING (lives in Studio) -->
-      <div class="glass jobbox" id="job" hidden>
-        <div class="jobhead">
-          <b id="jobname"></b>
-          <span id="jobstage" class="stage">queued</span>
-        </div>
-        <div class="bar"><div id="jobbar"></div></div>
-        <div class="timeline" id="timeline"></div>
-        <div class="skeletons" id="skeletons" hidden>
-          <div class="skel glass"></div><div class="skel glass"></div><div class="skel glass"></div>
-        </div>
-        <div class="jobdone" id="jobdone" hidden>
-          <button class="btn" id="goto-clips">🎞️ Open the Clips</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ CLIPS ============ -->
-    <section class="screen" id="screen-clips" hidden>
-      <div class="emptystate glass" id="clips-empty">
-        <div class="big">No clips yet</div>
-        <div class="dim">Run a video in the Studio — the podium lands here with judge verdicts and scores.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
-      </div>
-      <div class="podium" id="clips"></div>
-    </section>
-
-    <!-- ============ CANDIDATES ============ -->
-    <section class="screen" id="screen-lab" hidden>
-      <div class="emptystate glass" id="lab-empty">
-        <div class="big">No candidates yet</div>
-        <div class="dim">Every runner-up with its real measured score appears here after a run — one click renders any of them.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
-      </div>
-      <div id="labwrap">
-        <div class="metahead" style="margin-bottom:10px">Candidate lab — every runner-up, measured and judged
-          <span class="chip gold" style="margin-left:8px">click a card to render it</span></div>
-        <div class="labgrid" id="labgrid"></div>
-      </div>
-    </section>
-
-    <!-- ============ TRANSCRIPT ============ -->
-    <section class="screen" id="screen-transcript" hidden>
-      <div class="emptystate glass" id="cut-empty">
-        <div class="big">No transcript yet</div>
-        <div class="dim">After a run: click any line to jump, drag the white handles to cut your own clip.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
-      </div>
-      <div class="cutwrap glass" id="cutwrap" style="padding:18px">
-        <div class="cutplayer">
-          <video id="srcvid" controls preload="metadata"></video>
-        </div>
-        <div class="cutpanel">
-          <div class="cutbar" id="cutbar">
-            <div class="cutwin" id="cutwin"><i class="h l" id="hl"></i><i class="h r" id="hr"></i></div>
-          </div>
-          <div class="cutinfo">
-            <span id="cutrange" class="chip gold">—</span>
-            <button class="btn small" id="cutgo">✂ Cut this window</button>
-          </div>
-          <div class="transcript" id="transcript"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ CONNECT ============ -->
-    <section class="screen" id="screen-connect" hidden>
-      <div class="connectgrid">
-        <div class="glass platcard">
-          <div class="picon">▶️</div>
-          <h3>YouTube <span class="chip" id="yt-status">checking…</span></h3>
-          <p class="pdesc"><b style="color:var(--text)">Fully automatic posting</b> needs a one-time OAuth setup —
-          it does <b>not</b> work without it. Steps (≈15 min, click-by-click in <b>SETUP-YOUTUBE.md</b>):
-          ① create a free Google Cloud project → enable <b>YouTube Data API v3</b> → create an
-          <b>OAuth client ID</b> (type: Desktop app). ② paste the client ID + secret into <b>.env</b> (no restart needed).
-          ③ add the redirect URI below in Google Cloud → "Authorized redirect URIs". ④ press Connect.</p>
-          <div class="redirectbox"><code id="yt-redirect">checking…</code>
-            <button class="btn ghost small" id="yt-copy">copy</button></div>
-          <div class="row" style="margin:8px 0">
-            <button class="btn ghost small" id="yt-gcloud">☁️ Open Google Cloud Console</button>
-            <button class="btn ghost small" id="yt-gapi">🔌 Enable YouTube Data API</button>
-            <button class="btn ghost small" id="yt-gcreds">🔑 Create OAuth credentials</button>
-            <button class="btn ghost small" id="yt-gredirect">↩︎ Redirect URI settings</button>
-          </div>
-        <div class="platstatus" id="yt-detail"></div>
-        <div class="diagbox" id="yt-diag" hidden></div>
-        <div class="row">
-          <button class="btn small" id="yt-connect">Connect YouTube</button>
-          <button class="btn ghost small" id="yt-diagnose">🔍 Diagnose</button>
-          <button class="btn ghost small" id="yt-disconnect">Disconnect</button>
-        </div>
-        </div>
-
-        <div class="glass platcard">
-          <div class="picon">🎵</div>
-          <h3>TikTok <span class="chip">assisted one-click</span></h3>
-          <p class="pdesc">Renders finish → caption package (title + description + hashtags) is <b>auto-copied to
-          your clipboard</b> and the TikTok upload page opens. Full automation arrives when your TikTok developer
-          app is approved.</p>
-          <div class="platstatus" id="tt-detail"></div>
-          <button class="btn ghost small" id="tt-test">Open TikTok upload</button>
-        </div>
-
-        <div class="glass platcard">
-          <div class="picon">📸</div>
-          <h3>Instagram <span class="chip">assisted one-click</span></h3>
-          <p class="pdesc">Same assisted flow — clip + caption package ready for Reels.</p>
-          <button class="btn ghost small" id="ig-test">Open Instagram</button>
-        </div>
-
-        <div class="glass platcard">
-          <div class="picon">🔁</div>
-          <h3>More platforms</h3>
-          <p class="pdesc">Facebook and X are one click away on every clip card. Add a <b>CB_POST_KEY</b>
-          (Blotato / Ayrshare) to <b>.env</b> later and every platform becomes fully automatic.</p>
-        </div>
-      </div>
-
-      <div class="glass jobbox" style="margin-top:16px">
-        <div class="jobhead"><b>📡 Post queue</b><span class="chip" id="queue-count">0 clips</span></div>
-        <div id="queue" class="note">Nothing queued yet — clips you send to platforms appear here with live status.</div>
-      </div>
-    </section>
-    </div>
-  </div>
+<!-- STITCH_SHADER_END:ANIMATION_2 -->
+<aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside>
+<div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest" id="engine-status">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-28 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full">
+<!-- ============ SCREEN: POWERUP ============ -->
+<section class="screen" id="screen-powerup" hidden>
+<div class="relative w-full overflow-hidden flex flex-col items-center justify-center py-6">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-gradient-to-b from-primary/10 via-primary/[0.03] to-transparent rounded-full blur-[140px] pointer-events-none"></div>
+<div class="absolute -bottom-32 left-1/2 -translate-x-1/2 w-[540px] h-[320px] bg-primary/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-2xl w-full mx-auto flex flex-col items-center text-center relative z-10">
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-container-lowest/80 backdrop-blur-xl shadow-sm mb-6 transition-all duration-300 hover:bg-surface-container-high/60">
+<span class="material-symbols-outlined text-sm text-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant font-semibold tracking-[0.2em]">CLIPBLITZ</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
 </div>
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-[-0.025em] leading-none mb-3">
+        Power the engine.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-lg mb-10 leading-relaxed">
+        Paste your keys once. ClipBlitz hot-reloads them instantly — no restarts, ever.
+      </p>
+<div class="w-full flex flex-col gap-4 text-left mb-8">
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-base">psychology</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Groq — primary brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-primary bg-surface-container-highest px-3 py-0.5 rounded-full shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              REQUIRED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="pu-groq" placeholder="gsk_••••••••••••••••" type="password"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://console.groq.com/keys" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">console.groq.com/keys</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Llama-3.3-70b-versatile</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">schema</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Gemini — failover brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+              RECOMMENDED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="pu-gemini" placeholder="AIza••••••••••••••••" type="password"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://aistudio.google.com/apikey" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">aistudio.google.com/apikey</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Gemini-2.0-Flash</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">smart_display</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">YouTube Data API — auto-posting</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+              FOR AUTO-POST
+            </span>
+</div>
+<div class="flex flex-col gap-2.5">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">ID</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" id="pu-yt-id" placeholder="••••••••••••.apps.googleusercontent.com" type="text"/>
+</div>
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">SECRET</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" id="pu-yt-secret" placeholder="GOCSPX-••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant">
+<span>guide</span>
+<span class="text-outline">→</span>
+<span class="text-outline hover:text-primary transition cursor-pointer">Setup tab, 4 steps</span>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center gap-1.5" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="w-full flex flex-col items-center">
+<button class="w-full sm:w-auto bg-primary text-on-primary font-headline-sm text-body-md font-semibold px-10 py-3.5 rounded-full hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-xl mb-3 flex items-center justify-center gap-2" id="pu-master" type="button">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">electric_bolt</span>
+<span>SAVE &amp; TEST KEYS</span>
+</button>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition duration-150 mb-8 inline-flex items-center gap-1 cursor-pointer" id="pu-offline">
+<span>Continue offline</span>
+<span class="text-outline">→</span>
+</a>
+<div class="w-full max-w-xl rounded-full bg-surface-container-lowest/80 backdrop-blur-md px-5 py-2.5 flex items-center justify-center shadow-inner">
+<div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-label-caps text-label-caps text-outline tracking-[0.12em]">
+<span class="text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              ProX v5 engine
+            </span>
+<span>·</span>
+<span class="text-on-surface-variant" id="pu-stt">STT —</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>ffmpeg</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>yt-dlp</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ============ SCREEN: STUDIO ============ -->
+<section class="screen" id="screen-studio" hidden>
+<div class="relative w-full max-w-6xl mx-auto px-4 py-8 flex flex-col items-center">
+<!-- Ambient Lighting Halo behind Cockpit Input Zone -->
+<div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[320px] bg-primary/[0.04] rounded-full blur-[140px] pointer-events-none -z-10"></div>
+<!-- Header Cockpit Typography -->
+<div class="w-full text-center flex flex-col items-center mt-2 mb-10">
+<div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.03] backdrop-blur-xl mb-6 shadow-sm">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Autonomous Processing Array</span>
+</div>
+<h1 class="font-display-xl text-display-xl text-primary font-semibold tracking-[-0.025em] max-w-4xl text-center leading-none mb-4">
+        Any video in. Shorts that land.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl text-center font-normal">
+        The ProX v5 AI editor finds the peak moments, cuts complete stories, and judges every ending.
+      </p>
+</div>
+<!-- Massive YouTube Input Liquid Capsule -->
+<div class="w-full max-w-4xl group relative mb-5">
+<div class="h-20 bg-white/[0.04] backdrop-blur-2xl rounded-[28px] px-6 flex items-center justify-between shadow-2xl transition-all duration-300 group-hover:bg-white/[0.06] group-focus-within:bg-white/[0.07] group-focus-within:shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+<div class="flex items-center gap-4 flex-1 mr-4">
+<div class="w-10 h-10 rounded-full bg-white/[0.05] flex items-center justify-center text-primary/70 group-focus-within:text-primary transition-colors shrink-0">
+<span class="material-symbols-outlined text-[22px]">link</span>
+</div>
+<input id="url-input" placeholder="Paste a YouTube link — youtu.be/…" spellcheck="false" type="text"/>
+</div>
+<button class="bg-primary text-on-primary font-semibold font-body-sm text-body-sm tracking-wider px-8 py-4 rounded-full transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center gap-2.5 cursor-pointer shrink-0" id="make-clips-btn" id="make-clips-btn">
+<span>MAKE CLIPS</span>
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+</button>
+</div>
+</div>
+<!-- Dashed Glass Dropzone -->
+<div class="w-full max-w-4xl relative mb-6">
+<div class="w-full bg-white/[0.02] backdrop-blur-md rounded-[24px] py-9 px-8 flex flex-col items-center justify-center text-center transition-all duration-300 hover:bg-white/[0.04] cursor-pointer group" id="dropzone" id="dropzone">
+<div class="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center text-primary/30 group-hover:text-primary/70 group-hover:scale-110 transition-all duration-300 mb-3">
+<span class="material-symbols-outlined text-[26px]">upload_file</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-on-surface-variant/60 group-hover:text-on-surface-variant transition-colors">or drop an MP4 here</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">up to 2 GB</span>
+</div>
+<input type="file" id="file" class="hidden" accept="video/*" />
+</div>
+<!-- Option Chips Interactive Bar -->
+<div class="flex flex-wrap items-center justify-center gap-3 mb-16 w-full max-w-4xl">
+<div class="relative" data-chip="clips">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="clips">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Clips</span>
+<span class="text-primary font-medium">3</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="captions">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="captions">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Captions</span>
+<span class="text-primary font-medium">wordpop</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="framing">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="framing">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Framing</span>
+<span class="text-primary font-medium">blur-pad 9:16</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="lang">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="lang">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Language</span>
+<span class="text-primary font-medium">auto</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Recent Jobs Glass Rail Section -->
+<div class="w-full max-w-5xl flex flex-col">
+<div class="flex items-center justify-between mb-4 px-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary/40 text-[16px]">history</span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant/60">RECENT JOBS</span>
+</div>
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant/40">
+<span>PIPELINE</span>
+<span class="text-primary" id="pipeline-ready">— READY</span>
+</div>
+</div>
+<!-- 3 Glass Card Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full" id="recent-jobs"><!-- JOBS_MOUNT --></div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ============ SCREEN: PROCESSING ============ -->
+<section class="screen" id="screen-processing" hidden>
+<div class="relative w-full overflow-hidden">
+
+<div class="relative z-10 flex flex-col gap-6 py-4">
+<div class="flex items-center justify-between px-2">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary animate-ping"></div>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-[0.18em]">Active Session · Node 04</span>
+<span class="text-on-surface-variant/30 text-body-sm font-data-mono">/</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/70">JOB_ID: <span id="proc-job-id">—</span></span>
+</div>
+<div class="flex items-center gap-2 font-data-mono text-data-mono text-on-surface-variant/50">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40">memory</span>
+<span>LOCAL PIPELINE · 0 CLOUD</span>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+<!-- Left Column: Progress Center -->
+<div class="lg:col-span-6 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-12 flex flex-col items-center justify-center text-center h-[540px] shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative overflow-hidden group">
+<div class="absolute -top-24 -left-24 w-72 h-72 bg-white/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-24 -right-24 w-72 h-72 bg-white/[0.02] rounded-full blur-3xl pointer-events-none"></div>
+<!-- Circular SVG Progress Ring -->
+<div class="relative w-[260px] h-[260px] flex items-center justify-center">
+<svg class="w-[260px] h-[260px] -rotate-90 transform" viewbox="0 0 260 260">
+<defs>
+<filter height="140%" id="glow" width="140%" x="-20%" y="-20%">
+<fegaussianblur result="blur" stddeviation="3.5"></fegaussianblur>
+<femerge>
+<femergenode in="blur"></femergenode>
+<femergenode in="SourceGraphic"></femergenode>
+</femerge>
+</filter>
+</defs>
+<!-- Hairline Track -->
+<circle cx="130" cy="130" fill="none" r="115" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"></circle>
+<!-- Active Glow Stroke (67% of 2*PI*115 = 722.56 -> dasharray ~722.56, dashoffset ~238.44) -->
+<circle id="progress-circle" class="transition-all duration-1000 ease-out" cx="130" cy="130" fill="none" filter="url(#glow)" id="progress-circle" r="115" stroke="#ffffff" stroke-dasharray="722.56" stroke-dashoffset="238.44" stroke-linecap="round" stroke-width="2.5"></circle>
+</svg>
+<!-- Center Metrics Counter -->
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-display-xl text-display-xl font-semibold tracking-[-0.03em] text-primary select-none"> id="proc-pct">0%</span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.15em] text-white/40 mt-1">PROX v5 PIPELINE</span>
+</div>
+</div>
+<!-- Job Details -->
+<div class="flex flex-col items-center mt-8">
+<h2 class="font-headline-sm text-headline-sm font-semibold text-primary tracking-tight" id="proc-name">—</h2>
+<p class="font-body-sm text-body-sm text-white/50 mt-1" id="proc-sub">waiting…</p>
+</div>
+<div class="mt-4 flex items-center gap-2 text-white/30 font-data-mono text-data-mono" id="proc-meta"></div>
+</div>
+<!-- Right Column: Stage Roll -->
+<div class="lg:col-span-6 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-8 h-[540px] flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative overflow-hidden">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-white/40">EDIT BAY PIPELINE</span>
+<span class="font-data-mono text-data-mono text-white/30" id="proc-stage-n">STAGE — OF 8</span>
+</div>
+<!-- 8 Slim Glass Stage Rows -->
+<div class="flex flex-col gap-2.5 flex-1 justify-center" id="proc-stages">
+<!-- Stage 1 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Reading the audio's energy profile</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">0.4s</span>
+</div>
+<!-- Stage 2 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Detecting audience laughter</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">1.2s</span>
+</div>
+<!-- Stage 3 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Finding peak moments (audio + camera cuts)</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">12.8s</span>
+</div>
+<!-- Stage 4 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Transcribing — whisper-large-v3-turbo</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">34.1s</span>
+</div>
+<!-- Stage 5 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">ProX story pass — 9 stories found</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">18.6s</span>
+</div>
+<!-- Stage 6: ACTIVE ROW -->
+<div class="relative flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.08] shadow-[inset_0_0_24px_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-3">
+<span class="text-primary font-semibold text-body-sm animate-pulse">▶</span>
+<span class="text-primary font-semibold font-body-sm text-body-sm tracking-wide">Judge QC — 7 clips judged</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-data-mono text-data-mono text-primary/80 font-medium">IN PROGRESS</span>
+</div>
+</div>
+<!-- Stage 7 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg opacity-40">
+<span class="text-white/30 font-medium text-body-sm">○</span>
+<span class="text-white/30 font-body-sm text-body-sm">Rendering 9:16 clips</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">QUEUED</span>
+</div>
+<!-- Stage 8 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg opacity-40">
+<span class="text-white/30 font-medium text-body-sm">○</span>
+<span class="text-white/30 font-body-sm text-body-sm">Metadata &amp; finishing</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">QUEUED</span>
+</div>
+</div>
+<!-- Bottom Micro Visualizer -->
+<div class="pt-4 flex items-center justify-between text-white/40 font-data-mono text-data-mono">
+<div class="flex items-center gap-1.5">
+<span class="w-1 h-3 bg-white/40 animate-pulse"></span>
+<span class="w-1 h-5 bg-white/80 animate-pulse delay-75"></span>
+<span class="w-1 h-2 bg-white/30 animate-pulse delay-150"></span>
+<span class="w-1 h-4 bg-white/60 animate-pulse delay-100"></span>
+<span class="w-1 h-2 bg-white/20 animate-pulse delay-200"></span>
+</div>
+<span id="proc-engine">ENGINE: —</span>
+</div>
+</div>
+</div>
+<!-- Bottom Pill Banner -->
+<div class="w-full bg-white/[0.04] rounded-full px-6 py-3.5 flex items-center justify-between text-body-sm tracking-wider backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-3 text-white/80 font-medium font-body-sm min-w-0">
+<span class="material-symbols-outlined text-[18px] text-white/70 animate-spin">sync</span>
+<span class="truncate" id="proc-pill">—</span>
+<span class="hidden sm:inline-block font-data-mono text-data-mono text-white/40 bg-white/[0.05] px-2 py-0.5 rounded-full">1080x1920 @ 60FPS</span>
+</div>
+<div class="flex items-center gap-2 pl-4 shrink-0">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-white/50">PROCESSING LIVE</span>
+</div>
+</div>
+<!-- Preview Stage Snippet Bento Tray -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2" id="proc-tray"><!-- TRAY_MOUNT --></div>
+</div>
+</div>
+</section>
+
+<!-- ============ SCREEN: CLIPS ============ -->
+<section class="screen" id="screen-clips" hidden>
+<!-- Keynote Backdrop Glow / Aurora Layering -->
+<div class="relative w-full overflow-hidden flex flex-col gap-8 pb-12">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[360px] bg-gradient-to-b from-white/[0.08] via-white/[0.02] to-transparent blur-[120px] pointer-events-none rounded-full"></div>
+<!-- Header & Context Horizon -->
+<section class="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4 pt-2">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2.5">
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant/60">Podium Selection · Final Render</span>
+<span class="inline-flex w-1 h-1 rounded-full bg-primary/40"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40" id="clips-qc">—</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg font-semibold text-primary tracking-[-0.02em] leading-tight">Clips — <span id="clips-jobname">select a job</span></h1>
+</div>
+<!-- Context Chip & Quick Stats -->
+<div class="flex items-center gap-3 self-start md:self-auto">
+<div class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant/70 rounded-full px-3.5 py-1.5 bg-white/[0.04] backdrop-blur-md shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-primary">psychology</span>
+<span id="clips-brain">brain —</span>
+</div>
+<div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.02] text-on-surface-variant/40 font-data-mono text-data-mono">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span>1080x1920 · 60fps</span>
+</div>
+</div>
+</section>
+<!-- Podium 3-Column Display Grid -->
+<section class="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch" id="clips"><!-- CARDS_MOUNT --></section>
+<!-- Bottom Stage Telemetry Bar -->
+<section class="relative z-10 w-full rounded-2xl bg-white/[0.02] backdrop-blur-xl px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-4 text-on-surface-variant/50 font-data-mono text-data-mono">
+<span class="flex items-center gap-1.5 text-primary">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<span id="tele-engine">ENGINE READY</span>
+</span>
+<span class="hidden sm:inline text-white/20">/</span>
+<span id="tele-job">NO JOB LOADED</span>
+<span class="hidden sm:inline text-white/20">/</span>
+<span id="clips-models">MODELS: —</span>
+</div>
+<div class="flex items-center gap-2 font-label-caps text-label-caps uppercase">
+<button class="px-4 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/10 text-on-surface transition-colors" id="clips-export">Export manifest</button>
+<button class="px-4 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/10 text-on-surface transition-colors flex items-center gap-1" id="clips-batch"><span class="material-symbols-outlined text-[14px]">share</span><span>Batch dispatch</span></button>
+</div>
+</section>
+</div>
+</section>
+
+<!-- ============ SCREEN: CANDIDATES ============ -->
+<section class="screen" id="screen-candidates" hidden>
+<!-- Top Stage Hero Header -->
+<div class="flex flex-col gap-3">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-baseline gap-3">
+<h1 class="font-headline-lg-mobile md:font-headline-md text-headline-lg-mobile md:text-headline-md text-primary tracking-[-0.02em]">
+          Candidates <span class="text-on-surface-variant font-light">— runner-up cuts</span>
+</h1>
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 hidden sm:inline-block" id="cands-pool">PROX-LAB::POOL</span>
+</div>
+<!-- Filter Controls Pill Group -->
+<div class="flex items-center gap-2 bg-surface-container-lowest/80 p-1.5 rounded-full backdrop-blur-xl">
+<button data-filter="all" class="bg-primary text-on-primary font-headline-sm text-[12px] leading-tight px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all">All</button>
+<button data-filter="verified" class="bg-white/[0.04] hover:bg-white/[0.08] text-on-surface font-body-sm text-body-sm px-4 py-1.5 rounded-full transition-all">Verified</button>
+<button data-filter="peak" class="bg-white/[0.04] hover:bg-white/[0.08] text-on-surface font-body-sm text-body-sm px-4 py-1.5 rounded-full transition-all">Peak events</button>
+</div>
+</div>
+<!-- Keynote Context Hint Bar -->
+<div class="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.03] backdrop-blur-xl max-w-fit">
+<span class="material-symbols-outlined text-primary text-[18px]">auto_awesome</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Runner-ups the judge liked but the podium out-scored — render any of them in one click.
+      </p>
+</div>
+</div>
+<!-- Main Candidate Lab Matrix Floating Surface -->
+<div class="rounded-[24px] bg-white/[0.03] backdrop-blur-2xl p-6 flex flex-col gap-4 shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
+<!-- Column Legend & Diagnostics Header -->
+<div class="hidden lg:grid grid-cols-12 px-5 py-2 text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-widest">
+<span class="col-span-6">Segment Analysis / Source Timeline</span>
+<span class="col-span-2 text-center">Span Track</span>
+<span class="col-span-2 text-center">Score Delta</span>
+<span class="col-span-2 text-right">Action Gate</span>
+</div>
+<!-- Candidate List Rows -->
+<div class="flex flex-col gap-2.5" id="cands"><!-- CANDS_MOUNT --></div>
+<!-- Candidate Pipeline Floor Diagnostics -->
+<div class="mt-4 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-on-surface-variant font-label-caps text-label-caps">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary/40"></span>
+<span id="cands-queue">POOL READY</span>
+</span>
+<span class="text-white/20">/</span>
+<span>RESOLUTION: 9:16 VERTICAL RE-FRAME</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span>BATCH DISPATCH</span>
+<button id="cands-render-all" class="bg-white/[0.05] hover:bg-white/[0.1] text-primary px-3 py-1 rounded-full text-[10px] font-semibold tracking-widest transition-all">RENDER ALL</button>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ============ SCREEN: TRANSCRIPT ============ -->
+<section class="screen" id="screen-transcript" hidden>
+<div class="relative w-full flex flex-col gap-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3.5 text-on-surface-variant pointer-events-none">search</span>
+<input class="w-80 bg-white/[0.04] backdrop-blur-md rounded-full pl-10 pr-4 py-2 text-body-sm font-body-sm text-on-surface placeholder:text-on-surface-variant/40 shadow-sm focus:outline-none focus:bg-white/[0.08] transition-all" id="transcript-search" placeholder="Search the transcript…" type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<span id="transcript-count" class="font-label-caps text-label-caps uppercase text-on-surface-variant/60 rounded-full px-3.5 py-1.5 bg-white/[0.03] backdrop-blur-md">—</span>
+<span class="font-label-caps text-label-caps uppercase text-primary bg-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span><span id="transcript-stt">Acoustic Sync</span></span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button id="transcript-peaks" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] text-on-surface text-body-sm font-body-sm hover:bg-white/[0.08] transition-all"><span class="material-symbols-outlined text-body-sm">filter_alt</span><span>Peaks only</span></button><button id="transcript-custom" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] text-on-surface text-body-sm font-body-sm hover:bg-white/[0.08] transition-all"><span class="material-symbols-outlined text-body-sm">content_cut</span><span>Custom cut</span></button>
+<button id="transcript-srt" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] text-on-surface text-body-sm font-body-sm hover:bg-white/[0.08] transition-all"><span class="material-symbols-outlined text-body-sm">download</span><span>Export .SRT</span></button>
+<div class="w-px h-5 bg-white/10 mx-1"></div>
+<button class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_16px_rgba(255,255,255,0.25)] hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-body-sm font-semibold">barcode</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<div class="lg:col-span-7 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-6 flex flex-col gap-3 shadow-[0_20px_50px_rgba(0,0,0,0.4)] relative overflow-hidden">
+<div class="absolute -top-24 -left-24 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+<div class="flex items-center justify-between pb-2">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/50 tracking-widest">
+            Acoustic Stream &amp; Spoken Cadence
+          </span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/70" id="transcript-precision">—</span>
+</div>
+<div class="flex flex-col gap-2 overflow-y-auto max-h-[580px] pr-2 scroll-smooth select-text" id="transcript-container">
+<!-- BLOCKS_MOUNT -->
+</div>
+<div class="pt-3 flex items-center justify-between bg-white/[0.02] rounded-xl px-4 py-2 mt-1">
+<div class="flex items-center gap-4 text-body-sm font-body-sm text-on-surface-variant/70">
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-primary"></span> <span id="transcript-flagged">0</span> flagged clips</span>
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-white/30"></span> <span id="transcript-sync">99.2% sync lock</span></span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-primary text-body-sm font-body-sm transition-all">
+              Auto-Caption All
+            </button>
+</div>
+</div>
+</div>
+<div class="lg:col-span-5 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-6 flex flex-col justify-between h-[620px] shadow-[0_20px_50px_rgba(0,0,0,0.4)] relative overflow-hidden">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/50 tracking-widest">
+              Timeline Audio Frequency &amp; Peak Analysis
+            </span>
+<span id="wave-spec" class="font-data-mono text-data-mono text-primary bg-white/10 px-2 py-0.5 rounded-full">
+              — kHz · mono
+            </span>
+</div>
+<div class="relative w-full rounded-2xl overflow-hidden bg-surface-container-lowest p-3 flex gap-4 items-center shadow-lg group">
+<div class="w-24 h-36 rounded-xl overflow-hidden relative shrink-0 shadow-md">
+<div class="w-full h-full bg-cover bg-center" data-alt="Cinematic high contrast Formula One single seater race car overtakes on a floodlit Yas Marina Abu Dhabi night circuit, dramatic trackside sparks and rim light, motion blur on asphalt, monochrome aesthetic with bright silver specular highlights" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB8vzqg7O3K7yqKkJNxm9e_Pxa6TeIr7qrZgpH04jKXjo_f54e_VQU9VGvAwH-Fu2XKXDEtc8FxueaUzwZBp21CZd5yeKKJV1wjRjQdrXohfwzBjwwMrzf7O3IsmAr2WZma0eR4n8Fr3d2yP81DbPr2QO8ciDKKGs07q__GVB1X0RRj5mdU90648c8a80-qWvOp7mhcGFo_yRfbmfFHBII_VLP9u_cbc30u5WnboovAwdwjCD_iwv_aQQ')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20"></div>
+<div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-[9px] font-data-mono text-primary uppercase">
+                9:16 Crop
+              </div>
+<div class="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-white/20 backdrop-blur-md text-data-mono font-data-mono text-primary">
+                09:57
+              </div>
+</div>
+<div class="flex-1 flex flex-col justify-between h-36 py-1">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/60">Selected Keyframe</span>
+<span class="flex items-center gap-1 text-primary text-body-sm font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+                    AI Approved
+                  </span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-primary font-medium mt-1 leading-snug" id="wave-title">—</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5" id="wave-desc">—</p>
+</div>
+<div class="flex items-center gap-3 pt-2">
+<div class="relative w-9 h-9 flex items-center justify-center shrink-0">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="81, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary" id="wave-score">—</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/70">Virality Metric</span>
+<span class="font-data-mono text-data-mono text-primary font-medium" id="wave-metric">—</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="relative my-auto py-4 flex flex-col gap-2">
+<div id="wave-ruler" class="flex items-center justify-between text-on-surface-variant/50 font-data-mono text-[10px]">
+<span>08:00</span>
+<span>09:00</span>
+<span id="wave-now" class="text-primary font-semibold">—</span>
+<span>11:00</span>
+<span>12:00</span>
+<span>14:26</span>
+</div>
+<div id="wave-box" class="relative h-32 w-full bg-surface-container-lowest rounded-xl overflow-hidden p-2 flex items-center justify-between gap-1 shadow-inner">
+<div class="absolute inset-x-0 h-px bg-white/10 top-1/2 -translate-y-1/2 pointer-events-none"></div><div id="wave-markers" class="absolute inset-0 pointer-events-none"></div>
+<div id="wave-playhead" style="left:0%" class="absolute top-0 bottom-0 w-px bg-primary shadow-[0_0_12px_rgba(255,255,255,1)] z-20 pointer-events-none transition-all duration-300">
+<div class="absolute -top-1 -translate-x-1/2 left-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_8px_#fff]"></div>
+<div class="absolute -bottom-1 -translate-x-1/2 left-1/2 w-2 h-2 rounded-full bg-primary"></div>
+</div>
+
+
+
+<div id="wave-bars" class="contents"><div class="w-1.5 h-6 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-8 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-9 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-22 bg-white/45 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-18 bg-white/35 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-28 bg-white/60 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-30 bg-primary/80 rounded-full"></div>
+<div class="w-1.5 h-32 bg-primary rounded-full shadow-[0_0_8px_rgba(255,255,255,0.7)]"></div>
+<div class="w-1.5 h-28 bg-primary/90 rounded-full"></div>
+<div class="w-1.5 h-26 bg-white/70 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-22 bg-white/55 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-18 bg-white/45 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/60 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/35 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-8 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-7 bg-white/15 rounded-full"></div>
+</div></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_#fff]"></span>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant">Active Cue: 09:54 - 10:14</span>
+</div>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/60">Duration: 20s</span>
+</div>
+</div>
+<div class="bg-white/[0.02] rounded-2xl p-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_16px_rgba(255,255,255,0.35)]">
+<span class="material-symbols-outlined text-[20px]">play_arrow</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">replay_5</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">forward_5</span>
+</button>
+<div class="font-data-mono text-data-mono text-on-surface ml-1">
+<span class="text-primary font-semibold">09:57</span>
+<span class="text-on-surface-variant/50"> / 14:26</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-full bg-white/[0.05] hover:bg-white/10 text-on-surface font-data-mono text-[11px] transition-all">
+              1.0x
+            </button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">zoom_in</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ============ SCREEN: CONNECT ============ -->
+<section class="screen" id="screen-connect" hidden>
+<!-- Keynote Ambient Radiance Header Canvas -->
+<div class="relative w-full flex flex-col gap-6 pb-2">
+<!-- Breadcrumb & System Sub-badge -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-white/[0.06] text-primary">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</span>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-widest">Settings &amp; Infrastructure</span>
+<span class="text-white/20 font-data-mono text-data-mono">/</span>
+<span class="font-data-mono text-data-mono text-primary font-medium tracking-tight" id="co-node">NODE_PROX</span>
+</div>
+<div class="flex items-center gap-2.5 px-3 py-1 rounded-full bg-surface-container-highest/60 backdrop-blur-md">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-data-mono text-data-mono text-on-surface">HOT-RELOAD ENGINE ACTIVE</span>
+</div>
+</div>
+<!-- Main Headline with optical alignment -->
+<div class="flex flex-col gap-1.5">
+<h1 class="font-headline-md text-headline-md font-semibold text-primary tracking-[-0.02em]">
+        System Integrations &amp; API Engine
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+        Manage sovereign local authentication channels, inference failover parameters, and runtime binary pipeline hooks.
+      </p>
+</div>
+</div>
+<!-- Primary Twin Glass Monolith Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+<!-- LEFT COLUMN: YouTube Auto-Posting -->
+<div class="relative group rounded-lg bg-surface-container/60 backdrop-blur-2xl p-8 flex flex-col justify-between overflow-hidden shadow-xl transition-all duration-300 hover:bg-surface-container-high/70">
+<!-- Glow Refraction Halo Behind Card -->
+<div class="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/[0.03] blur-3xl pointer-events-none"></div>
+<!-- Top Section -->
+<div class="flex flex-col relative z-10">
+<!-- Title & Status Badge Row -->
+<div class="flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-primary font-semibold tracking-tight">YouTube auto-posting</span>
+</div>
+<span id="yt-status" class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant bg-surface-container-lowest/80 px-3.5 py-1.5 rounded-full">checking…</span>
+</div>
+<!-- Explainer -->
+<p class="font-body-md text-body-md text-on-surface-variant mt-4 mb-8 leading-relaxed">
+          One click to post clips as YouTube Shorts with title, description and hashtags.
+        </p>
+<!-- CTA Button -->
+<button class="w-fit flex items-center gap-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase px-7 py-3.5 rounded-full shadow-[0_0_24px_rgba(255,255,255,0.25)] hover:bg-white/90 hover:shadow-[0_0_32px_rgba(255,255,255,0.4)] active:scale-95 transition-all mb-8" id="yt-connect">
+<span class="material-symbols-outlined text-[18px]">add_link</span>
+<span>Connect YouTube</span>
+</button>
+<!-- 4-Row Interactive Checklist -->
+<div class="flex flex-col gap-3 py-4 bg-surface-container-lowest/60 rounded-DEFAULT p-4" id="yt-check">
+<!-- YT_CHECK_MOUNT -->
+</div>
+</div>
+<div class="relative z-10 mt-3 flex flex-wrap items-center gap-2 font-data-mono text-data-mono">
+<button id="yt-diagnose" class="px-3 py-1.5 rounded-full bg-surface-container-highest/60 hover:bg-surface-bright text-on-surface transition-all">Diagnose</button>
+<button id="yt-redirect-copy" class="px-3 py-1.5 rounded-full bg-surface-container-highest/60 hover:bg-surface-bright text-on-surface transition-all">Copy redirect URI</button>
+<span id="yt-redirect" class="text-on-surface-variant/70 truncate max-w-[300px]"></span>
+</div>
+<div id="yt-diag" class="relative z-10 mt-3" hidden></div>
+<!-- Footnote Alert Box -->
+<div class="relative z-10 mt-6 flex items-start gap-3 bg-surface-container-highest/40 rounded-DEFAULT p-4">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">help_outline</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">Keys hot-reload - no restarts, ever.</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant/80">
+            → OAuth consent screen → Audience → Paste Groq / Gemini / YouTube keys in the AI Keys column - each is tested live and stored in clipblitz/.env.
+          </p>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: AI Keys & Brain Runtime -->
+<div class="relative group rounded-lg bg-surface-container/60 backdrop-blur-2xl p-8 flex flex-col justify-between overflow-hidden shadow-xl transition-all duration-300 hover:bg-surface-container-high/70">
+<!-- Glow Refraction Halo Behind Card -->
+<div class="absolute -top-24 -left-24 w-64 h-64 rounded-full bg-white/[0.03] blur-3xl pointer-events-none"></div>
+<!-- Content Container -->
+<div class="flex flex-col relative z-10">
+<!-- Title -->
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[22px]">psychology</span>
+<h2 class="font-headline-sm text-headline-sm font-semibold text-primary tracking-tight">AI keys — hot-reloaded from the UI</h2>
+</div>
+<span class="flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            Zero Downtime
+          </span>
+</div>
+<!-- Key 1: Groq Primary Brain -->
+<div class="flex flex-col gap-2.5 mb-5 p-4 rounded-DEFAULT bg-surface-container-lowest/70">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm font-medium text-primary">Groq primary brain</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant">(Llama 3.3 70B &amp; Whisper)</span>
+</div>
+<div id="keychip-groq" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-primary font-data-mono text-data-mono"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span><span><div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-primary font-data-mono text-data-mono">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span></span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="relative flex-1 flex items-center">
+<input id="key-groq" class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface tracking-wider focus:outline-none select-all" type="password" placeholder="gsk_••••••••" autocomplete="off" spellcheck="false"/>
+<button class="absolute right-3 text-on-surface-variant hover:text-primary transition-colors" onclick="const i = this.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password';">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+</div>
+<button data-key="groq" class="px-5 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase hover:bg-white/90 active:scale-95 transition-all shadow-md">Test &amp; Save</button>
+</div>
+</div>
+<!-- Key 2: Gemini Failover -->
+<div class="flex flex-col gap-2.5 mb-5 p-4 rounded-DEFAULT bg-surface-container-lowest/70">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm font-medium text-primary">Gemini failover</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant">(Flash 2.0 Fallback)</span>
+</div>
+<div id="keychip-gemini" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant/70 font-data-mono text-data-mono"><span class="material-symbols-outlined text-[12px]">radio_button_unchecked</span><span><div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant/70 font-data-mono text-data-mono">
+<span class="material-symbols-outlined text-[12px]">radio_button_unchecked</span>
+<span></span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="relative flex-1 flex items-center">
+<input id="key-gemini" class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none select-all" placeholder="Paste AIzaSy… or AQ…" type="password" autocomplete="off" spellcheck="false"/>
+</div>
+<button data-key="gemini" class="px-5 py-2.5 rounded-full bg-surface-container-highest hover:bg-primary hover:text-on-primary text-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase active:scale-95 transition-all">Test &amp; Save</button>
+</div>
+</div>
+<!-- Key 3: YouTube Data API -->
+<div class="flex flex-col gap-2.5 mb-5 p-4 rounded-DEFAULT bg-surface-container-lowest/70">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm font-medium text-primary">YouTube Data API</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant">(OAuth client · Desktop app)</span>
+</div>
+<div id="keychip-youtube" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant/70 font-data-mono text-data-mono">
+<span class="material-symbols-outlined text-[12px]">radio_button_unchecked</span>
+<span>EMPTY</span>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+<input id="key-yt-id" class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none select-all" placeholder="…apps.googleusercontent.com" type="password" autocomplete="off" spellcheck="false"/>
+<input id="key-yt-secret" class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none select-all" placeholder="GOCSPX-••••••••" type="password" autocomplete="off" spellcheck="false"/>
+</div>
+<div class="flex justify-end mt-1">
+<button data-key="youtube" class="px-5 py-2.5 rounded-full bg-surface-container-highest hover:bg-primary hover:text-on-primary text-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase active:scale-95 transition-all">Test &amp; Save</button>
+</div>
+</div>
+<!-- Select Chip for STT Model -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2">
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Speech Recognition Target</span>
+</div>
+<div class="relative group/sel cursor-pointer">
+<div class="flex items-center gap-2 bg-surface-container-highest px-4 py-2 rounded-full hover:bg-surface-bright transition-all">
+<span class="material-symbols-outlined text-[16px] text-primary">graphic_eq</span>
+<span class="font-data-mono text-data-mono text-on-surface font-medium" id="stt-model-label">STT model: —</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Info Bar / Footnote -->
+<div class="relative z-10 mt-6 flex items-start gap-3 bg-surface-container-highest/40 rounded-DEFAULT p-4">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">lock</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm text-body-sm text-primary font-medium">Local Sovereignty Assured</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant/90 leading-relaxed">
+            Keys apply on the very next job — no restart. They live in your local <code class="text-primary font-semibold">.env</code> only, never uploaded to external servers.
+          </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom: Engine Diagnostics Liquid Glass Strip -->
+<div class="mt-6 w-full rounded-full bg-surface-container/70 backdrop-blur-xl px-8 py-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+<!-- Left Section: Label -->
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant font-semibold">Engine Diagnostics</span>
+</div>
+<!-- Diagnostics Micro-Chips Row -->
+<div class="flex items-center gap-3 flex-wrap">
+<!-- Chip 1: ffmpeg -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">ffmpeg</span><span class="text-primary">✓</span><span class="text-on-surface-variant/50 text-[10px]" id="diag-ffmpeg">✓</span>
+</div>
+<!-- Chip 2: yt-dlp -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">yt-dlp</span><span class="text-primary">✓</span><span class="text-on-surface-variant/50 text-[10px]" id="diag-ytdlp">✓</span>
+</div>
+<!-- Chip 3: judge groq -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">judge</span><span class="text-primary">✓</span><span class="text-on-surface-variant/50 text-[10px]" id="diag-judge">—</span>
+</div>
+<!-- Chip 4: quota indicator with SVG Mini Gauge -->
+<div class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<!-- Circular Progress Ring (Current color / Monochrome Keynote) -->
+<svg class="w-3.5 h-3.5 transform -rotate-90" viewbox="0 0 32 32">
+<circle class="text-surface-container-highest" cx="16" cy="16" fill="none" r="13" stroke="currentColor" stroke-width="4"></circle>
+<circle class="text-primary" cx="16" cy="16" fill="none" r="13" stroke="currentColor" stroke-dasharray="81.68" stroke-dashoffset="21.24" stroke-linecap="round" stroke-width="4"></circle>
+</svg>
+<span class="font-medium text-primary" id="diag-quota">quota —</span>
+</div>
+<!-- Quick Pipeline Refresh Trigger -->
+<button class="w-7 h-7 rounded-full bg-surface-container-highest hover:bg-primary hover:text-on-primary flex items-center justify-center text-on-surface-variant transition-all ml-1" id="diag-refresh" title="Ping Engine Diagnostics">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+<div id="toasts" class="fixed bottom-6 right-6 z-[100] flex flex-col gap-2 items-end"></div>
 <script src="/app.js"></script>
 </body>
 </html>

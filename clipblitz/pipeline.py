@@ -7,6 +7,7 @@ orphans clips. Every candidate and clip carries its factor breakdown.
 
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -49,7 +50,7 @@ _load_jobs()
 
 
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
-            demo=False, framing="blur"):
+            demo=False, framing="blur", top_n=None):
     job_id = uuid.uuid4().hex[:8]
     JOBS[job_id] = {
         "id": job_id, "name": name, "status": "queued", "stage": "waiting",
@@ -59,6 +60,7 @@ def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False
         "style": style or captions.DEFAULT_STYLE,
         "position": position, "size_scale": float(size_scale or 1.0),
         "auto_post": bool(auto_post), "privacy": privacy or CONFIG["privacy"],
+        "top_n": int(top_n) if top_n else CONFIG["top_n"],
     }
     save()
     return job_id
@@ -95,18 +97,7 @@ def _words_for_window(segments, w0, w1):
 
 
 def _render_clip(job, src_path, m, base, clips_dir):
-    """Cut + caption one moment. Returns the clip dict (appended by caller).
-    THE LANDING RULE: every cut renders with one extra second after its last word —
-    the final beat of the payoff needs room to breathe (a clip that stops on the
-    exact last millisecond of speech feels chopped). Render-level only: engine
-    windows and scores are untouched."""
-    landing_pad = 1.0
-    end = m["end"]
-    src_dur = job.get("duration") or 0
-    if src_dur and end > 0:
-        end = min(end + landing_pad, src_dur - 0.05)
-    else:
-        end = end + landing_pad
+    """Cut + caption one moment. Returns the clip dict (appended by caller)."""
     words = _words_for_window(job["segments"], m["start"], m["end"])
     if not words and job.get("demo"):
         span = max(1.0, m["end"] - m["start"])
@@ -119,7 +110,7 @@ def _render_clip(job, src_path, m, base, clips_dir):
         captions.build_ass(words, (m["start"], m["end"]),
                            job["style"], job["size_scale"], job["position"], ass_path)
         ass_name = base + ".ass"  # relative → ffmpeg runs with cwd=clips_dir (path-safe)
-    note = ffmpeg_tools.cut_clip(src_path, m["start"], end,
+    note = ffmpeg_tools.cut_clip(src_path, m["start"], m["end"],
                                  os.path.join(clips_dir, base + ".mp4"), ass_name,
                                  cwd=clips_dir, framing=job.get("framing", "blur"))
     return {
@@ -134,8 +125,8 @@ def _render_clip(job, src_path, m, base, clips_dir):
         "topic": m.get("topic", ""),
         "score": m.get("score", 50),
         "factors": m.get("factors", {}),
-        "start": round(m["start"], 1), "end": round(end, 1),
-        "duration": round(end - m["start"], 1),
+        "start": round(m["start"], 1), "end": round(m["end"], 1),
+        "duration": round(m["end"] - m["start"], 1),
         "style": job["style"],
         "rank": m.get("rank"),
         "custom": bool(m.get("custom")),
@@ -177,8 +168,8 @@ def process(job_id, src_path):
 
         _set(job_, stage=f"ProX engine: mining + measuring candidates", progress=52)
         moments, candidates, picker, content_type = virality.rank(
-            segments, duration, count=CONFIG["top_n"], energy=energy, laughs=laughs,
-            scenes=scenes)
+            segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
+            energy=energy, laughs=laughs, scenes=scenes)
         _set(job_, mode=f"{mode}+{picker}", content_type=content_type, picker=picker,
              candidates=[{k: c[k] for k in c if k != "meta"} for c in candidates])
         if not moments:
@@ -335,6 +326,10 @@ def start_from_url(job_id, url):
             src = ingest.download(url, os.path.join(CONFIG["data_dir"], "uploads"))
             JOBS[job_id]["src"] = src
             JOBS[job_id]["src_name"] = os.path.basename(src)
+            base = os.path.splitext(os.path.basename(src))[0]
+            pretty = re.sub(r"^yt_[A-Za-z0-9_-]+_\d+_", "", base)  # strip yt_<id>_<ts>_ prefix
+            if len(pretty) > 3 and re.fullmatch(r"[A-Za-z0-9_-]{11}", JOBS[job_id].get("name") or ""):
+                JOBS[job_id]["name"] = pretty  # URL-slug name -> real video title
             save()
             process(job_id, src)
         except Exception as e:

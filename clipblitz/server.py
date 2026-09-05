@@ -112,9 +112,9 @@ class Handler(BaseHTTPRequestHandler):
                 yt_ok = social.youtube_channel() is not None  # real token check
             from .brains import brains
             return self._json(200, {
-                "ok": True, "name": "ClipBlitz", "version": "3.1.0",
+                "ok": True, "name": "ClipBlitz", "version": "3.3.0",
                 "engine": "ProX v5", "ffmpeg": ffmpeg_available(), "stt": stt_mode(),
-                "ai_picker": bool(CONFIG["ai_key"]), "top_n": CONFIG["top_n"],
+                "ai_picker": bool(brains()), "top_n": CONFIG["top_n"],
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,
                 "brains": [b["name"] for b in brains()],
             })
@@ -126,7 +126,11 @@ class Handler(BaseHTTPRequestHandler):
                 "id": j["id"], "name": j.get("name"), "status": j.get("status"),
                 "stage": j.get("stage"), "progress": j.get("progress"),
                 "clips": len(j.get("clips", [])), "created": j.get("created"),
+                "top_score": max([c.get("score", 0) for c in j.get("clips", [])], default=0),
             } for j in jobs[:20]])
+        if path == "/api/keys":
+            from . import keys
+            return self._json(200, keys.status())
         if path == "/api/social/status":
             return self._json(200, {
                 "youtube": {"connected": social.youtube_connected(),
@@ -157,6 +161,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(os.path.join(WEB, "app.js"), "text/javascript")
         if path == "/styles.css":
             return self._file(os.path.join(WEB, "styles.css"), "text/css")
+        if path == "/tailwind.css":
+            return self._file(os.path.join(WEB, "tailwind.css"), "text/css")
+        if path == "/gsap.min.js":
+            return self._file(os.path.join(WEB, "gsap.min.js"), "text/javascript")
 
         job_m = re.fullmatch(r"/api/job/(\w+)", path)
         if job_m:
@@ -234,6 +242,20 @@ class Handler(BaseHTTPRequestHandler):
             if not social.youtube_configured():
                 return self._json(400, {"error": "CB_YT_CLIENT_ID / CB_YT_CLIENT_SECRET missing in .env — see SETUP-YOUTUBE.md"})
             return self._json(200, {"url": social.youtube_auth_url()})
+        if path == "/api/keys":
+            from . import keys
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            result = keys.save({k: v for k, v in body.items() if k in keys.KEY_VARS})
+            result["tests"] = {k: keys.test(k) for k in result["saved"]}
+            return self._json(200, result)
+        if path == "/api/keys/test":
+            from . import keys
+            body = json_body()
+            if body is None or not body.get("which"):
+                return self._json(400, {"error": "which (groq|gemini|yt_client_id|yt_client_secret) required"})
+            return self._json(200, keys.test(body["which"], body.get("value")))
 
         self._json(404, {"error": "not found"})
 
@@ -250,11 +272,16 @@ class Handler(BaseHTTPRequestHandler):
             scale = 1.0
         style = (qs.get("style") or ["wordpop"])[0]
         framing = (qs.get("framing") or ["blur"])[0]
+        try:
+            top_n = int((qs.get("top_n") or [CONFIG["top_n"]])[0])
+        except ValueError:
+            top_n = CONFIG["top_n"]
         return {
             "style": style if style in {s["id"] for s in captions.styles_for_api()} else "wordpop",
             "framing": framing if framing in ("blur", "crop", "crop-left", "crop-right") else "blur",
             "position": (qs.get("position") or ["bottom"])[0],
             "scale": min(1.6, max(0.5, scale)),
+            "top_n": min(6, max(1, top_n)),
             "auto_post": (qs.get("auto_post") or ["0"])[0] == "1",
             "privacy": (qs.get("privacy") or [CONFIG["privacy"]])[0],
         }
@@ -268,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
         o = self._opts(qs)
         job_id = pipeline.new_job("demo_source.mp4", style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
-                                  privacy=o["privacy"], demo=True, framing=o["framing"])
+                                  privacy=o["privacy"], demo=True, framing=o["framing"], top_n=o["top_n"])
         pipeline.start(job_id, demo)
         self._json(200, {"job_id": job_id})
 
@@ -280,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
         name = url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or url[:60]
         job_id = pipeline.new_job(name, style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
-                                  privacy=o["privacy"], framing=o["framing"])
+                                  privacy=o["privacy"], framing=o["framing"], top_n=o["top_n"])
         pipeline.start_from_url(job_id, url)
         return self._json(200, {"job_id": job_id})
 
@@ -310,7 +337,7 @@ class Handler(BaseHTTPRequestHandler):
                          "(the MP4 index 'moov atom' is missing). Re-download the video and try again."})
         job_id = pipeline.new_job(name, style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
-                                  privacy=o["privacy"], framing=o["framing"])
+                                  privacy=o["privacy"], framing=o["framing"], top_n=o["top_n"])
         pipeline.start(job_id, dest)
         self._json(200, {"job_id": job_id, "bytes": length})
 

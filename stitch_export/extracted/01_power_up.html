@@ -1,0 +1,154 @@
+<main class="w-full min-h-screen relative z-10 flex items-center justify-center p-6"><div class="flex flex-col w-full">
+<div class="relative w-full overflow-hidden flex flex-col items-center justify-center py-6">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-gradient-to-b from-primary/10 via-primary/[0.03] to-transparent rounded-full blur-[140px] pointer-events-none"></div>
+<div class="absolute -bottom-32 left-1/2 -translate-x-1/2 w-[540px] h-[320px] bg-primary/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-2xl w-full mx-auto flex flex-col items-center text-center relative z-10">
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-container-lowest/80 backdrop-blur-xl shadow-sm mb-6 transition-all duration-300 hover:bg-surface-container-high/60">
+<span class="material-symbols-outlined text-sm text-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant font-semibold tracking-[0.2em]">CLIPBLITZ</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-[-0.025em] leading-none mb-3">
+        Power the engine.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-lg mb-10 leading-relaxed">
+        Paste your keys once. ClipBlitz hot-reloads them instantly — no restarts, ever.
+      </p>
+<div class="w-full flex flex-col gap-4 text-left mb-8">
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-base">psychology</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Groq — primary brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-primary bg-surface-container-highest px-3 py-0.5 rounded-full shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              REQUIRED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="groq-key" placeholder="gsk_••••••••••••••••" type="password" value="gsk_9238f0923e80f823a09e8023f82093e"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" onclick="toggleKeyVis('groq-key', this)" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" onclick="triggerTest(this, 'Groq connected')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://console.groq.com/keys" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">console.groq.com/keys</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Llama-3.3-70b-versatile</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">schema</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Gemini — failover brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+              RECOMMENDED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="gemini-key" placeholder="AIza••••••••••••••••" type="password" value="AIzaSyC09a80e8f0a9sd8f09as8df098as0"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" onclick="toggleKeyVis('gemini-key', this)" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" onclick="triggerTest(this, 'Gemini 2.0 ready')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://aistudio.google.com/apikey" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">aistudio.google.com/apikey</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Gemini-2.0-Flash</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">smart_display</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">YouTube Data API — auto-posting</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+              FOR AUTO-POST
+            </span>
+</div>
+<div class="flex flex-col gap-2.5">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">ID</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" placeholder="••••••••••••.apps.googleusercontent.com" type="text"/>
+</div>
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">SECRET</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" placeholder="GOCSPX-••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant">
+<span>guide</span>
+<span class="text-outline">→</span>
+<span class="text-outline hover:text-primary transition cursor-pointer">Setup tab, 4 steps</span>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center gap-1.5" onclick="triggerTest(this, 'OAuth configured')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="w-full flex flex-col items-center">
+<button class="w-full sm:w-auto bg-primary text-on-primary font-headline-sm text-body-md font-semibold px-10 py-3.5 rounded-full hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-xl mb-3 flex items-center justify-center gap-2" id="master-save-btn" onclick="runMasterCalibration(this)" type="button">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">electric_bolt</span>
+<span>SAVE &amp; TEST KEYS</span>
+</button>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition duration-150 mb-8 inline-flex items-center gap-1" href="#" onclick="event.preventDefault(); alert('Continuing in localized offline mode (Whisper Turbo + ffmpeg only).');">
+<span>Continue offline</span>
+<span class="text-outline">→</span>
+</a>
+<div class="w-full max-w-xl rounded-full bg-surface-container-lowest/80 backdrop-blur-md px-5 py-2.5 flex items-center justify-center shadow-inner">
+<div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-label-caps text-label-caps text-outline tracking-[0.12em]">
+<span class="text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              ProX v5 engine
+            </span>
+<span>·</span>
+<span class="text-on-surface-variant">STT whisper-large-v3-turbo</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>ffmpeg</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>yt-dlp</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>

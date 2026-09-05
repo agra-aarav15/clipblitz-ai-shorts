@@ -1,0 +1,311 @@
+<aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside><div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full">
+<div class="relative w-full flex flex-col gap-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3.5 text-on-surface-variant pointer-events-none">search</span>
+<input class="w-80 bg-white/[0.04] backdrop-blur-md rounded-full pl-10 pr-4 py-2 text-body-sm font-body-sm text-on-surface placeholder:text-on-surface-variant/40 shadow-sm focus:outline-none focus:bg-white/[0.08] transition-all" id="transcript-search" placeholder="Search the transcript…" type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/60 rounded-full px-3.5 py-1.5 bg-white/[0.03] backdrop-blur-md">
+            334 blocks · 14:26
+          </span>
+<span class="font-label-caps text-label-caps uppercase text-primary bg-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            Acoustic Sync v5
+          </span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] text-on-surface text-body-sm font-body-sm hover:bg-white/[0.08] transition-all">
+<span class="material-symbols-outlined text-body-sm">filter_alt</span>
+<span>Peaks Only</span>
+</button>
+<button class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] text-on-surface text-body-sm font-body-sm hover:bg-white/[0.08] transition-all">
+<span class="material-symbols-outlined text-body-sm">download</span>
+<span>Export .SRT</span>
+</button>
+<div class="w-px h-5 bg-white/10 mx-1"></div>
+<button class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_16px_rgba(255,255,255,0.25)] hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-body-sm font-semibold">barcode</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<div class="lg:col-span-7 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-6 flex flex-col gap-3 shadow-[0_20px_50px_rgba(0,0,0,0.4)] relative overflow-hidden">
+<div class="absolute -top-24 -left-24 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+<div class="flex items-center justify-between pb-2">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/50 tracking-widest">
+            Acoustic Stream &amp; Spoken Cadence
+          </span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/70">
+            Precision: Frame 17,910
+          </span>
+</div>
+<div class="flex flex-col gap-2 overflow-y-auto max-h-[580px] pr-2 scroll-smooth select-text" id="transcript-container">
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">09:48</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                Safety car in this lap. Nicholas Latifi's Williams has been cleared from turn fourteen.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Trackside</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">09:51</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                Green flags across sector three. The delta is collapsing rapidly.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Team Radio</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">09:54</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface/80 group-hover:text-primary transition-colors">
+                Max Verstappen is almost overtaking Lewis Hamilton.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/40 uppercase">Crofty</span>
+</div>
+<div class="p-4 rounded-xl bg-white/[0.08] shadow-[inset_12px_0_24px_-10px_rgba(255,255,255,0.25)] flex items-start gap-4 transition-all relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-xl shadow-[0_0_12px_rgba(255,255,255,0.8)]"></div>
+<span class="font-data-mono text-data-mono text-primary font-medium pt-0.5">09:57</span>
+<div class="flex-1 flex flex-col gap-1.5">
+<div class="flex items-center gap-2">
+<p class="font-headline-sm text-headline-sm text-primary font-semibold leading-snug">
+                  This is barely believable.
+                </p>
+<span class="font-label-caps text-label-caps uppercase text-primary bg-white/15 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[12px]">local_fire_department</span>
+                  peak moment
+                </span>
+</div>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-data-mono text-data-mono text-on-surface-variant/80">Audio Spike: +9.4 dB</span>
+<span class="w-1 h-1 rounded-full bg-white/30"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/80">Sentiment: Hyper-Kinetic</span>
+<span class="w-1 h-1 rounded-full bg-white/30"></span>
+<span class="font-data-mono text-data-mono text-primary">Viral Index 98.4</span>
+</div>
+</div>
+<span class="font-label-caps text-label-caps text-primary uppercase tracking-wider bg-white/10 px-2 py-1 rounded-md">
+              Marker 04
+            </span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:01</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface/80 group-hover:text-primary transition-colors">
+                This is it. This is it.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/40 uppercase">Brundle</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:06</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface/80 group-hover:text-primary transition-colors">
+                We're going to have one lap of racing to decide the championship.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/40 uppercase">Crofty</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:12</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                Hamilton leads into turn 5, Verstappen dives down the inside.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Trackside</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:18</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                Look at the spray, look at the margin of error. Hamilton tries to fight back down the back straight!
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Brundle</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:24</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                No DRS available. It is sheer mechanical grip and absolute nerve through the chicane.
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Trackside</span>
+</div>
+<div class="p-3 rounded-xl hover:bg-white/[0.03] transition-all cursor-pointer group flex items-start gap-4">
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 pt-0.5 group-hover:text-primary">10:30</span>
+<div class="flex-1">
+<p class="font-body-md text-body-md text-on-surface-variant group-hover:text-on-surface transition-colors">
+                Max Verstappen takes the lead of the Abu Dhabi Grand Prix on the final lap!
+              </p>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/30 uppercase">Crofty</span>
+</div>
+</div>
+<div class="pt-3 flex items-center justify-between bg-white/[0.02] rounded-xl px-4 py-2 mt-1">
+<div class="flex items-center gap-4 text-body-sm font-body-sm text-on-surface-variant/70">
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-primary"></span> 4 Flagged Clips</span>
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-white/30"></span> 99.2% Sync Lock</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-primary text-body-sm font-body-sm transition-all">
+              Auto-Caption All
+            </button>
+</div>
+</div>
+</div>
+<div class="lg:col-span-5 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-6 flex flex-col justify-between h-[620px] shadow-[0_20px_50px_rgba(0,0,0,0.4)] relative overflow-hidden">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/50 tracking-widest">
+              Timeline Audio Frequency &amp; Peak Analysis
+            </span>
+<span class="font-data-mono text-data-mono text-primary bg-white/10 px-2 py-0.5 rounded-full">
+              48 kHz · 24-bit
+            </span>
+</div>
+<div class="relative w-full rounded-2xl overflow-hidden bg-surface-container-lowest p-3 flex gap-4 items-center shadow-lg group">
+<div class="w-24 h-36 rounded-xl overflow-hidden relative shrink-0 shadow-md">
+<div class="w-full h-full bg-cover bg-center" data-alt="Cinematic high contrast Formula One single seater race car overtakes on a floodlit Yas Marina Abu Dhabi night circuit, dramatic trackside sparks and rim light, motion blur on asphalt, monochrome aesthetic with bright silver specular highlights" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB8vzqg7O3K7yqKkJNxm9e_Pxa6TeIr7qrZgpH04jKXjo_f54e_VQU9VGvAwH-Fu2XKXDEtc8FxueaUzwZBp21CZd5yeKKJV1wjRjQdrXohfwzBjwwMrzf7O3IsmAr2WZma0eR4n8Fr3d2yP81DbPr2QO8ciDKKGs07q__GVB1X0RRj5mdU90648c8a80-qWvOp7mhcGFo_yRfbmfFHBII_VLP9u_cbc30u5WnboovAwdwjCD_iwv_aQQ')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20"></div>
+<div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-[9px] font-data-mono text-primary uppercase">
+                9:16 Crop
+              </div>
+<div class="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-white/20 backdrop-blur-md text-data-mono font-data-mono text-primary">
+                09:57
+              </div>
+</div>
+<div class="flex-1 flex flex-col justify-between h-36 py-1">
+<div>
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/60">Selected Keyframe</span>
+<span class="flex items-center gap-1 text-primary text-body-sm font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+                    AI Approved
+                  </span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-primary font-medium mt-1 leading-snug">
+                  The Turn 5 Decider
+                </h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5">
+                  Decisive overtake inside lane under heavy braking. Peak audio volume &amp; commentator excitation spike.
+                </p>
+</div>
+<div class="flex items-center gap-3 pt-2">
+<div class="relative w-9 h-9 flex items-center justify-center shrink-0">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="81, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">81</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/70">Virality Metric</span>
+<span class="font-data-mono text-data-mono text-primary font-medium">Top 2% of video span</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="relative my-auto py-4 flex flex-col gap-2">
+<div class="flex items-center justify-between text-on-surface-variant/50 font-data-mono text-[10px]">
+<span>08:00</span>
+<span>09:00</span>
+<span class="text-primary font-semibold">09:57 (NOW)</span>
+<span>11:00</span>
+<span>12:00</span>
+<span>14:26</span>
+</div>
+<div class="relative h-32 w-full bg-surface-container-lowest rounded-xl overflow-hidden p-2 flex items-center justify-between gap-1 shadow-inner">
+<div class="absolute inset-x-0 h-px bg-white/10 top-1/2 -translate-y-1/2 pointer-events-none"></div>
+<div class="absolute left-[54%] top-0 bottom-0 w-px bg-primary shadow-[0_0_12px_rgba(255,255,255,1)] z-20 pointer-events-none">
+<div class="absolute -top-1 -translate-x-1/2 left-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_8px_#fff]"></div>
+<div class="absolute -bottom-1 -translate-x-1/2 left-1/2 w-2 h-2 rounded-full bg-primary"></div>
+</div>
+<div class="absolute left-[35%] top-1 bottom-1 w-px bg-white/30 z-10 pointer-events-none"></div>
+<div class="absolute left-[78%] top-1 bottom-1 w-px bg-white/30 z-10 pointer-events-none"></div>
+<div class="absolute left-[88%] top-1 bottom-1 w-px bg-white/30 z-10 pointer-events-none"></div>
+<div class="w-1.5 h-6 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-8 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-9 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-22 bg-white/45 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-18 bg-white/35 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-28 bg-white/60 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-30 bg-primary/80 rounded-full"></div>
+<div class="w-1.5 h-32 bg-primary rounded-full shadow-[0_0_8px_rgba(255,255,255,0.7)]"></div>
+<div class="w-1.5 h-28 bg-primary/90 rounded-full"></div>
+<div class="w-1.5 h-26 bg-white/70 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/50 rounded-full"></div>
+<div class="w-1.5 h-22 bg-white/55 rounded-full"></div>
+<div class="w-1.5 h-16 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-18 bg-white/45 rounded-full"></div>
+<div class="w-1.5 h-24 bg-white/60 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/35 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-12 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-8 bg-white/20 rounded-full"></div>
+<div class="w-1.5 h-14 bg-white/30 rounded-full"></div>
+<div class="w-1.5 h-20 bg-white/40 rounded-full"></div>
+<div class="w-1.5 h-10 bg-white/25 rounded-full"></div>
+<div class="w-1.5 h-7 bg-white/15 rounded-full"></div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_#fff]"></span>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant">Active Cue: 09:54 - 10:14</span>
+</div>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant/60">Duration: 20s</span>
+</div>
+</div>
+<div class="bg-white/[0.02] rounded-2xl p-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_16px_rgba(255,255,255,0.35)]">
+<span class="material-symbols-outlined text-[20px]">play_arrow</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">replay_5</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">forward_5</span>
+</button>
+<div class="font-data-mono text-data-mono text-on-surface ml-1">
+<span class="text-primary font-semibold">09:57</span>
+<span class="text-on-surface-variant/50"> / 14:26</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded-full bg-white/[0.05] hover:bg-white/10 text-on-surface font-data-mono text-[11px] transition-all">
+              1.0x
+            </button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">zoom_in</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>

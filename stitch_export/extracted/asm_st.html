@@ -1,0 +1,92 @@
+<div class="relative w-full max-w-6xl mx-auto px-4 py-8 flex flex-col items-center">
+<!-- Ambient Lighting Halo behind Cockpit Input Zone -->
+<div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[320px] bg-primary/[0.04] rounded-full blur-[140px] pointer-events-none -z-10"></div>
+<!-- Header Cockpit Typography -->
+<div class="w-full text-center flex flex-col items-center mt-2 mb-10">
+<div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.03] backdrop-blur-xl mb-6 shadow-sm">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Autonomous Processing Array</span>
+</div>
+<h1 class="font-display-xl text-display-xl text-primary font-semibold tracking-[-0.025em] max-w-4xl text-center leading-none mb-4">
+        Any video in. Shorts that land.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl text-center font-normal">
+        The ProX v5 AI editor finds the peak moments, cuts complete stories, and judges every ending.
+      </p>
+</div>
+<!-- Massive YouTube Input Liquid Capsule -->
+<div class="w-full max-w-4xl group relative mb-5">
+<div class="h-20 bg-white/[0.04] backdrop-blur-2xl rounded-[28px] px-6 flex items-center justify-between shadow-2xl transition-all duration-300 group-hover:bg-white/[0.06] group-focus-within:bg-white/[0.07] group-focus-within:shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+<div class="flex items-center gap-4 flex-1 mr-4">
+<div class="w-10 h-10 rounded-full bg-white/[0.05] flex items-center justify-center text-primary/70 group-focus-within:text-primary transition-colors shrink-0">
+<span class="material-symbols-outlined text-[22px]">link</span>
+</div>
+<input id="url-input" placeholder="Paste a YouTube link — youtu.be/…" spellcheck="false" type="text"/>
+</div>
+<button class="bg-primary text-on-primary font-semibold font-body-sm text-body-sm tracking-wider px-8 py-4 rounded-full transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center gap-2.5 cursor-pointer shrink-0" id="make-clips-btn" id="make-clips-btn">
+<span>MAKE CLIPS</span>
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+</button>
+</div>
+</div>
+<!-- Dashed Glass Dropzone -->
+<div class="w-full max-w-4xl relative mb-6">
+<div class="w-full bg-white/[0.02] backdrop-blur-md rounded-[24px] py-9 px-8 flex flex-col items-center justify-center text-center transition-all duration-300 hover:bg-white/[0.04] cursor-pointer group" id="dropzone" id="dropzone">
+<div class="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center text-primary/30 group-hover:text-primary/70 group-hover:scale-110 transition-all duration-300 mb-3">
+<span class="material-symbols-outlined text-[26px]">upload_file</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-on-surface-variant/60 group-hover:text-on-surface-variant transition-colors">or drop an MP4 here</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/40">up to 2 GB</span>
+</div>
+<input type="file" id="file" class="hidden" accept="video/*" />
+</div>
+<!-- Option Chips Interactive Bar -->
+<div class="flex flex-wrap items-center justify-center gap-3 mb-16 w-full max-w-4xl">
+<div class="relative" data-chip="clips">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="clips">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Clips</span>
+<span class="text-primary font-medium">3</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="captions">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="captions">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Captions</span>
+<span class="text-primary font-medium">wordpop</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="framing">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="framing">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Framing</span>
+<span class="text-primary font-medium">blur-pad 9:16</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+<div class="relative" data-chip="lang">
+<button class="bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl rounded-full px-4 py-2 flex items-center gap-2 font-body-sm text-body-sm text-on-surface transition cursor-pointer" data-chip-btn="lang">
+<span class="text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-wider">Language</span>
+<span class="text-primary font-medium">auto</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/60 group-hover/chip:rotate-180 transition-transform">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Recent Jobs Glass Rail Section -->
+<div class="w-full max-w-5xl flex flex-col">
+<div class="flex items-center justify-between mb-4 px-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary/40 text-[16px]">history</span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant/60">RECENT JOBS</span>
+</div>
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant/40">
+<span>PIPELINE</span>
+<span class="text-primary" id="pipeline-ready">— READY</span>
+</div>
+</div>
+<!-- 3 Glass Card Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full" id="recent-jobs"><!-- JOBS_MOUNT --></div>
+</div>
+</div>
+</div>

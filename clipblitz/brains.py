@@ -10,6 +10,7 @@ reasoning-only answers (the gpt-oss quirk). Rate limits respect Retry-After.
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -17,7 +18,18 @@ import urllib.request
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = os.environ.get("CB_GEMINI_MODEL", "").strip() or "gemini-3.6-flash"
+
+
+def _retired_model_successor(e):
+    """Providers announce retirements with the replacement in the body
+    ('... models/gemini-3.6-flash for the latest ...') — read it and self-heal."""
+    try:
+        body = e.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    m = re.search(r"use models/([\w.\-]+)", body) or re.search(r"models/([\w.\-]+) is no longer", body)
+    return m.group(1) if m else None
 
 
 def _read_env_keys():
@@ -48,8 +60,11 @@ def brains():
     return [b for b in order if b["key"]]
 
 
-def _call_one(brain, payload, timeout=180):
-    body = json.dumps(payload).encode()
+def _call_one(brain, payload, timeout=180, model_override=None):
+    # Each brain serves ITS OWN model — the caller's "model" field is just a hint for
+    # the primary. Sending the primary's model name to the failover provider 404s.
+    model = model_override or brain["model"] or payload.get("model")
+    body = json.dumps({**payload, "model": model}).encode()
     req = urllib.request.Request(
         f"{brain['base'].rstrip('/')}/chat/completions", data=body, method="POST",
         headers={"Content-Type": "application/json", "User-Agent": "ClipBlitz/0.3",
@@ -80,7 +95,15 @@ def ai_chat(payload, attempts_per_brain=2):
                 return _call_one(brain, payload)
             except urllib.error.HTTPError as e:
                 last = e
-                if e.code in (400, 401, 403, 404):
+                if e.code == 404:
+                    successor = _retired_model_successor(e)
+                    if successor:  # provider told us the replacement model — use it
+                        try:
+                            return _call_one(brain, payload, model_override=successor)
+                        except urllib.error.HTTPError:
+                            pass
+                    break  # this brain can't serve this request — try the other brain
+                if e.code in (400, 401, 403):
                     break  # this brain can't serve this request — try the other brain
                 if e.code == 429:
                     retry_after = e.headers.get("Retry-After")

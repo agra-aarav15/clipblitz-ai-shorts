@@ -222,6 +222,30 @@
     <section class="screen" id="screen-connect" hidden>
       <div class="connectgrid">
         <div class="glass platcard">
+          <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg></div>
+          <h3>API keys <span class="chip" id="keys-chip">checking…</span></h3>
+          <p class="pdesc">Paste once — <b>hot-reloaded</b> from the UI, no restart. Each key is
+          <b>tested live</b> against its provider before it is stored in <b>.env</b>.</p>
+          <div class="keyrow">
+            <div class="field"><label>Groq — primary brain</label>
+              <div class="keyinput"><input id="key-groq" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="groq">Test &amp; save</button></div>
+            </div>
+            <span class="keystate" id="state-groq">—</span>
+          </div>
+          <div class="keyrow">
+            <div class="field"><label>Gemini — failover brain</label>
+              <div class="keyinput"><input id="key-gemini" type="password" placeholder="AIzaSy… or AQ…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="gemini">Test &amp; save</button></div>
+            </div>
+            <span class="keystate" id="state-gemini">—</span>
+          </div>
+          <div class="keyrow">
+            <div class="field"><label>YouTube Data API — auto-post (OAuth client · Desktop app)</label>
+              <div class="keyinput"><input id="key-yt-id" type="password" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false"><input id="key-yt-secret" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="youtube">Test &amp; save</button></div>
+            </div>
+            <span class="keystate" id="state-youtube">—</span>
+          </div>
+        </div>
+        <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></div>
           <h3>YouTube <span class="chip" id="yt-status">checking…</span></h3>
           <p class="pdesc"><b style="color:var(--text)">Fully automatic posting</b> needs a one-time OAuth setup —

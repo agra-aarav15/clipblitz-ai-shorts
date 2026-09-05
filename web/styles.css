@@ -616,3 +616,21 @@ svg.ic { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor;
 .logo .mark { width: 30px; height: 30px; margin-right: 9px; vertical-align: -7px;
   filter: drop-shadow(0 0 10px rgba(255,255,255,.22)); }
 .btn svg.ic { vertical-align: -0.18em; }
+
+/* ---- API keys card ---- */
+.keyrow { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.keyrow .field { flex: 1; min-width: 0; }
+.keyinput { display: flex; gap: 8px; }
+.keyinput input {
+  flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.05); color: var(--text);
+  border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 13px;
+  font: inherit; font-size: 13px; outline: none;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;
+}
+.keyinput input:focus { border-color: #ffffff; }
+.keyinput input::placeholder { color: var(--muted); }
+.keyinput .btn { white-space: nowrap; }
+.keystate { font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px;
+  padding: 5px 11px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; }
+.keystate.ok { color: #0b0b0b; background: #ffffff; border-color: #ffffff; font-weight: 600; }

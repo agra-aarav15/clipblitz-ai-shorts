@@ -835,3 +835,62 @@ if (wanted) {
     empty.appendChild(btn);
   } catch { /* best effort */ }
 })();
+
+/* ---------- ?screen= deep link (job deep links handled by latestJobResume/watch) ---------- */
+(() => {
+  const s = new URLSearchParams(location.search).get('screen');
+  if (s && document.getElementById('screen-' + s)) setTimeout(() => showScreen(s), 60);
+})();
+
+/* ---------- API keys: states + save with live provider test ---------- */
+function keyState(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = v.set ? (v.masked || 'saved') : 'empty';
+  el.className = 'keystate' + (v.set ? ' ok' : '');
+}
+async function loadKeyStates() {
+  try {
+    const r = await fetch('/api/keys');
+    const st = await r.json();
+    keyState('state-groq', st.groq || {});
+    keyState('state-gemini', st.gemini || {});
+    const ytOk = (st.yt_client_id || {}).set && (st.yt_client_secret || {}).set;
+    const yel = document.getElementById('state-youtube');
+    if (yel) { yel.textContent = ytOk ? 'saved' : 'empty'; yel.className = 'keystate' + (ytOk ? ' ok' : ''); }
+    if ((st.yt_client_id || {}).masked) { const i = document.getElementById('key-yt-id'); if (i) i.placeholder = st.yt_client_id.masked; }
+    const chip = document.getElementById('keys-chip');
+    if (chip) {
+      const brains = st.brains || [];
+      chip.textContent = brains.length ? (brains.join(' + ') + ' online') : 'paste a key to start';
+      chip.className = 'chip' + (brains.length ? ' ok' : '');
+    }
+  } catch { /* best effort */ }
+}
+document.querySelectorAll('[data-savekey]').forEach((b) => b.addEventListener('click', async () => {
+  const which = b.dataset.savekey;
+  const body = {};
+  if (which === 'groq') body.groq = document.getElementById('key-groq').value.trim();
+  if (which === 'gemini') body.gemini = document.getElementById('key-gemini').value.trim();
+  if (which === 'youtube') {
+    body.yt_client_id = document.getElementById('key-yt-id').value.trim();
+    body.yt_client_secret = document.getElementById('key-yt-secret').value.trim();
+  }
+  if (Object.values(body).some((v) => !v)) { toast('Paste the value first.'); return; }
+  b.disabled = true;
+  const old = b.textContent;
+  b.textContent = 'Testing…';
+  try {
+    const resp = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await resp.json();
+    if (!resp.ok) throw new Error(r.error || resp.statusText);
+    const tests = r.tests || {};
+    const fails = Object.entries(tests).filter(([, t]) => !t.ok).map(([k, t]) => k + ': ' + (t.detail || 'failed'));
+    if (fails.length) toast('Saved, but check — ' + fails.join(' · '), true);
+    else toast('Saved and live' + (Object.keys(tests).length ? ' — ' + Object.values(tests).map((t) => t.detail).join(' · ') : '.'));
+    loadKeyStates();
+  } catch (e) { toast('Could not save: ' + (e && e.message ? e.message : e), true); }
+  b.disabled = false;
+  b.textContent = old;
+}));
+loadKeyStates();

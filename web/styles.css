@@ -339,8 +339,8 @@ a { color: var(--text); }
 
 /* card entrance */
 .clipcard { opacity: 1; }
-.clipcard.enter { opacity: 0; transform: translateY(14px) scale(0.98); }
-.clipcard.enter.in { opacity: 1 !important; transform: none; transition: opacity 0.5s ease, transform 0.5s cubic-bezier(.2,.9,.3,1); }
+.clipcard.enter { opacity: 0; }
+.clipcard.enter.in { opacity: 1 !important; transition: opacity 0.35s ease; }
 
 /* skeletons */
 .skeletons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }

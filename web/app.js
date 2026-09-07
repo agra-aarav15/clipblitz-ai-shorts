@@ -13,27 +13,17 @@ let lastFailToast = 0;
 
 const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
-/* ---------- cinematic motion layer (GSAP; every call degrades gracefully offline) ---------- */
-const G = window.gsap || null;
-const EASE = 'power3.out';
-
+/* ---------- motion: intentionally NONE -------------------------------------
+   The GSAP layer (CDN tweens, magnetic buttons, intro choreography) is what made
+   the UI feel glitchy — screens stuck half-faded, elements shifting under the
+   cursor. All motion is now two short CSS transitions that always complete.
+   -------------------------------------------------------------------------- */
 function revealScreen(name) {
   const el = $(`screen-${name}`);
   if (!el) return;
-  if (!G) { el.style.opacity = ''; el.style.transform = ''; return; }
-  /* the CSS `screenin` keyframe also animates opacity — two animators on one
-     property is what made switches flicker; GSAP takes over completely */
-  el.style.animation = 'none';
-  /* kill any tween already touching this screen — competing tweens are what made
-     rapid clicking leave screens stuck half-faded */
-  G.killTweensOf(el);
-  /* immediateRender:false -> if rAF stalls (busy system, background tab), the screen
-     simply stays visible instead of being held invisible by the tween's start state */
-  G.fromTo(el, { opacity: 0, y: 16 },
-    { opacity: 1, y: 0, duration: 0.5, ease: EASE, overwrite: 'auto', immediateRender: false,
-      clearProps: 'transform', onComplete: () => { el.style.opacity = ''; } });
-  /* safety net: nothing may stay invisible, whatever happens to rAF */
-  setTimeout(() => { if (!el.hidden) { el.style.opacity = ''; el.style.transform = ''; } }, 900);
+  el.style.opacity = '';
+  el.style.transform = '';
+  el.style.animation = '';
 }
 
 /* app-shell views */
@@ -44,39 +34,11 @@ function showScreen(name) {
     b.classList.toggle('active', b.dataset.screen === name));
   const titles = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', connect: 'Connect' };
   const titleEl = $('jobtitle');
-  if (G && titleEl.textContent !== titles[name]) {
-    G.fromTo(titleEl, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.35, ease: EASE, overwrite: 'auto', immediateRender: false, clearProps: 'transform,opacity' });
-  }
   titleEl.textContent = titles[name] || 'ClipBlitz';
   revealScreen(name);
   if (name === 'connect') { refreshSocial(); renderQueue(); }
 }
 
-/* first-load choreography: the shell assembles itself */
-(function intro() {
-  if (!G) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const tl = G.timeline({ defaults: { ease: EASE, overwrite: 'auto' } })
-    .from('.sidebar', { x: -28, opacity: 0, duration: 0.7, clearProps: 'transform,opacity', immediateRender: false }, 0.05)
-    .from('.sidebar .snavbtn', { x: -14, opacity: 0, duration: 0.4, stagger: 0.05, clearProps: 'transform,opacity', immediateRender: false }, 0.25)
-    .from('.topbar', { y: -14, opacity: 0, duration: 0.5, clearProps: 'transform,opacity', immediateRender: false }, 0.35)
-    .from('#screen-studio .glass', { y: 22, opacity: 0, duration: 0.6, clearProps: 'transform,opacity', immediateRender: false }, 0.45);
-  /* the intro must never win a fight with the first revealScreen / user click */
-  tl.eventCallback('onComplete', () => tl.kill());
-})();
-
-/* magnetic buttons + specular follow */
-if (G) {
-  document.addEventListener('mousemove', (e) => {
-    const btn = e.target.closest && e.target.closest('.btn');
-    document.querySelectorAll('.btn.magnet').forEach(b => { if (b !== btn) { b.classList.remove('magnet'); G.to(b, { x: 0, y: 0, duration: 0.5, ease: EASE, overwrite: 'auto' }); } });
-    if (!btn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const r = btn.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-    btn.classList.add('magnet');
-    G.to(btn, { x: dx * 0.12, y: dy * 0.18, duration: 0.4, ease: EASE, overwrite: 'auto' });
-  });
-}
 document.querySelectorAll('.snavbtn').forEach((b) =>
   b.addEventListener('click', () => showScreen(b.dataset.screen)));
 document.querySelectorAll('[data-goto]').forEach((b) =>
@@ -459,15 +421,8 @@ function ensureClipCard(job, c, i) {
     el.innerHTML = clipCardHTML(job, c, i);
     $('clips').appendChild(el);
     bindClipCard(el, job.id);
-    if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-      el.className = 'glass clipcard';
-      G.killTweensOf(el);
-      G.fromTo(el, { autoAlpha: 0, y: 26, scale: 0.985 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.65, ease: EASE, delay: Math.min(i * 0.12, 0.5), overwrite: 'auto', immediateRender: false, clearProps: 'transform,visibility' });
-    } else {
-      el.className = 'glass clipcard enter';
-      setTimeout(() => el.classList.add('in'), 60);
-    }
+    el.className = 'glass clipcard enter';
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
     animateDial(el, c.score || 0);
     animateBars(el);
   } else {
@@ -489,17 +444,6 @@ function animateDial(el, score) {
   const fg = el.querySelector('.dial-fg'), num = el.querySelector('.dial-num');
   const C = 2 * Math.PI * 26;
   const target = C * (1 - score / 100);
-  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    fg.style.strokeDashoffset = C;
-    G.to(fg, { strokeDashoffset: target, duration: 1.35, ease: 'power3.out' });
-    const counter = { v: 0 };
-    G.to(counter, {
-      v: score, duration: 1.35, ease: 'power3.out',
-      onUpdate: () => { num.textContent = Math.round(counter.v); },
-    });
-    setTimeout(() => { num.textContent = score; fg.style.strokeDashoffset = target; }, 1600); // must land regardless
-    return;
-  }
   requestAnimationFrame(() => {
     fg.style.strokeDashoffset = target.toFixed(1);
   });
@@ -517,14 +461,6 @@ function animateDial(el, score) {
 
 function animateBars(el) {
   const bars = el.querySelectorAll('.fbar i');
-  if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    G.to(bars, {
-      width: (idx, b) => (b.dataset.w || 0) + '%',
-      duration: 1.0, ease: 'power3.out', stagger: 0.07, delay: 0.25, overwrite: 'auto',
-    });
-    setTimeout(() => bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; }), 2200); // must land
-    return;
-  }
   setTimeout(() => {
     bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; });
   }, 120);

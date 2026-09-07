@@ -18,9 +18,22 @@ const G = window.gsap || null;
 const EASE = 'power3.out';
 
 function revealScreen(name) {
-  if (!G) return;
   const el = $(`screen-${name}`);
-  if (el) G.fromTo(el, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: EASE, clearProps: 'transform' });
+  if (!el) return;
+  if (!G) { el.style.opacity = ''; el.style.transform = ''; return; }
+  /* the CSS `screenin` keyframe also animates opacity — two animators on one
+     property is what made switches flicker; GSAP takes over completely */
+  el.style.animation = 'none';
+  /* kill any tween already touching this screen — competing tweens are what made
+     rapid clicking leave screens stuck half-faded */
+  G.killTweensOf(el);
+  /* immediateRender:false -> if rAF stalls (busy system, background tab), the screen
+     simply stays visible instead of being held invisible by the tween's start state */
+  G.fromTo(el, { opacity: 0, y: 16 },
+    { opacity: 1, y: 0, duration: 0.5, ease: EASE, overwrite: 'auto', immediateRender: false,
+      clearProps: 'transform', onComplete: () => { el.style.opacity = ''; } });
+  /* safety net: nothing may stay invisible, whatever happens to rAF */
+  setTimeout(() => { if (!el.hidden) { el.style.opacity = ''; el.style.transform = ''; } }, 900);
 }
 
 /* app-shell views */
@@ -32,7 +45,7 @@ function showScreen(name) {
   const titles = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', connect: 'Connect' };
   const titleEl = $('jobtitle');
   if (G && titleEl.textContent !== titles[name]) {
-    G.fromTo(titleEl, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.35, ease: EASE });
+    G.fromTo(titleEl, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.35, ease: EASE, overwrite: 'auto', immediateRender: false, clearProps: 'transform,opacity' });
   }
   titleEl.textContent = titles[name] || 'ClipBlitz';
   revealScreen(name);
@@ -43,23 +56,25 @@ function showScreen(name) {
 (function intro() {
   if (!G) return;
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  G.timeline({ defaults: { ease: EASE } })
-    .from('.sidebar', { x: -28, opacity: 0, duration: 0.7 }, 0.05)
-    .from('.sidebar .snavbtn', { x: -14, opacity: 0, duration: 0.4, stagger: 0.05 }, 0.25)
-    .from('.topbar', { y: -14, opacity: 0, duration: 0.5 }, 0.35)
-    .from('#screen-studio .glass', { y: 22, opacity: 0, duration: 0.6, clearProps: 'transform' }, 0.45);
+  const tl = G.timeline({ defaults: { ease: EASE, overwrite: 'auto' } })
+    .from('.sidebar', { x: -28, opacity: 0, duration: 0.7, clearProps: 'transform,opacity', immediateRender: false }, 0.05)
+    .from('.sidebar .snavbtn', { x: -14, opacity: 0, duration: 0.4, stagger: 0.05, clearProps: 'transform,opacity', immediateRender: false }, 0.25)
+    .from('.topbar', { y: -14, opacity: 0, duration: 0.5, clearProps: 'transform,opacity', immediateRender: false }, 0.35)
+    .from('#screen-studio .glass', { y: 22, opacity: 0, duration: 0.6, clearProps: 'transform,opacity', immediateRender: false }, 0.45);
+  /* the intro must never win a fight with the first revealScreen / user click */
+  tl.eventCallback('onComplete', () => tl.kill());
 })();
 
 /* magnetic buttons + specular follow */
 if (G) {
   document.addEventListener('mousemove', (e) => {
     const btn = e.target.closest && e.target.closest('.btn');
-    document.querySelectorAll('.btn.magnet').forEach(b => { if (b !== btn) { b.classList.remove('magnet'); G.to(b, { x: 0, y: 0, duration: 0.5, ease: EASE }); } });
+    document.querySelectorAll('.btn.magnet').forEach(b => { if (b !== btn) { b.classList.remove('magnet'); G.to(b, { x: 0, y: 0, duration: 0.5, ease: EASE, overwrite: 'auto' }); } });
     if (!btn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const r = btn.getBoundingClientRect();
     const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
     btn.classList.add('magnet');
-    G.to(btn, { x: dx * 0.12, y: dy * 0.18, duration: 0.4, ease: EASE });
+    G.to(btn, { x: dx * 0.12, y: dy * 0.18, duration: 0.4, ease: EASE, overwrite: 'auto' });
   });
 }
 document.querySelectorAll('.snavbtn').forEach((b) =>
@@ -446,8 +461,9 @@ function ensureClipCard(job, c, i) {
     bindClipCard(el, job.id);
     if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
       el.className = 'glass clipcard';
+      G.killTweensOf(el);
       G.fromTo(el, { autoAlpha: 0, y: 26, scale: 0.985 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.65, ease: EASE, delay: Math.min(i * 0.12, 0.5), clearProps: 'transform' });
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.65, ease: EASE, delay: Math.min(i * 0.12, 0.5), overwrite: 'auto', immediateRender: false, clearProps: 'transform,visibility' });
     } else {
       el.className = 'glass clipcard enter';
       setTimeout(() => el.classList.add('in'), 60);
@@ -504,7 +520,7 @@ function animateBars(el) {
   if (G && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
     G.to(bars, {
       width: (idx, b) => (b.dataset.w || 0) + '%',
-      duration: 1.0, ease: 'power3.out', stagger: 0.07, delay: 0.25,
+      duration: 1.0, ease: 'power3.out', stagger: 0.07, delay: 0.25, overwrite: 'auto',
     });
     setTimeout(() => bars.forEach(b => { b.style.width = (b.dataset.w || 0) + '%'; }), 2200); // must land
     return;

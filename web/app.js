@@ -104,7 +104,6 @@ function fileChosen() {
 /* ---------- LIVE CAPTION PREVIEW ---------- */
 const PV_COLORS = { wordpop: '#fff', goldbold: '#FFD700', minimal: '#fff', karaoke: '#FFD700', neon: '#39FF14', box: '#fff' };
 const PV_WORDS = ['Your captions', 'look insane', 'in every style'];
-let pvTimer = null;
 
 function captureFrame(file) {
   const v = document.createElement('video');
@@ -124,33 +123,18 @@ function captureFrame(file) {
 }
 
 function runPreview() {
-  clearInterval(pvTimer);
+  /* one render, zero timers: the crossfade + karaoke loop run in CSS only */
   const cap = $('pv-caption');
   cap.className = 'pv-caption st-' + chosenStyle;
   cap.style.color = PV_COLORS[chosenStyle] || '#fff';
-
+  const span = (w, i) => `<span class="w" style="--i:${i}">${esc(w)}</span>`;
   if (chosenStyle === 'karaoke') {
     const words = PV_WORDS.join(' ').split(' ');
-    cap.innerHTML = words.map(w => `<span class="w">${esc(w)}</span>`).join(' ');
-    let idx = 0;
-    const spans = cap.querySelectorAll('.w');
-    pvTimer = setInterval(() => {
-      spans.forEach(s => s.classList.remove('spoken'));
-      for (let k = 0; k <= idx % spans.length; k++) spans[k].classList.add('spoken');
-      idx++;
-    }, 380);
+    cap.innerHTML = `<div class="pv-screen">${words.map(span).join(' ')}</div>`;
+    cap.style.setProperty('--kfill', (words.length * 0.32 + 1.6) + 's');
     return;
   }
-  const perScreen = 2;
-  const screens = [];
-  for (let i = 0; i < PV_WORDS.length; i += perScreen) screens.push(PV_WORDS.slice(i, i + perScreen).join(' '));
-  let s = 0;
-  const show = () => {
-    cap.innerHTML = screens[s % screens.length].split(' ').map(w => `<span class="w">${esc(w)}</span>`).join(' ');
-    s++;
-  };
-  show();
-  pvTimer = setInterval(show, 1300);
+  cap.innerHTML = `<div class="pv-screen">${PV_WORDS.join(' ').split(' ').map(span).join(' ')}</div>`;
 }
 
 function opts() {

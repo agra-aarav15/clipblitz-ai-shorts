@@ -544,7 +544,8 @@ def draft_cuts(stories, segments, laughs, energy, content_type, duration, moment
             cut = {"start": a, "end": b,
                    "title": (c.get("title") or st["summary"])[:80],
                    "hook": (c.get("hook_line") or st["hook_line"])[:120],
-                   "story_summary": st["summary"]}
+                   "story_summary": st["summary"],
+                   "story_start": st["start"]}
             if _is_hype(cut["title"] + " " + cut["story_summary"]):
                 continue  # double-check: hype never reaches the podium
             cuts.append(cut)
@@ -788,7 +789,8 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None):
         cands = draft_cuts(stories, segments, laughs, energy, content_type, duration)
     else:
         cands = [{"start": s["start"], "end": s["end"], "title": s["summary"][:70],
-                  "hook": s["hook_line"], "story_summary": s["summary"]} for s in stories]
+                  "hook": s["hook_line"], "story_summary": s["summary"],
+                  "story_start": s["start"]} for s in stories]
     if not cands:
         return _even_windows(duration, count), [], "prox-windows", content_type
     for c in cands:
@@ -854,19 +856,47 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None):
     def _ends_well(c):
         return c.get("qc") == "verified" or c["measured"].get("tail_laugh", 0) >= 0.25
 
+    def _hook_open(c):
+        """1.0 if the cut's first words grab: a question, a number, or a curiosity
+        opener. Deterministic — reads the transcript, never the LLM."""
+        segs = [t for t in (segments or []) if c["start"] <= t.get("start", 0) < c["start"] + 6]
+        first = " ".join((t.get("text") or "") for t in segs[:2]).strip()
+        if not first:
+            return 0.0
+        low = first.lower()
+        if "?" in first[:80]:
+            return 1.0
+        if any(low.startswith(w) for w in ("how ", "why ", "what ", "when ", "who ", "which ", "did ", "can ", "will ", "is ", "are ")):
+            return 0.8
+        if any(ch.isdigit() for ch in first[:24]):
+            return 0.6
+        return 0.0
+
+    def _order_key(c):
+        return -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6) + 2 * _hook_open(c))
+
     passing = [c for c in top_pool if _ends_well(c)]
     rest = [c for c in top_pool if not _ends_well(c)]
     # event-first ordering: a cut that contains a measured peak moment beats an
-    # equally-scoring cut that doesn't (this is what used to bury the F1 battle)
-    passing.sort(key=lambda c: -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6)))
-    rest.sort(key=lambda c: -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6)
-                              + c["measured"].get("tail_laugh", 0)
-                              + c["measured"].get("laughter", 0)))
+    # equally-scoring cut that doesn't (this is what used to bury the F1 battle);
+    # a strong opening line gets a small tiebreak bonus (never touches the score).
+    passing.sort(key=_order_key)
+    rest.sort(key=lambda c: _order_key(c) - (c["measured"].get("tail_laugh", 0)
+                                             + c["measured"].get("laughter", 0)))
     picked = []
+    # first pass: no overlap AND one cut per story — the podium should tell the
+    # whole arc, not two adjacent slices of the same scene
     for c in passing + rest:
         if len(picked) >= count:
             break
-        if all(abs(c["start"] - p["start"]) > 60 for p in picked):
+        if all(abs(c["start"] - p["start"]) > 60 for p in picked) \
+           and all(abs(c.get("story_start", -999) - p.get("story_start", -999)) > 1 for p in picked):
+            picked.append(c)
+    # second pass: relax the story rule before relaxing the overlap rule
+    for c in passing + rest:
+        if len(picked) >= count:
+            break
+        if c not in picked and all(abs(c["start"] - p["start"]) > 60 for p in picked):
             picked.append(c)
     for c in passing + rest:
         if len(picked) >= count:

@@ -278,7 +278,7 @@ a { color: var(--text); }
 @keyframes kfill { 0%, 4% { color: rgba(255,255,255,0.85); } 9%, 78% { color: #FFD700; } 86%, 100% { color: rgba(255,255,255,0.85); } }
 @keyframes wpop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 .pv-caption.st-minimal { font-family: 'Segoe UI', sans-serif; font-weight: 600; font-size: 17px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
-.pv-caption.st-minimal .w { animation: fadein 0.4s both; }
+.pv-caption.st-minimal .w { animation: fadein 0.4s ease; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 .pv-caption.st-neon { color: #39FF14; text-shadow: 0 0 8px #39FF14, 0 0 18px #39FF14, 0 2px 0 #003300; animation: neonpulse 2.4s ease-in-out infinite; }
 @keyframes neonpulse { 0%,100% { transform: translateX(-50%) translateY(0); } 33% { transform: translateX(calc(-50% - 2px)) translateY(-2px); } 66% { transform: translateX(calc(-50% + 2px)) translateY(2px); } }
@@ -617,3 +617,47 @@ svg.ic { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor;
   color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px;
   padding: 5px 11px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; }
 .keystate.ok { color: #0b0b0b; background: #ffffff; border-color: #ffffff; font-weight: 600; }
+
+/* ---------- immersive layer ---------- */
+/* two soft light veils drifting on the GPU (transform only, no filters) */
+.aurora { position: absolute; width: 70vw; height: 70vw; border-radius: 50%;
+  will-change: transform; }
+.aur-1 { left: -22vw; top: -26vw;
+  background: radial-gradient(circle at 40% 40%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 45%, transparent 68%);
+  animation: aurora-a 34s ease-in-out infinite alternate; }
+.aur-2 { right: -24vw; bottom: -30vw;
+  background: radial-gradient(circle at 55% 45%, rgba(255,255,255,0.07), transparent 62%);
+  animation: aurora-b 44s ease-in-out infinite alternate; }
+@keyframes aurora-a { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(10vw,8vh,0) scale(1.14); } }
+@keyframes aurora-b { from { transform: translate3d(0,0,0) scale(1.08); } to { transform: translate3d(-9vw,-7vh,0) scale(0.92); } }
+
+/* cursor halo: one composited layer, transform-tracked, rests wherever it is */
+.glow { position: fixed; left: 0; top: 0; width: 44vw; height: 44vw; margin: -22vw 0 0 -22vw;
+  border-radius: 50%; pointer-events: none; z-index: 1;
+  background: radial-gradient(circle, rgba(255,255,255,0.05), transparent 62%);
+  transform: translate3d(50vw, 50vh, 0); will-change: transform; }
+
+/* card entrance: transform-only stagger; frozen clock = a few px off, never invisible */
+@keyframes cardin { from { transform: translateY(16px); } to { transform: none; } }
+.glass.rvin { animation: cardin 0.5s cubic-bezier(.2,.8,.2,1) both;
+  animation-delay: calc(var(--i, 0) * 70ms); }
+
+/* specular sheen sweeps across primary buttons on hover (transform only) */
+.btn:not(.ghost) { position: relative; overflow: hidden; }
+.btn:not(.ghost)::before { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.28) 50%, transparent 70%);
+  transform: translateX(-110%); transition: transform 0.6s cubic-bezier(.2,.8,.2,1); }
+.btn:not(.ghost):hover::before { transform: translateX(110%); }
+
+/* live chips breathe toward full opacity (base = 1, so frozen = on) */
+.chip.gold, .chip.ok, #caps { animation: breathe 2.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.68; } }
+
+/* nav pill glides */
+.snavbtn { transition: background 0.18s, color 0.18s, transform 0.18s, box-shadow 0.18s; }
+.snavbtn:hover { transform: translateX(3px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora, .glow, .glass.rvin, .btn:not(.ghost)::before,
+  .chip.gold, .chip.ok, #caps, .snavbtn:hover { animation: none !important; transition: none !important; transform: none !important; }
+}

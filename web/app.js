@@ -26,6 +26,34 @@ function revealScreen(name) {
   el.style.animation = '';
 }
 
+
+/* ---------- immersive layer: cursor halo + staggered card reveal ---------- */
+(function startGlow() {
+  const g = document.getElementById('glow');
+  if (!g || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let tx = innerWidth / 2, ty = innerHeight / 2, cx = tx, cy = ty, raf = 0;
+  addEventListener('mousemove', (e) => {
+    tx = e.clientX; ty = e.clientY;
+    if (!raf) raf = requestAnimationFrame(function step() {
+      cx += (tx - cx) * 0.08; cy += (ty - cy) * 0.08;
+      g.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0)`;
+      raf = (Math.abs(tx - cx) > 0.5 || Math.abs(ty - cy) > 0.5) ? requestAnimationFrame(step) : 0;
+    });
+  }, { passive: true });
+})();
+
+function revealCards(name) {
+  /* transform-only staggered entrance; base state is fully visible */
+  const sec = $(`screen-${name}`);
+  if (!sec || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  sec.querySelectorAll(':scope > .glass, :scope > * > .glass').forEach((el, i) => {
+    el.classList.remove('rvin');
+    el.style.setProperty('--i', Math.min(i, 6));
+    void el.offsetWidth;                       /* restart the animation */
+    el.classList.add('rvin');
+  });
+}
+
 /* app-shell views */
 const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'connect'];
 function showScreen(name) {
@@ -36,6 +64,7 @@ function showScreen(name) {
   const titleEl = $('jobtitle');
   titleEl.textContent = titles[name] || 'ClipBlitz';
   revealScreen(name);
+  revealCards(name);
   if (name === 'connect') { refreshSocial(); renderQueue(); }
 }
 

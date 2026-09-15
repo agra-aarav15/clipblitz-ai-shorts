@@ -872,8 +872,12 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None):
             return 0.6
         return 0.0
 
+    def _words(c):
+        return set(re.findall(r"[a-z]+", (c.get("title") or "").lower()))
+
     def _order_key(c):
-        return -(c["score"] + 6 * (c["measured"].get("event", 0) >= 0.6) + 2 * _hook_open(c))
+        ev = c["measured"].get("event", 0)
+        return -(c["score"] + 8 * ev + 2 * _hook_open(c))
 
     passing = [c for c in top_pool if _ends_well(c)]
     rest = [c for c in top_pool if not _ends_well(c)]
@@ -884,13 +888,27 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None):
     rest.sort(key=lambda c: _order_key(c) - (c["measured"].get("tail_laugh", 0)
                                              + c["measured"].get("laughter", 0)))
     picked = []
-    # first pass: no overlap AND one cut per story — the podium should tell the
-    # whole arc, not two adjacent slices of the same scene
+    spread = max(60.0, 0.12 * duration)
+
+    def _near_dup(c):
+        w = _words(c)
+        if not w:
+            return False
+        for p in picked:
+            pw = _words(p)
+            if pw and len(w & pw) / max(len(w | pw), 1) > 0.6:
+                return True
+        return False
+
+    # first pass: no overlap, one cut per story, spread across the timeline,
+    # and no near-duplicate titles — the podium tells the whole arc
     for c in passing + rest:
         if len(picked) >= count:
             break
         if all(abs(c["start"] - p["start"]) > 60 for p in picked) \
-           and all(abs(c.get("story_start", -999) - p.get("story_start", -999)) > 1 for p in picked):
+           and all(abs(c.get("story_start", -999) - p.get("story_start", -999)) > 1 for p in picked) \
+           and all(abs(c["start"] - p["start"]) > spread for p in picked) \
+           and not _near_dup(c):
             picked.append(c)
     # second pass: relax the story rule before relaxing the overlap rule
     for c in passing + rest:

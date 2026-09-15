@@ -276,7 +276,7 @@ a { color: var(--text); }
 .pv-screen { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; text-align: center; gap: 0 4px; }
 .pv-caption.st-karaoke .w { animation: kfill var(--kfill, 4.5s) infinite; animation-delay: calc(var(--i, 0) * 0.32s); }
 @keyframes kfill { 0%, 4% { color: rgba(255,255,255,0.85); } 9%, 78% { color: #FFD700; } 86%, 100% { color: rgba(255,255,255,0.85); } }
-@keyframes wpop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes wpop { 0% { transform: scale(0.4); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
 .pv-caption.st-minimal { font-family: 'Segoe UI', sans-serif; font-weight: 600; font-size: 17px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
 .pv-caption.st-minimal .w { animation: fadein 0.4s ease; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
@@ -649,9 +649,7 @@ svg.ic { width: 1.05em; height: 1.05em; fill: none; stroke: currentColor;
   transform: translateX(-110%); transition: transform 0.6s cubic-bezier(.2,.8,.2,1); }
 .btn:not(.ghost):hover::before { transform: translateX(110%); }
 
-/* live chips breathe toward full opacity (base = 1, so frozen = on) */
-.chip.gold, .chip.ok, #caps { animation: breathe 2.6s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.68; } }
+/* status chips are STEADY — a fading chip reads as a glitch, so no opacity pulse here */
 
 /* nav pill glides */
 .snavbtn { transition: background 0.18s, color 0.18s, transform 0.18s, box-shadow 0.18s; }

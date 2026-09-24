@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-background":"#e5e2e1","tertiary-container":"#e2e2e2","on-primary-fixed-variant":"#454747","background":"#131313","on-error-container":"#ffdad6","inverse-on-surface":"#313030","on-surface":"#e5e2e1","inverse-surface":"#e5e2e1","surface-container-highest":"#353534","on-tertiary":"#2f3131","surface-container-lowest":"#0e0e0e","on-secondary-fixed":"#1b1c1c","on-primary-container":"#636565","on-surface-variant":"#c4c7c8","primary-container":"#e2e2e2","surface-variant":"#353534","on-secondary-fixed-variant":"#474746","on-tertiary-fixed":"#1a1c1c","on-tertiary-container":"#636565","inverse-primary":"#5d5f5f","secondary-fixed":"#e4e2e1","primary-fixed-dim":"#c6c6c7","surface":"#131313","error-container":"#93000a","surface-container-high":"#2a2a2a","primary":"#ffffff","secondary-fixed-dim":"#c8c6c5","on-primary":"#2f3131","secondary-container":"#474746","tertiary-fixed-dim":"#c6c6c7","surface-bright":"#3a3939","tertiary-fixed":"#e2e2e2","surface-container-low":"#1c1b1b","on-secondary-container":"#b7b5b4","on-tertiary-fixed-variant":"#454747","on-error":"#690005","on-secondary":"#303030","surface-dim":"#131313","outline":"#8e9192","primary-fixed":"#e2e2e2","surface-container":"#201f1f","on-primary-fixed":"#1a1c1c","secondary":"#c8c6c5","error":"#ffb4ab","surface-tint":"#c6c6c7","outline-variant":"#444748","tertiary":"#ffffff"},borderRadius:{DEFAULT:"1rem",lg:"2rem",xl:"3rem",full:"9999px"},spacing:{"element-gap":"1rem","stage-margin":"3rem","stage-gutter":"2rem","card-padding":"1.5rem","factor-gap":"0.5rem","dock-padding":"0.75rem"},fontFamily:{"body-sm":["Inter"],"body-md":["Inter"],"label-caps":["Inter"],"headline-sm":["Inter"],"display-xl":["Inter"],"headline-lg-mobile":["Inter"],"display-xl-mobile":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"data-mono":["JetBrains Mono"]},fontSize:{"body-sm":["13px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"16px",letterSpacing:"0.12em",fontWeight:"500"}],"headline-sm":["20px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"500"}],"display-xl":["72px",{lineHeight:"76px",letterSpacing:"-0.025em",fontWeight:"600"}],"headline-lg-mobile":["32px",{lineHeight:"36px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-xl-mobile":["40px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["28px",{lineHeight:"34px",letterSpacing:"-0.015em",fontWeight:"500"}],"headline-lg":["56px",{lineHeight:"60px",letterSpacing:"-0.02em",fontWeight:"600"}],"data-mono":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"400"}]}}}}</script></head><body class="bg-[#050505] font-body-md text-body-md text-on-surface min-h-screen relative selection:bg-primary selection:text-on-primary"><!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_2 --><aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside><div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full">
+<div class="relative w-full overflow-hidden">
+<!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_2 -->
+<div class="relative z-10 flex flex-col gap-6 py-4">
+<div class="flex items-center justify-between px-2">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary animate-ping"></div>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-[0.18em]">Active Session · Node 04</span>
+<span class="text-on-surface-variant/30 text-body-sm font-data-mono">/</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant/70">JOB_ID: TX-9021-AD</span>
+</div>
+<div class="flex items-center gap-2 font-data-mono text-data-mono text-on-surface-variant/50">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40">memory</span>
+<span>CUDA 12.4 · 84 TFLOPS</span>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+<!-- Left Column: Progress Center -->
+<div class="lg:col-span-6 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-12 flex flex-col items-center justify-center text-center h-[540px] shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative overflow-hidden group">
+<div class="absolute -top-24 -left-24 w-72 h-72 bg-white/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-24 -right-24 w-72 h-72 bg-white/[0.02] rounded-full blur-3xl pointer-events-none"></div>
+<!-- Circular SVG Progress Ring -->
+<div class="relative w-[260px] h-[260px] flex items-center justify-center">
+<svg class="w-[260px] h-[260px] -rotate-90 transform" viewbox="0 0 260 260">
+<defs>
+<filter height="140%" id="glow" width="140%" x="-20%" y="-20%">
+<fegaussianblur result="blur" stddeviation="3.5"></fegaussianblur>
+<femerge>
+<femergenode in="blur"></femergenode>
+<femergenode in="SourceGraphic"></femergenode>
+</femerge>
+</filter>
+</defs>
+<!-- Hairline Track -->
+<circle cx="130" cy="130" fill="none" r="115" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"></circle>
+<!-- Active Glow Stroke (67% of 2*PI*115 = 722.56 -> dasharray ~722.56, dashoffset ~238.44) -->
+<circle class="transition-all duration-1000 ease-out" cx="130" cy="130" fill="none" filter="url(#glow)" id="progress-circle" r="115" stroke="#ffffff" stroke-dasharray="722.56" stroke-dashoffset="238.44" stroke-linecap="round" stroke-width="2.5"></circle>
+</svg>
+<!-- Center Metrics Counter -->
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-display-xl text-display-xl font-semibold tracking-[-0.03em] text-primary select-none">67%</span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.15em] text-white/40 mt-1">PROX v5 PIPELINE</span>
+</div>
+</div>
+<!-- Job Details -->
+<div class="flex flex-col items-center mt-8">
+<h2 class="font-headline-sm text-headline-sm font-semibold text-primary tracking-tight">That Night in Abu Dhabi — F1 Short Film</h2>
+<p class="font-body-sm text-body-sm text-white/50 mt-1">started 2 min ago · 14:26 source file</p>
+</div>
+<div class="mt-4 flex items-center gap-2 text-white/30 font-data-mono text-data-mono">
+<span>BITRATE: 48.2 MB/S</span>
+<span>·</span>
+<span>PRORES 422 HQ</span>
+</div>
+</div>
+<!-- Right Column: Stage Roll -->
+<div class="lg:col-span-6 bg-white/[0.04] backdrop-blur-2xl rounded-[24px] p-8 h-[540px] flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative overflow-hidden">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-white/40">EDIT BAY PIPELINE</span>
+<span class="font-data-mono text-data-mono text-white/30">STAGE 6 OF 8</span>
+</div>
+<!-- 8 Slim Glass Stage Rows -->
+<div class="flex flex-col gap-2.5 flex-1 justify-center">
+<!-- Stage 1 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Reading the audio's energy profile</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">0.4s</span>
+</div>
+<!-- Stage 2 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Detecting audience laughter</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">1.2s</span>
+</div>
+<!-- Stage 3 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Finding peak moments (audio + camera cuts)</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">12.8s</span>
+</div>
+<!-- Stage 4 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">Transcribing — whisper-large-v3-turbo</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">34.1s</span>
+</div>
+<!-- Stage 5 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.02]">
+<span class="text-white/60 font-medium text-body-sm">✓</span>
+<span class="text-white/70 font-body-sm text-body-sm">ProX story pass — 9 stories found</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">18.6s</span>
+</div>
+<!-- Stage 6: ACTIVE ROW -->
+<div class="relative flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.08] shadow-[inset_0_0_24px_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-3">
+<span class="text-primary font-semibold text-body-sm animate-pulse">▶</span>
+<span class="text-primary font-semibold font-body-sm text-body-sm tracking-wide">Judge QC — 7 clips judged</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-data-mono text-data-mono text-primary/80 font-medium">IN PROGRESS</span>
+</div>
+</div>
+<!-- Stage 7 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg opacity-40">
+<span class="text-white/30 font-medium text-body-sm">○</span>
+<span class="text-white/30 font-body-sm text-body-sm">Rendering 9:16 clips</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">QUEUED</span>
+</div>
+<!-- Stage 8 -->
+<div class="flex items-center gap-3 px-3 py-1.5 rounded-lg opacity-40">
+<span class="text-white/30 font-medium text-body-sm">○</span>
+<span class="text-white/30 font-body-sm text-body-sm">Metadata &amp; finishing</span>
+<span class="ml-auto font-data-mono text-data-mono text-white/20">QUEUED</span>
+</div>
+</div>
+<!-- Bottom Micro Visualizer -->
+<div class="pt-4 flex items-center justify-between text-white/40 font-data-mono text-data-mono">
+<div class="flex items-center gap-1.5">
+<span class="w-1 h-3 bg-white/40 animate-pulse"></span>
+<span class="w-1 h-5 bg-white/80 animate-pulse delay-75"></span>
+<span class="w-1 h-2 bg-white/30 animate-pulse delay-150"></span>
+<span class="w-1 h-4 bg-white/60 animate-pulse delay-100"></span>
+<span class="w-1 h-2 bg-white/20 animate-pulse delay-200"></span>
+</div>
+<span>ENGINE: GROQ-LLAMA3-70B · GEMINI-1.5-PRO</span>
+</div>
+</div>
+</div>
+<!-- Bottom Pill Banner -->
+<div class="w-full bg-white/[0.04] rounded-full px-6 py-3.5 flex items-center justify-between text-body-sm tracking-wider backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-3 text-white/80 font-medium font-body-sm min-w-0">
+<span class="material-symbols-outlined text-[18px] text-white/70 animate-spin">sync</span>
+<span class="truncate">Rendering clip 2/3 · wordpop captions · blur-pad 9:16</span>
+<span class="hidden sm:inline-block font-data-mono text-data-mono text-white/40 bg-white/[0.05] px-2 py-0.5 rounded-full">1080x1920 @ 60FPS</span>
+</div>
+<div class="flex items-center gap-2 pl-4 shrink-0">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-white/50">PROCESSING LIVE</span>
+</div>
+</div>
+<!-- Preview Stage Snippet Bento Tray -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+<div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-4 flex items-center gap-4">
+<div class="w-16 h-16 rounded-xl bg-surface-container-high overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover grayscale brightness-90" data-alt="Cinematic high contrast monochrome night shot of a Formula 1 car cutting through illuminated turn 1 under blinding stadium floodlights, motion blurred background and sharp optical glints." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_MLP_adLSXM8mCmcgSFRetUNUJUpSpYW12mtaPeyVc6JZppG4xz6U4rx8C-9l4uTGpcFjn2dNqrhBks8KD3Q-GgkMlsZZG2wE0vH8PSsCCAy_piejyzz7-e4PfT-HoSRWRDU_VCXdshVI6kDV9HQP30_52BVpMrlEbDuPnNOvXp886wBxIQavKRz44GYAmKuy52UK_GHRKA6agFl1WOCSUJKgCR_KYj3WrCFHDfeJ0ws-MSjhhPqE6A"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[10px] text-white/80">00:42</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-caps text-label-caps text-white/40 uppercase">Clip Candidate 01</span>
+<span class="font-body-sm text-body-sm text-white font-medium truncate">The Overtake on Lap 58</span>
+<span class="font-data-mono text-data-mono text-white/40">Viral Score: 98.4%</span>
+</div>
+</div>
+<div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-4 flex items-center gap-4">
+<div class="w-16 h-16 rounded-xl bg-surface-container-high overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover grayscale brightness-90" data-alt="Monochrome extreme close up on intense racing driver eyes reflected in the glossy tinted helmet visor beneath nocturnal Abu Dhabi track spotlights, raw cinematic mood." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWGSMMuMvKdioxODg6gk_GSzteNRUTs-qs2fuQJ0KoIG7i_K3QNCYnZFcrSqF7uRdbxQjV7iuvERD-os7qYqc_ZIEW_8tcde_7N9o6g64dnC-WzwVbr3Gl16jkO13g1s-fClWtH8-KIEDCYQO5OpbgUHxa1aKziHveN7cVSH0wKsGNT22bh7a2wmaSi1WhTC8ULvx2KVh3Zt1bCCP-Fyw_lqT3Z2qrCqJYlFXhAmDXZoS43kwAOKVIRw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[10px] text-white/80">04:15</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-caps text-label-caps text-white/40 uppercase">Clip Candidate 02</span>
+<span class="font-body-sm text-body-sm text-white font-medium truncate">Radio Silence · Checkered Flag</span>
+<span class="font-data-mono text-data-mono text-white/40">Viral Score: 96.1%</span>
+</div>
+</div>
+<div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-4 flex items-center gap-4">
+<div class="w-16 h-16 rounded-xl bg-surface-container-high overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover grayscale brightness-90" data-alt="Monochrome deep shadow view of pit crew standing in unison along the pit wall with arms raised against blinding stadium backlights, dramatic silhouettes." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRGCtxTWNC7VqVveGc8EC4zrrltbyibI60WpRYPYONZj2WEOlDLw9Udllux38qXttjFkrV_rc1S9rS9uC7kZeCO2fteKKl1MfO3qK6_Uu0DZ6npmt2-QB0ZSGA09cl-z2aOEjSUVaIYgMx78NykZBuKqND9D8m67rde4SGqKGvXYaXO3dgSyyPjCi4MmtxrUX5pyPDtCYj3sn-tzsV3J_Qn2z201mLz_91BD8HARIobf8bhliGqhWUEA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+<span class="absolute bottom-1 right-1 font-data-mono text-[10px] text-white/80">11:08</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-caps text-label-caps text-white/40 uppercase">Clip Candidate 03</span>
+<span class="font-body-sm text-body-sm text-white font-medium truncate">Pitwall Euphoria &amp; Tears</span>
+<span class="font-data-mono text-data-mono text-white/40">Viral Score: 94.8%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function initEditBayMicroInteractions() {
+    const circle = document.getElementById('progress-circle');
+    if (!circle) return;
+
+    let baseOffset = 238.44;
+    let tick = 0;
+
+    setInterval(() => {
+      tick++;
+      // Subtle organic breathing oscillation on the progress line
+      const jitter = Math.sin(tick * 0.15) * 1.5;
+      circle.style.strokeDashoffset = (baseOffset + jitter).toString();
+    }, 120);
+  })();
+</script></main></div></body></html>

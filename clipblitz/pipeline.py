@@ -96,6 +96,28 @@ def _words_for_window(segments, w0, w1):
             for i, w in enumerate(text_words)]
 
 
+def _waveform(energy, duration, buckets=600):
+    """Normalise the ALREADY-MEASURED RMS series into `buckets` values in 0..1 so the
+    Transcript timeline can draw the real audio shape. Pure arithmetic on data the
+    pipeline already has — no extra ffmpeg pass. Returns [] when the profile is too
+    sparse to be honest about, in which case the UI draws nothing."""
+    series, mean_db = energy if energy else ([], -30.0)
+    if len(series) < 8 or not duration:
+        return []
+    step = duration / buckets
+    sums, counts = [0.0] * buckets, [0] * buckets
+    for t, db in series:
+        i = min(buckets - 1, max(0, int(t / step)))
+        sums[i] += db
+        counts[i] += 1
+    vals = [sums[i] / counts[i] if counts[i] else mean_db for i in range(buckets)]
+    lo, hi = min(vals), max(vals)
+    if hi - lo < 6.0:                       # a flat video: show it relative to its own mean
+        lo, hi = mean_db - 12.0, mean_db + 3.0
+    span = max(1.0, hi - lo)
+    return [round(max(0.0, min(1.0, (v - lo) / span)), 3) for v in vals]
+
+
 def _render_clip(job, src_path, m, base, clips_dir):
     """Cut + caption one moment. Returns the clip dict (appended by caller)."""
     words = _words_for_window(job["segments"], m["start"], m["end"])
@@ -171,7 +193,11 @@ def process(job_id, src_path):
             segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
             energy=energy, laughs=laughs, scenes=scenes)
         _set(job_, mode=f"{mode}+{picker}", content_type=content_type, picker=picker,
-             candidates=[{k: c[k] for k in c if k != "meta"} for c in candidates])
+             candidates=[{k: c[k] for k in c if k != "meta"} for c in candidates],
+             # real measured audio + the mined peak regions, for the Transcript timeline
+             waveform=_waveform(energy, duration),
+             moments=[{k: m[k] for k in ("start", "end", "heat", "roar", "cuts") if k in m}
+                      for m in moments])
         if not moments:
             raise RuntimeError("No clip candidates could be produced from this video.")
 

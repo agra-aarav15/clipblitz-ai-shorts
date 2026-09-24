@@ -82,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self._write(data)
 
-    def _file(self, path, ctype):
+    def _file(self, path, ctype, cache="no-store"):
         try:
             with open(path, "rb") as f:
                 data = f.read()
@@ -91,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         self._write(data)
 
@@ -112,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 yt_ok = social.youtube_channel() is not None  # real token check
             from .brains import brains
             return self._json(200, {
-                "ok": True, "name": "ClipBlitz", "version": "3.4.5",
+                "ok": True, "name": "ClipBlitz", "version": "3.5.0",
                 "engine": "ProX v5", "ffmpeg": ffmpeg_available(), "stt": stt_mode(),
                 "ai_picker": bool(brains()), "top_n": CONFIG["top_n"],
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,
@@ -147,13 +147,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/oauth/youtube/callback":
             code = qs.get("code", [""])[0]
             if not code:
-                return self._file(self._success_page("❌ Google did not return a code."), "text/html; charset=utf-8")
+                return self._file(self._success_page("Google did not return a code.", False),
+                                  "text/html; charset=utf-8")
             try:
                 social.youtube_exchange(code)
-                return self._file(self._success_page("✅ YouTube connected! You can close this tab and go back to ClipBlitz."),
-                                  "text/html; charset=utf-8")
+                return self._file(self._success_page(
+                    "YouTube connected. Close this tab and go back to ClipBlitz.", True),
+                    "text/html; charset=utf-8")
             except Exception as e:
-                return self._file(self._success_page(f"❌ Token exchange failed: {e}"), "text/html; charset=utf-8")
+                return self._file(self._success_page(f"Token exchange failed: {e}", False),
+                                  "text/html; charset=utf-8")
 
         if path == "/" or path == "/index.html":
             return self._file(os.path.join(WEB, "index.html"), "text/html; charset=utf-8")
@@ -161,10 +164,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(os.path.join(WEB, "app.js"), "text/javascript")
         if path == "/styles.css":
             return self._file(os.path.join(WEB, "styles.css"), "text/css")
-        if path == "/tailwind.css":
-            return self._file(os.path.join(WEB, "tailwind.css"), "text/css")
-        if path == "/gsap.min.js":
-            return self._file(os.path.join(WEB, "gsap.min.js"), "text/javascript")
+        # self-hosted webfonts — [\w-]+ cannot contain '/' or '..', so this is traversal-safe
+        font = re.fullmatch(r"/fonts/([\w-]+\.woff2)", path)
+        if font:
+            return self._file(os.path.join(WEB, "fonts", font.group(1)), "font/woff2",
+                              cache="public, max-age=31536000, immutable")
 
         job_m = re.fullmatch(r"/api/job/(\w+)", path)
         if job_m:
@@ -186,16 +190,25 @@ class Handler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "not found"})
 
-    def _success_page(self, msg):
+    def _success_page(self, msg, ok=True):
+        """Monochrome result page for the OAuth redirect. Inline styles + system fonts:
+        it renders before the app's own CSS has any reason to be loaded."""
+        mark = ("M4.5 12.5l5 5L19.5 7" if ok else "M6 6l12 12M18 6L6 18")
         return ("<!doctype html><html><head><meta charset='utf-8'>"
                 "<meta http-equiv='refresh' content='4;url=/'>"
                 "<title>ClipBlitz</title>"
-                "<style>body{background:#050505;color:#f7f7f8;font-family:Segoe UI,sans-serif;"
-                "display:grid;place-items:center;height:100vh}div{background:rgba(255,255,255,.05);"
-                "border:1px solid rgba(255,255,255,.25);padding:40px 60px;border-radius:20px;"
-                "font-size:20px;text-align:center}small{color:#9ba0a6;font-size:13px;display:block;"
-                "margin-top:14px}</style></head><body><div>" + msg +
-                "<small>returning to ClipBlitz…</small></div></body></html>").encode("utf-8")
+                "<style>body{background:#050505;color:#fff;font-family:system-ui,Segoe UI,sans-serif;"
+                "display:grid;place-items:center;height:100vh;margin:0}"
+                "div{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);"
+                "backdrop-filter:blur(24px);padding:40px 56px;border-radius:24px;"
+                "font-size:19px;text-align:center;max-width:520px;line-height:1.5;"
+                "box-shadow:0 24px 64px rgba(0,0,0,.55)}"
+                "svg{width:30px;height:30px;fill:none;stroke:#fff;stroke-width:1.8;"
+                "stroke-linecap:round;stroke-linejoin:round;margin-bottom:16px}"
+                "small{color:rgba(255,255,255,.4);font-size:13px;display:block;margin-top:16px;"
+                "letter-spacing:.12em;text-transform:uppercase}</style></head><body><div>"
+                f"<svg viewBox='0 0 24 24'><path d='{mark}'/></svg><br>" + msg +
+                "<small>returning to ClipBlitz</small></div></body></html>").encode("utf-8")
 
     # ---------- POST ----------
 

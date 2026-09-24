@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-background":"#e5e2e1","tertiary-container":"#e2e2e2","on-primary-fixed-variant":"#454747","background":"#131313","on-error-container":"#ffdad6","inverse-on-surface":"#313030","on-surface":"#e5e2e1","inverse-surface":"#e5e2e1","surface-container-highest":"#353534","on-tertiary":"#2f3131","surface-container-lowest":"#0e0e0e","on-secondary-fixed":"#1b1c1c","on-primary-container":"#636565","on-surface-variant":"#c4c7c8","primary-container":"#e2e2e2","surface-variant":"#353534","on-secondary-fixed-variant":"#474746","on-tertiary-fixed":"#1a1c1c","on-tertiary-container":"#636565","inverse-primary":"#5d5f5f","secondary-fixed":"#e4e2e1","primary-fixed-dim":"#c6c6c7","surface":"#131313","error-container":"#93000a","surface-container-high":"#2a2a2a","primary":"#ffffff","secondary-fixed-dim":"#c8c6c5","on-primary":"#2f3131","secondary-container":"#474746","tertiary-fixed-dim":"#c6c6c7","surface-bright":"#3a3939","tertiary-fixed":"#e2e2e2","surface-container-low":"#1c1b1b","on-secondary-container":"#b7b5b4","on-tertiary-fixed-variant":"#454747","on-error":"#690005","on-secondary":"#303030","surface-dim":"#131313","outline":"#8e9192","primary-fixed":"#e2e2e2","surface-container":"#201f1f","on-primary-fixed":"#1a1c1c","secondary":"#c8c6c5","error":"#ffb4ab","surface-tint":"#c6c6c7","outline-variant":"#444748","tertiary":"#ffffff"},borderRadius:{DEFAULT:"1rem",lg:"2rem",xl:"3rem",full:"9999px"},spacing:{"element-gap":"1rem","stage-margin":"3rem","stage-gutter":"2rem","card-padding":"1.5rem","factor-gap":"0.5rem","dock-padding":"0.75rem"},fontFamily:{"body-sm":["Inter"],"body-md":["Inter"],"label-caps":["Inter"],"headline-sm":["Inter"],"display-xl":["Inter"],"headline-lg-mobile":["Inter"],"display-xl-mobile":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"data-mono":["JetBrains Mono"]},fontSize:{"body-sm":["13px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"16px",letterSpacing:"0.12em",fontWeight:"500"}],"headline-sm":["20px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"500"}],"display-xl":["72px",{lineHeight:"76px",letterSpacing:"-0.025em",fontWeight:"600"}],"headline-lg-mobile":["32px",{lineHeight:"36px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-xl-mobile":["40px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["28px",{lineHeight:"34px",letterSpacing:"-0.015em",fontWeight:"500"}],"headline-lg":["56px",{lineHeight:"60px",letterSpacing:"-0.02em",fontWeight:"600"}],"data-mono":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"400"}]}}}}</script></head><body class="bg-[#050505] font-body-md text-body-md text-on-surface min-h-screen relative selection:bg-primary selection:text-on-primary"><!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_2 --><aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside><div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full">
+<!-- Keynote Ambient Radiance Header Canvas -->
+<div class="relative w-full flex flex-col gap-6 pb-2">
+<!-- Breadcrumb & System Sub-badge -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-white/[0.06] text-primary">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</span>
+<span class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-widest">Settings &amp; Infrastructure</span>
+<span class="text-white/20 font-data-mono text-data-mono">/</span>
+<span class="font-data-mono text-data-mono text-primary font-medium tracking-tight">NODE_0x7F_PROX</span>
+</div>
+<div class="flex items-center gap-2.5 px-3 py-1 rounded-full bg-surface-container-highest/60 backdrop-blur-md">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+<span class="font-data-mono text-data-mono text-on-surface">HOT-RELOAD ENGINE ACTIVE</span>
+</div>
+</div>
+<!-- Main Headline with optical alignment -->
+<div class="flex flex-col gap-1.5">
+<h1 class="font-headline-md text-headline-md font-semibold text-primary tracking-[-0.02em]">
+        System Integrations &amp; API Engine
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+        Manage sovereign local authentication channels, inference failover parameters, and runtime binary pipeline hooks.
+      </p>
+</div>
+</div>
+<!-- Primary Twin Glass Monolith Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+<!-- LEFT COLUMN: YouTube Auto-Posting -->
+<div class="relative group rounded-lg bg-surface-container/60 backdrop-blur-2xl p-8 flex flex-col justify-between overflow-hidden shadow-xl transition-all duration-300 hover:bg-surface-container-high/70">
+<!-- Glow Refraction Halo Behind Card -->
+<div class="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/[0.03] blur-3xl pointer-events-none"></div>
+<!-- Top Section -->
+<div class="flex flex-col relative z-10">
+<!-- Title & Status Badge Row -->
+<div class="flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-primary font-semibold tracking-tight">YouTube auto-posting</span>
+</div>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant bg-surface-container-lowest/80 px-3.5 py-1.5 rounded-full">
+            Not connected
+          </span>
+</div>
+<!-- Explainer -->
+<p class="font-body-md text-body-md text-on-surface-variant mt-4 mb-8 leading-relaxed">
+          One click to post clips as YouTube Shorts with title, description and hashtags.
+        </p>
+<!-- CTA Button -->
+<button class="w-fit flex items-center gap-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase px-7 py-3.5 rounded-full shadow-[0_0_24px_rgba(255,255,255,0.25)] hover:bg-white/90 hover:shadow-[0_0_32px_rgba(255,255,255,0.4)] active:scale-95 transition-all mb-8" id="connect-yt-btn">
+<span class="material-symbols-outlined text-[18px]">add_link</span>
+<span>Connect YouTube</span>
+</button>
+<!-- 4-Row Interactive Checklist -->
+<div class="flex flex-col gap-3 py-4 bg-surface-container-lowest/60 rounded-DEFAULT p-4">
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">OAuth client configured</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant">READY</span>
+</div>
+<div class="h-px w-full bg-surface-container-highest/40"></div>
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant/40 text-[18px]">radio_button_unchecked</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Consent screen: add yourself as test user</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant/50">PENDING</span>
+</div>
+<div class="h-px w-full bg-surface-container-highest/40"></div>
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Redirect URI matches</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant">127.0.0.1:8080</span>
+</div>
+<div class="h-px w-full bg-surface-container-highest/40"></div>
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant/40 text-[18px]">radio_button_unchecked</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Token stored</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant/50">NONE</span>
+</div>
+</div>
+</div>
+<!-- Footnote Alert Box -->
+<div class="relative z-10 mt-6 flex items-start gap-3 bg-surface-container-highest/40 rounded-DEFAULT p-4">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">help_outline</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">Google error 403 org_internal?</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant/80">
+            → OAuth consent screen → Audience → Set to <span class="text-primary font-medium">External</span> + add your current email as test user.
+          </p>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: AI Keys & Brain Runtime -->
+<div class="relative group rounded-lg bg-surface-container/60 backdrop-blur-2xl p-8 flex flex-col justify-between overflow-hidden shadow-xl transition-all duration-300 hover:bg-surface-container-high/70">
+<!-- Glow Refraction Halo Behind Card -->
+<div class="absolute -top-24 -left-24 w-64 h-64 rounded-full bg-white/[0.03] blur-3xl pointer-events-none"></div>
+<!-- Content Container -->
+<div class="flex flex-col relative z-10">
+<!-- Title -->
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[22px]">psychology</span>
+<h2 class="font-headline-sm text-headline-sm font-semibold text-primary tracking-tight">AI keys — hot-reloaded from the UI</h2>
+</div>
+<span class="flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            Zero Downtime
+          </span>
+</div>
+<!-- Key 1: Groq Primary Brain -->
+<div class="flex flex-col gap-2.5 mb-5 p-4 rounded-DEFAULT bg-surface-container-lowest/70">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm font-medium text-primary">Groq primary brain</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant">(Llama 3.3 70B &amp; Whisper)</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-highest text-primary font-data-mono text-data-mono">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span>SAVED · ONLINE</span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="relative flex-1 flex items-center">
+<input class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface tracking-wider focus:outline-none select-all" readonly="" type="password" value="gsk_99x8291048bcae912"/>
+<button class="absolute right-3 text-on-surface-variant hover:text-primary transition-colors" onclick="const i = this.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password';">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+</div>
+<button class="px-5 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase hover:bg-white/90 active:scale-95 transition-all shadow-md">
+              Test &amp; Save
+            </button>
+</div>
+</div>
+<!-- Key 2: Gemini Failover -->
+<div class="flex flex-col gap-2.5 mb-5 p-4 rounded-DEFAULT bg-surface-container-lowest/70">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-body-sm text-body-sm font-medium text-primary">Gemini failover</span>
+<span class="font-data-mono text-data-mono text-on-surface-variant">(Flash 2.0 Fallback)</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant/70 font-data-mono text-data-mono">
+<span class="material-symbols-outlined text-[12px]">radio_button_unchecked</span>
+<span>EMPTY</span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="relative flex-1 flex items-center">
+<input class="w-full bg-surface-container px-4 py-2.5 rounded-full font-data-mono text-data-mono text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none select-all" placeholder="Paste AIzaSy..." type="text"/>
+</div>
+<button class="px-5 py-2.5 rounded-full bg-surface-container-highest hover:bg-primary hover:text-on-primary text-primary font-body-sm text-body-sm font-semibold tracking-wider uppercase active:scale-95 transition-all">
+              Test &amp; Save
+            </button>
+</div>
+</div>
+<!-- Select Chip for STT Model -->
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-2">
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Speech Recognition Target</span>
+</div>
+<div class="relative group/sel cursor-pointer">
+<div class="flex items-center gap-2 bg-surface-container-highest px-4 py-2 rounded-full hover:bg-surface-bright transition-all">
+<span class="material-symbols-outlined text-[16px] text-primary">graphic_eq</span>
+<span class="font-data-mono text-data-mono text-on-surface font-medium">STT model: whisper-large-v3-turbo</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Info Bar / Footnote -->
+<div class="relative z-10 mt-6 flex items-start gap-3 bg-surface-container-highest/40 rounded-DEFAULT p-4">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">lock</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm text-body-sm text-primary font-medium">Local Sovereignty Assured</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant/90 leading-relaxed">
+            Keys apply on the very next job — no restart. They live in your local <code class="text-primary font-semibold">.env</code> only, never uploaded to external servers.
+          </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom: Engine Diagnostics Liquid Glass Strip -->
+<div class="mt-6 w-full rounded-full bg-surface-container/70 backdrop-blur-xl px-8 py-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+<!-- Left Section: Label -->
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-caps text-label-caps uppercase tracking-[0.12em] text-on-surface-variant font-semibold">Engine Diagnostics</span>
+</div>
+<!-- Diagnostics Micro-Chips Row -->
+<div class="flex items-center gap-3 flex-wrap">
+<!-- Chip 1: ffmpeg -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">ffmpeg</span>
+<span class="text-primary">✓</span>
+<span class="text-on-surface-variant/50 text-[10px]">v6.1.1</span>
+</div>
+<!-- Chip 2: yt-dlp -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">yt-dlp</span>
+<span class="text-primary">✓</span>
+<span class="text-on-surface-variant/50 text-[10px]">2024.12</span>
+</div>
+<!-- Chip 3: judge groq -->
+<div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<span class="font-medium text-primary">judge groq</span>
+<span class="text-primary">✓</span>
+<span class="text-on-surface-variant/50 text-[10px]">240 tps</span>
+</div>
+<!-- Chip 4: quota indicator with SVG Mini Gauge -->
+<div class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-surface-container-lowest font-data-mono text-data-mono text-on-surface">
+<!-- Circular Progress Ring (Current color / Monochrome Keynote) -->
+<svg class="w-3.5 h-3.5 transform -rotate-90" viewbox="0 0 32 32">
+<circle class="text-surface-container-highest" cx="16" cy="16" fill="none" r="13" stroke="currentColor" stroke-width="4"></circle>
+<circle class="text-primary" cx="16" cy="16" fill="none" r="13" stroke="currentColor" stroke-dasharray="81.68" stroke-dashoffset="21.24" stroke-linecap="round" stroke-width="4"></circle>
+</svg>
+<span class="font-medium text-primary">quota 74% left</span>
+</div>
+<!-- Quick Pipeline Refresh Trigger -->
+<button class="w-7 h-7 rounded-full bg-surface-container-highest hover:bg-primary hover:text-on-primary flex items-center justify-center text-on-surface-variant transition-all ml-1" id="refresh-diagnostics-btn" title="Ping Engine Diagnostics">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  // Simple interactive feedback simulation for Connect screen
+  document.getElementById('connect-yt-btn')?.addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span><span>Authenticating...</span>';
+    btn.classList.add('opacity-80');
+    setTimeout(() => {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">verified</span><span>Auth Prompt Dispatched</span>';
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.remove('opacity-80');
+      }, 3000);
+    }, 1200);
+  });
+
+  document.getElementById('refresh-diagnostics-btn')?.addEventListener('click', function() {
+    const icon = this.querySelector('span');
+    icon.classList.add('animate-spin');
+    setTimeout(() => {
+      icon.classList.remove('animate-spin');
+    }, 800);
+  });
+</script></main></div></body></html>

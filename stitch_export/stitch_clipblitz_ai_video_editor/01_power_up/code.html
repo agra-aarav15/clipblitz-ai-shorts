@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-background":"#e5e2e1","tertiary-container":"#e2e2e2","on-primary-fixed-variant":"#454747","background":"#131313","on-error-container":"#ffdad6","inverse-on-surface":"#313030","on-surface":"#e5e2e1","inverse-surface":"#e5e2e1","surface-container-highest":"#353534","on-tertiary":"#2f3131","surface-container-lowest":"#0e0e0e","on-secondary-fixed":"#1b1c1c","on-primary-container":"#636565","on-surface-variant":"#c4c7c8","primary-container":"#e2e2e2","surface-variant":"#353534","on-secondary-fixed-variant":"#474746","on-tertiary-fixed":"#1a1c1c","on-tertiary-container":"#636565","inverse-primary":"#5d5f5f","secondary-fixed":"#e4e2e1","primary-fixed-dim":"#c6c6c7","surface":"#131313","error-container":"#93000a","surface-container-high":"#2a2a2a","primary":"#ffffff","secondary-fixed-dim":"#c8c6c5","on-primary":"#2f3131","secondary-container":"#474746","tertiary-fixed-dim":"#c6c6c7","surface-bright":"#3a3939","tertiary-fixed":"#e2e2e2","surface-container-low":"#1c1b1b","on-secondary-container":"#b7b5b4","on-tertiary-fixed-variant":"#454747","on-error":"#690005","on-secondary":"#303030","surface-dim":"#131313","outline":"#8e9192","primary-fixed":"#e2e2e2","surface-container":"#201f1f","on-primary-fixed":"#1a1c1c","secondary":"#c8c6c5","error":"#ffb4ab","surface-tint":"#c6c6c7","outline-variant":"#444748","tertiary":"#ffffff"},borderRadius:{DEFAULT:"1rem",lg:"2rem",xl:"3rem",full:"9999px"},spacing:{"element-gap":"1rem","stage-margin":"3rem","stage-gutter":"2rem","card-padding":"1.5rem","factor-gap":"0.5rem","dock-padding":"0.75rem"},fontFamily:{"body-sm":["Inter"],"body-md":["Inter"],"label-caps":["Inter"],"headline-sm":["Inter"],"display-xl":["Inter"],"headline-lg-mobile":["Inter"],"display-xl-mobile":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"data-mono":["JetBrains Mono"]},fontSize:{"body-sm":["13px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"16px",letterSpacing:"0.12em",fontWeight:"500"}],"headline-sm":["20px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"500"}],"display-xl":["72px",{lineHeight:"76px",letterSpacing:"-0.025em",fontWeight:"600"}],"headline-lg-mobile":["32px",{lineHeight:"36px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-xl-mobile":["40px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["28px",{lineHeight:"34px",letterSpacing:"-0.015em",fontWeight:"500"}],"headline-lg":["56px",{lineHeight:"60px",letterSpacing:"-0.02em",fontWeight:"600"}],"data-mono":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"400"}]}}}}</script></head><body class="bg-[#050505] font-body-md text-body-md text-on-surface min-h-screen relative selection:bg-primary selection:text-on-primary flex items-center justify-center overflow-x-hidden"><!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_2 --><main class="w-full min-h-screen relative z-10 flex items-center justify-center p-6"><div class="flex flex-col w-full">
+<div class="relative w-full overflow-hidden flex flex-col items-center justify-center py-6">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-gradient-to-b from-primary/10 via-primary/[0.03] to-transparent rounded-full blur-[140px] pointer-events-none"></div>
+<div class="absolute -bottom-32 left-1/2 -translate-x-1/2 w-[540px] h-[320px] bg-primary/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-2xl w-full mx-auto flex flex-col items-center text-center relative z-10">
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-container-lowest/80 backdrop-blur-xl shadow-sm mb-6 transition-all duration-300 hover:bg-surface-container-high/60">
+<span class="material-symbols-outlined text-sm text-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant font-semibold tracking-[0.2em]">CLIPBLITZ</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-[-0.025em] leading-none mb-3">
+        Power the engine.
+      </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-lg mb-10 leading-relaxed">
+        Paste your keys once. ClipBlitz hot-reloads them instantly — no restarts, ever.
+      </p>
+<div class="w-full flex flex-col gap-4 text-left mb-8">
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-base">psychology</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Groq — primary brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-primary bg-surface-container-highest px-3 py-0.5 rounded-full shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              REQUIRED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="groq-key" placeholder="gsk_••••••••••••••••" type="password" value="gsk_9238f0923e80f823a09e8023f82093e"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" onclick="toggleKeyVis('groq-key', this)" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" onclick="triggerTest(this, 'Groq connected')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://console.groq.com/keys" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">console.groq.com/keys</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Llama-3.3-70b-versatile</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">schema</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">Gemini — failover brain</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+              RECOMMENDED
+            </span>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+<div class="flex-1 min-w-0 rounded-xl bg-surface-container-lowest/90 px-4 py-2.5 flex items-center justify-between gap-3 focus-within:bg-surface-container-lowest transition shadow-inner">
+<div class="flex items-center gap-2.5 flex-1 min-w-0">
+<span class="material-symbols-outlined text-outline text-base">key</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none" id="gemini-key" placeholder="AIza••••••••••••••••" type="password" value="AIzaSyC09a80e8f0a9sd8f09as8df098as0"/>
+</div>
+<button aria-label="Toggle visibility" class="text-outline hover:text-primary transition p-1" onclick="toggleKeyVis('gemini-key', this)" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2.5 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center justify-center gap-1.5" onclick="triggerTest(this, 'Gemini 2.0 ready')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+<div class="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-data-mono">
+<a class="hover:text-primary transition inline-flex items-center gap-1" href="https://aistudio.google.com/apikey" rel="noopener noreferrer" target="_blank">
+<span>free key</span>
+<span class="text-outline">→</span>
+<span class="underline decoration-outline/40 underline-offset-2">aistudio.google.com/apikey</span>
+</a>
+<span class="text-outline font-label-caps text-label-caps">Gemini-2.0-Flash</span>
+</div>
+</div>
+<div class="group relative rounded-[20px] bg-surface-container-low/70 backdrop-blur-2xl p-5 shadow-xl transition-all duration-300 hover:bg-surface-container/70">
+<div class="flex items-center justify-between gap-3 mb-3.5">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-secondary text-base">smart_display</span>
+<h2 class="font-headline-sm text-body-md text-primary font-medium tracking-tight truncate">YouTube Data API — auto-posting</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-3 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+              FOR AUTO-POST
+            </span>
+</div>
+<div class="flex flex-col gap-2.5">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">ID</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" placeholder="••••••••••••.apps.googleusercontent.com" type="text"/>
+</div>
+<div class="rounded-xl bg-surface-container-lowest/90 px-3.5 py-2.5 flex items-center gap-2 min-w-0 shadow-inner">
+<span class="font-label-caps text-label-caps text-outline shrink-0">SECRET</span>
+<input class="w-full bg-transparent font-data-mono text-data-mono text-primary placeholder:text-outline focus:outline-none truncate" placeholder="GOCSPX-••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant">
+<span>guide</span>
+<span class="text-outline">→</span>
+<span class="text-outline hover:text-primary transition cursor-pointer">Setup tab, 4 steps</span>
+</div>
+<button class="shrink-0 bg-primary text-on-primary font-headline-sm text-body-sm font-semibold px-4 py-2 rounded-full hover:bg-primary-container active:scale-[0.98] transition shadow-md flex items-center gap-1.5" onclick="triggerTest(this, 'OAuth configured')" type="button">
+<span>TEST &amp; SAVE</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="w-full flex flex-col items-center">
+<button class="w-full sm:w-auto bg-primary text-on-primary font-headline-sm text-body-md font-semibold px-10 py-3.5 rounded-full hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-xl mb-3 flex items-center justify-center gap-2" id="master-save-btn" onclick="runMasterCalibration(this)" type="button">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">electric_bolt</span>
+<span>SAVE &amp; TEST KEYS</span>
+</button>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition duration-150 mb-8 inline-flex items-center gap-1" href="#" onclick="event.preventDefault(); alert('Continuing in localized offline mode (Whisper Turbo + ffmpeg only).');">
+<span>Continue offline</span>
+<span class="text-outline">→</span>
+</a>
+<div class="w-full max-w-xl rounded-full bg-surface-container-lowest/80 backdrop-blur-md px-5 py-2.5 flex items-center justify-center shadow-inner">
+<div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-label-caps text-label-caps text-outline tracking-[0.12em]">
+<span class="text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              ProX v5 engine
+            </span>
+<span>·</span>
+<span class="text-on-surface-variant">STT whisper-large-v3-turbo</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>ffmpeg</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+<span>·</span>
+<span class="text-primary flex items-center gap-0.5">
+<span>yt-dlp</span>
+<span class="material-symbols-outlined text-xs">check</span>
+</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+    function toggleKeyVis(inputId, btn) {
+      const input = document.getElementById(inputId);
+      const icon = btn.querySelector('.material-symbols-outlined');
+      if (!input || !icon) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.textContent = 'visibility_off';
+      } else {
+        input.type = 'password';
+        icon.textContent = 'visibility';
+      }
+    }
+
+    function triggerTest(btn, successMsg) {
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span><span>CHECKING...</span>';
+      setTimeout(() => {
+        btn.innerHTML = '<span class="material-symbols-outlined text-sm">check</span><span>VERIFIED</span>';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+        }, 1800);
+      }, 700);
+    }
+
+    function runMasterCalibration(btn) {
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">progress_activity</span><span>SYNCHRONIZING ENGINES...</span>';
+      setTimeout(() => {
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg">done_all</span><span>ALL ENGINES LIVE</span>';
+        setTimeout(() => {
+          btn.innerHTML = original;
+          btn.disabled = false;
+        }, 2200);
+      }, 1100);
+    }
+  </script>
+</div></main></body></html>

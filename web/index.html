@@ -3,15 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ClipBlitz — ProX Editor · AI Clipping Studio</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<title>ClipBlitz — AI Clipping Studio</title>
+<meta name="description" content="Turn one long video into vertical shorts. Story segmentation, judge-verified cuts, animated captions." />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+
+<!-- ================= icon system: monochrome inline SVG strokes, no emoji ================= -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<linearGradient id="lgMark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#7d7d85"/></linearGradient>
+<linearGradient id="lgMark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#8a8a92"/></linearGradient>
 <symbol id="i-mark" viewBox="0 0 48 48"><rect x="3.5" y="3.5" width="41" height="41" rx="13" fill="rgba(255,255,255,0.06)" stroke="url(#lgMark)" stroke-opacity="0.55" stroke-width="1.4"/><path d="M27.2 9.5 L14.5 27.4 h8.1 L20.2 38.5 L33.5 20.6 h-8.2 z" fill="url(#lgMark)"/></symbol>
 <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
 <symbol id="i-strip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 5v14M12 5v14M17 5v14M3 10h4M3 14h4M10 10h4M10 14h4M17 10h4M17 14h4"/></symbol>
@@ -38,27 +40,38 @@
 <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4L2.8 20h18.4z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r="0.9" fill="currentColor" stroke="none"/></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3.5 5.5h17l-6.5 7.6V20l-4-2.4v-4.5z"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
 </defs></svg>
-<div class="liquid" aria-hidden="true"><div class="aurora aur-1"></div><div class="aurora aur-2"></div><div class="glow" id="glow"></div></div>
+
+<!-- ================= the light field: static gradients + transform-only drift ================= -->
+<div class="void" aria-hidden="true">
+  <div class="aurora aur-a"></div>
+  <div class="aurora aur-b"></div>
+  <div class="halo" id="halo"></div>
+  <div class="grain"></div>
 </div>
+
 <div class="app">
 
-  <!-- ============ SIDEBAR ============ -->
+  <!-- ================= SIDEBAR ================= -->
   <aside class="sidebar glass">
-    <div class="logo"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg><span class="grad-text">ClipBlitz</span></div>
-    <nav class="snav" id="snav">
-      <button class="snavbtn active" data-screen="studio"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg> <span>Studio</span></button>
-      <button class="snavbtn" data-screen="clips"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg> <span>Clips</span></button>
-      <button class="snavbtn" data-screen="lab"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg> <span>Candidates</span></button>
-      <button class="snavbtn" data-screen="transcript"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg> <span>Transcript</span></button>
-      <button class="snavbtn" data-screen="connect"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg> <span>Connect</span></button>
+    <div class="logo"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg><span class="wordmark">ClipBlitz</span></div>
+    <nav class="snav" id="snav" aria-label="Screens">
+      <button class="snavbtn active" data-screen="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg><span>Studio</span></button>
+      <button class="snavbtn" data-screen="clips" type="button"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg><span>Clips</span></button>
+      <button class="snavbtn" data-screen="lab" type="button"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Candidates</span></button>
+      <button class="snavbtn" data-screen="transcript" type="button"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg><span>Transcript</span></button>
+      <button class="snavbtn" data-screen="connect" type="button"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span>Connect</span></button>
     </nav>
     <div class="sstatus">
+      <div class="label-caps">Engine</div>
       <span class="chip" id="caps">checking…</span>
     </div>
   </aside>
 
-  <!-- ============ MAIN ============ -->
+  <!-- ================= MAIN ================= -->
   <div class="main">
     <header class="topbar">
       <div class="jobtitle" id="jobtitle">Studio</div>
@@ -69,36 +82,48 @@
     </header>
 
     <div class="screens">
-    <!-- ============ STUDIO ============ -->
+
+    <!-- ================= STUDIO ================= -->
     <section class="screen" id="screen-studio">
-      <div class="glass" style="padding:24px">
-        <div class="row" style="align-items:stretch; gap:20px">
-          <div style="flex:1.15; min-width:300px">
-            <div class="uploadzone" id="dropzone">
+      <div class="hero">
+        <div class="label-caps">ProX v5 editor · story → draft → judge</div>
+        <h1 class="display">One long video in.<br />The clips that matter out.</h1>
+        <p class="lede">The engine segments the episode into <b>stories</b>, drafts the tightest cut inside
+        each one, lands every ending on the payoff, then a strict <b>QC judge</b> reads the exact final
+        clip and scores it. Nothing is random, and nothing is invented.</p>
+      </div>
+
+      <div class="glass panel">
+        <div class="studio-row">
+          <div class="studio-col">
+            <div class="uploadzone" id="dropzone" role="button" tabindex="0" aria-label="Drop a video or browse">
+              <svg class="ic big-ic" aria-hidden="true"><use href="#i-tape"/></svg>
               <div class="big">Drop your long video here, or click to browse</div>
-              <div>The AI editor finds <b style="color:var(--text)">stories, drafts the cut, judges it,</b> and renders the top 3 · 9:16</div>
+              <div class="sub">MP4 · MOV · MKV · WEBM — up to 2 GB, straight off your disk</div>
               <input type="file" id="file" accept="video/*" />
             </div>
+
             <div class="urlrow">
-              <input type="text" id="url" placeholder="…or paste a YouTube link — https://youtube.com/watch?v=…" />
-              <button class="btn" id="fetch"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> From URL</button>
+              <input type="text" id="url" placeholder="…or paste a YouTube link — https://youtube.com/watch?v=…" spellcheck="false" />
+              <button class="btn ghost" id="fetch" type="button"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> From URL</button>
             </div>
-            <div class="row" style="margin-top:16px">
+
+            <div class="opts">
               <div class="field">
-                <label>Size <span id="scaleval">1.0×</span></label>
+                <label for="scale">Size <span class="mono" id="scaleval">1.00×</span></label>
                 <input type="range" id="scale" min="0.7" max="1.4" step="0.05" value="1" />
               </div>
               <div class="field">
-                <label>Framing</label>
+                <label for="framing">Framing</label>
                 <select id="framing">
-                  <option value="blur">Blur-pad — full frame, nothing cut (recommended)</option>
-                  <option value="crop">Center crop — cuts sides</option>
+                  <option value="blur">Blur-pad — full frame, nothing cut</option>
+                  <option value="crop">Center crop — cuts the sides</option>
                   <option value="crop-left">Crop left speaker</option>
                   <option value="crop-right">Crop right speaker</option>
                 </select>
               </div>
               <div class="field">
-                <label>Position</label>
+                <label for="position">Caption position</label>
                 <select id="position">
                   <option value="bottom">Bottom</option>
                   <option value="middle">Middle</option>
@@ -106,7 +131,7 @@
                 </select>
               </div>
               <div class="field">
-                <label>YouTube privacy</label>
+                <label for="privacy">YouTube privacy</label>
                 <select id="privacy">
                   <option value="public">Public</option>
                   <option value="unlisted">Unlisted</option>
@@ -114,42 +139,44 @@
                 </select>
               </div>
               <div class="field">
-                <label>Auto-post when ready</label>
+                <label for="autopost">Auto-post when ready</label>
                 <select id="autopost">
                   <option value="0">Manual — I press Post</option>
                   <option value="1">Automatic</option>
                 </select>
               </div>
             </div>
-            <div class="row" style="margin-top:18px">
-              <button class="btn" id="upload"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg> Edit my video</button>
-              <button class="btn ghost" id="demo"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg> Demo (generated test video)</button>
+
+            <div class="row">
+              <button class="btn" id="upload" type="button"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg> Edit my video</button>
+              <button class="btn ghost" id="demo" type="button"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg> Demo video</button>
             </div>
           </div>
 
-          <!-- LIVE CAPTION PREVIEW -->
-          <div class="preview-panel glass" style="flex:1; min-width:260px; padding:14px">
-            <div class="metahead" style="margin-bottom:10px">Live caption preview <span id="pv-hint" class="chip gold" style="margin-left:6px">pick a style → watch it move</span></div>
+          <div class="studio-col preview-col">
+            <div class="label-caps">Live caption preview</div>
             <div class="pv-frame" id="pv-frame">
               <canvas id="pv-canvas" width="270" height="480"></canvas>
-              <div class="pv-caption" id="pv-caption">Your captions <br> look like this</div>
-              <div class="pv-empty" id="pv-empty">drop a video to see<br>your real frame here</div>
+              <div class="pv-caption" id="pv-caption"></div>
+              <div class="pv-empty" id="pv-empty">
+                <svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>
+                <span>drop a video to see<br />your real frame here</span>
+              </div>
             </div>
+            <div class="pv-note" id="pv-hint">Pick a caption style below — the preview is live.</div>
           </div>
         </div>
 
-        <div class="metahead" style="margin:18px 0 8px">Caption style</div>
+        <div class="divider"></div>
+
+        <div class="label-caps">Caption style</div>
         <div class="stylegrid" id="stylegrid"></div>
-        <p class="note">The <b>ProX editor</b> segments the episode into <b>stories</b>, drafts the tightest cut inside each one,
-        polishes the edges (never starts on filler, lands the ending on the laugh), then a strict <b>QC judge</b> reads the exact
-        clip and scores it — only clips that stand alone make the podium, each with its verdict.</p>
       </div>
 
       <div id="error"></div>
-      <div id="toasts"></div>
 
-      <!-- PROCESSING (lives in Studio) -->
-      <div class="glass jobbox" id="job" hidden>
+      <!-- processing -->
+      <div class="glass panel jobbox" id="job" hidden>
         <div class="jobhead">
           <b id="jobname"></b>
           <span id="jobstage" class="stage">queued</span>
@@ -160,144 +187,213 @@
           <div class="skel glass"></div><div class="skel glass"></div><div class="skel glass"></div>
         </div>
         <div class="jobdone" id="jobdone" hidden>
-          <button class="btn" id="goto-clips"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg> Open the Clips</button>
+          <button class="btn" id="goto-clips" data-goto="clips" type="button"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg> Open the Clips</button>
         </div>
+      </div>
+
+      <!-- recent jobs -->
+      <div class="glass panel" id="recentwrap">
+        <div class="jobhead">
+          <b><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> Recent jobs</b>
+          <span class="chip" id="recent-count">—</span>
+        </div>
+        <div id="recent" class="recentlist"></div>
       </div>
     </section>
 
-    <!-- ============ CLIPS ============ -->
+    <!-- ================= CLIPS ================= -->
     <section class="screen" id="screen-clips" hidden>
       <div class="emptystate glass" id="clips-empty">
+        <svg class="ic big-ic" aria-hidden="true"><use href="#i-strip"/></svg>
         <div class="big">No clips yet</div>
         <div class="dim">Run a video in the Studio — the podium lands here with judge verdicts and scores.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+        <button class="btn ghost small" data-goto="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg> Back to Studio</button>
       </div>
       <div class="podium" id="clips"></div>
     </section>
 
-    <!-- ============ CANDIDATES ============ -->
+    <!-- ================= CANDIDATES ================= -->
     <section class="screen" id="screen-lab" hidden>
       <div class="emptystate glass" id="lab-empty">
+        <svg class="ic big-ic" aria-hidden="true"><use href="#i-layers"/></svg>
         <div class="big">No candidates yet</div>
         <div class="dim">Every runner-up with its real measured score appears here after a run — one click renders any of them.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+        <button class="btn ghost small" data-goto="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg> Back to Studio</button>
       </div>
-      <div id="labwrap">
-        <div class="metahead" style="margin-bottom:10px">Candidate lab — every runner-up, measured and judged
-          <span class="chip gold" style="margin-left:8px">click a card to render it</span></div>
+      <div id="labwrap" hidden>
+        <div class="labhead">
+          <div>
+            <div class="label-caps">Candidate lab</div>
+            <div class="dim">Every runner-up, measured and judged. Click a card to render it.</div>
+          </div>
+          <div class="filters" id="labfilters" role="group" aria-label="Candidate filters">
+            <button class="fbtn active" data-filter="all" type="button"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg> All</button>
+            <button class="fbtn" data-filter="verified" type="button"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg> Verified</button>
+            <button class="fbtn" data-filter="peak" type="button"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> Peak events</button>
+          </div>
+        </div>
         <div class="labgrid" id="labgrid"></div>
+        <div class="dim" id="labnone" hidden>No candidates match this filter.</div>
       </div>
     </section>
 
-    <!-- ============ TRANSCRIPT ============ -->
+    <!-- ================= TRANSCRIPT ================= -->
     <section class="screen" id="screen-transcript" hidden>
       <div class="emptystate glass" id="cut-empty">
+        <svg class="ic big-ic" aria-hidden="true"><use href="#i-doc"/></svg>
         <div class="big">No transcript yet</div>
-        <div class="dim">After a run: click any line to jump, drag the white handles to cut your own clip.</div>
-        <button class="btn ghost small" data-goto="studio">← back to Studio</button>
+        <div class="dim">After a run: click any line to jump, drag the handles on the waveform to cut your own clip.</div>
+        <button class="btn ghost small" data-goto="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg> Back to Studio</button>
       </div>
-      <div class="cutwrap glass" id="cutwrap" style="padding:18px">
-        <div class="cutplayer">
-          <video id="srcvid" controls preload="metadata"></video>
-        </div>
-        <div class="cutpanel">
-          <div class="cutbar" id="cutbar">
-            <div class="cutwin" id="cutwin"><i class="h l" id="hl"></i><i class="h r" id="hr"></i></div>
+      <div id="cutwrap" hidden>
+        <div class="cutgrid">
+          <div class="cutplayer glass">
+            <div class="label-caps">Source</div>
+            <video id="srcvid" controls preload="metadata" playsinline></video>
           </div>
-          <div class="cutinfo">
-            <span id="cutrange" class="chip gold">—</span>
-            <button class="btn small" id="cutgo"><svg class="ic" aria-hidden="true"><use href="#i-cut"/></svg> Cut this window</button>
+          <div class="cutpanel glass">
+            <div class="label-caps">Timeline <span class="mono dim" id="wf-dur">—</span></div>
+            <div class="wf" id="wf">
+              <div class="wf-ruler" id="wf-ruler"></div>
+              <div class="wf-body" id="wf-body">
+                <canvas class="wf-canvas" id="wf-canvas" width="1400" height="110"></canvas>
+                <div class="wf-layer" id="wf-marks"></div>
+                <div class="wf-cut" id="cutwin"><i class="h l" id="hl"></i><i class="h r" id="hr"></i></div>
+                <div class="wf-head" id="wf-head"></div>
+              </div>
+            </div>
+            <div class="legend">
+              <span class="lg"><i class="sw sel"></i> clip</span>
+              <span class="lg"><i class="sw cand"></i> candidate</span>
+              <span class="lg"><i class="sw peak"></i> peak event</span>
+              <span class="lg"><i class="sw cut"></i> your window</span>
+            </div>
+            <div class="cutinfo">
+              <span id="cutrange" class="chip gold mono">—</span>
+              <button class="btn small" id="cutgo" type="button"><svg class="ic" aria-hidden="true"><use href="#i-cut"/></svg> Cut this window</button>
+              <button class="btn ghost small" id="srt" type="button"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> Export .SRT</button>
+            </div>
+            <div class="label-caps">Transcript <span class="mono dim" id="seg-count">—</span></div>
+            <div class="transcript" id="transcript"></div>
           </div>
-          <div class="transcript" id="transcript"></div>
         </div>
       </div>
     </section>
 
-    <!-- ============ CONNECT ============ -->
+    <!-- ================= CONNECT ================= -->
     <section class="screen" id="screen-connect" hidden>
       <div class="connectgrid">
+
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg></div>
           <h3>API keys <span class="chip" id="keys-chip">checking…</span></h3>
           <p class="pdesc">Paste once — <b>hot-reloaded</b> from the UI, no restart. Each key is
-          <b>tested live</b> against its provider before it is stored in <b>.env</b>.</p>
+          <b>tested live</b> against its provider before it is stored.</p>
+
           <div class="keyrow">
-            <div class="field"><label>Groq — primary brain</label>
-              <div class="keyinput"><input id="key-groq" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="groq">Test &amp; save</button></div>
+            <div class="field"><label for="key-groq">Groq — primary brain</label>
+              <div class="keyinput">
+                <input id="key-groq" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false" />
+                <button class="btn small" data-savekey="groq" type="button">Test &amp; save</button>
+              </div>
             </div>
             <span class="keystate" id="state-groq">—</span>
           </div>
+
           <div class="keyrow">
-            <div class="field"><label>Gemini — failover brain</label>
-              <div class="keyinput"><input id="key-gemini" type="password" placeholder="AIzaSy… or AQ…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="gemini">Test &amp; save</button></div>
+            <div class="field"><label for="key-gemini">Gemini — failover brain</label>
+              <div class="keyinput">
+                <input id="key-gemini" type="password" placeholder="AIzaSy… or AQ…" autocomplete="off" spellcheck="false" />
+                <button class="btn small" data-savekey="gemini" type="button">Test &amp; save</button>
+              </div>
             </div>
             <span class="keystate" id="state-gemini">—</span>
           </div>
+
           <div class="keyrow">
-            <div class="field"><label>YouTube Data API — auto-post (OAuth client · Desktop app)</label>
-              <div class="keyinput"><input id="key-yt-id" type="password" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false"><input id="key-yt-secret" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"><button class="btn small" data-savekey="youtube">Test &amp; save</button></div>
+            <div class="field"><label for="key-yt-id">YouTube Data API — auto-post (OAuth client)</label>
+              <div class="keyinput">
+                <input id="key-yt-id" type="password" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
+                <input id="key-yt-secret" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false" />
+                <button class="btn small" data-savekey="youtube" type="button">Test &amp; save</button>
+              </div>
             </div>
             <span class="keystate" id="state-youtube">—</span>
           </div>
+
+          <p class="note">Keys live only in this machine's <b>.env</b>. They are never printed, never
+          committed and never leave the machine except to their own provider during the test call.</p>
         </div>
+
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></div>
           <h3>YouTube <span class="chip" id="yt-status">checking…</span></h3>
-          <p class="pdesc"><b style="color:var(--text)">Fully automatic posting</b> needs a one-time OAuth setup —
-          it does <b>not</b> work without it. Steps (≈15 min, click-by-click in <b>SETUP-YOUTUBE.md</b>):
-          ① create a free Google Cloud project → enable <b>YouTube Data API v3</b> → create an
-          <b>OAuth client ID</b> (type: Desktop app). ② paste the client ID + secret into <b>.env</b> (no restart needed).
-          ③ add the redirect URI below in Google Cloud → "Authorized redirect URIs". ④ press Connect.</p>
+          <p class="pdesc"><b>Fully automatic posting</b> needs a one-time OAuth setup. Four steps,
+          about 15 minutes — the full click-by-click walkthrough is in <b>SETUP-YOUTUBE.md</b>:</p>
+          <ol class="steps">
+            <li>Create a free Google Cloud project, then enable <b>YouTube Data API v3</b>.</li>
+            <li>Create an <b>OAuth client ID</b> (Desktop app, or Web application — both work).</li>
+            <li>Paste the client ID + secret into the <b>API keys</b> card on this screen.</li>
+            <li>Add the redirect URI below in Google Cloud, then press <b>Connect</b>.</li>
+          </ol>
           <div class="redirectbox"><code id="yt-redirect">checking…</code>
-            <button class="btn ghost small" id="yt-copy">copy</button></div>
-          <div class="row" style="margin:8px 0">
-            <button class="btn ghost small" id="yt-gcloud"><svg class="ic" aria-hidden="true"><use href="#i-cloud"/></svg> Open Google Cloud Console</button>
-            <button class="btn ghost small" id="yt-gapi"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg> Enable YouTube Data API</button>
-            <button class="btn ghost small" id="yt-gcreds"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg> Create OAuth credentials</button>
-            <button class="btn ghost small" id="yt-gredirect">↩︎ Redirect URI settings</button>
+            <button class="btn ghost small" id="yt-copy" type="button">Copy</button>
           </div>
-        <div class="platstatus" id="yt-detail"></div>
-        <div class="diagbox" id="yt-diag" hidden></div>
-        <div class="row">
-          <button class="btn small" id="yt-connect">Connect YouTube</button>
-          <button class="btn ghost small" id="yt-diagnose"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg> Diagnose</button>
-          <button class="btn ghost small" id="yt-disconnect">Disconnect</button>
-        </div>
+          <div class="row">
+            <button class="btn ghost small" id="yt-gcloud" type="button"><svg class="ic" aria-hidden="true"><use href="#i-cloud"/></svg> Google Cloud Console</button>
+            <button class="btn ghost small" id="yt-gapi" type="button"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg> Enable YouTube Data API</button>
+            <button class="btn ghost small" id="yt-gcreds" type="button"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg> Create OAuth credentials</button>
+            <button class="btn ghost small" id="yt-gredirect" type="button"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg> Redirect URI settings</button>
+          </div>
+          <div class="platstatus" id="yt-detail"></div>
+          <div class="diagbox" id="yt-diag" hidden></div>
+          <div class="row">
+            <button class="btn small" id="yt-connect" type="button">Connect YouTube</button>
+            <button class="btn ghost small" id="yt-diagnose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg> Diagnose</button>
+            <button class="btn ghost small" id="yt-disconnect" type="button">Disconnect</button>
+          </div>
         </div>
 
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg></div>
-          <h3>TikTok <span class="chip">assisted one-click</span></h3>
-          <p class="pdesc">Renders finish → caption package (title + description + hashtags) is <b>auto-copied to
-          your clipboard</b> and the TikTok upload page opens. Full automation arrives when your TikTok developer
-          app is approved.</p>
+          <h3>TikTok <span class="chip">assisted</span></h3>
+          <p class="pdesc">When a render finishes, the caption package (title + description + hashtags)
+          is <b>copied to your clipboard</b> and the TikTok upload page opens. Full automation arrives
+          once your TikTok developer app is approved.</p>
           <div class="platstatus" id="tt-detail"></div>
-          <button class="btn ghost small" id="tt-test">Open TikTok upload</button>
+          <button class="btn ghost small" id="tt-test" type="button"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg> Open TikTok upload</button>
         </div>
 
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></div>
-          <h3>Instagram <span class="chip">assisted one-click</span></h3>
-          <p class="pdesc">Same assisted flow — clip + caption package ready for Reels.</p>
-          <button class="btn ghost small" id="ig-test">Open Instagram</button>
+          <h3>Instagram <span class="chip">assisted</span></h3>
+          <p class="pdesc">The same assisted flow — clip plus caption package, ready for Reels.</p>
+          <button class="btn ghost small" id="ig-test" type="button"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg> Open Instagram</button>
         </div>
 
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-repeat"/></svg></div>
-          <h3>More platforms</h3>
-          <p class="pdesc">Facebook and X are one click away on every clip card. Add a <b>CB_POST_KEY</b>
-          (Blotato / Ayrshare) to <b>.env</b> later and every platform becomes fully automatic.</p>
+          <h3>Facebook &amp; X</h3>
+          <p class="pdesc">Both are one click away on every clip card. Add a <b>CB_POST_KEY</b>
+          (Blotato / Ayrshare) later and every platform becomes fully automatic.</p>
         </div>
-      </div>
 
-      <div class="glass jobbox" style="margin-top:16px">
-        <div class="jobhead"><b><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> Post queue</b><span class="chip" id="queue-count">0 clips</span></div>
-        <div id="queue" class="note">Nothing queued yet — clips you send to platforms appear here with live status.</div>
+        <div class="glass platcard">
+          <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg></div>
+          <h3>Post queue</h3>
+          <p class="pdesc">Live status of everything you have sent to a platform.</p>
+          <div class="platstatus"><span class="chip" id="queue-count">0 clips</span></div>
+          <div id="queue" class="note">Nothing queued yet — clips you send to platforms appear here with live status.</div>
+        </div>
+
       </div>
     </section>
+
     </div>
   </div>
 </div>
+
+<div id="toasts" aria-live="polite"></div>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-background":"#e5e2e1","tertiary-container":"#e2e2e2","on-primary-fixed-variant":"#454747","background":"#131313","on-error-container":"#ffdad6","inverse-on-surface":"#313030","on-surface":"#e5e2e1","inverse-surface":"#e5e2e1","surface-container-highest":"#353534","on-tertiary":"#2f3131","surface-container-lowest":"#0e0e0e","on-secondary-fixed":"#1b1c1c","on-primary-container":"#636565","on-surface-variant":"#c4c7c8","primary-container":"#e2e2e2","surface-variant":"#353534","on-secondary-fixed-variant":"#474746","on-tertiary-fixed":"#1a1c1c","on-tertiary-container":"#636565","inverse-primary":"#5d5f5f","secondary-fixed":"#e4e2e1","primary-fixed-dim":"#c6c6c7","surface":"#131313","error-container":"#93000a","surface-container-high":"#2a2a2a","primary":"#ffffff","secondary-fixed-dim":"#c8c6c5","on-primary":"#2f3131","secondary-container":"#474746","tertiary-fixed-dim":"#c6c6c7","surface-bright":"#3a3939","tertiary-fixed":"#e2e2e2","surface-container-low":"#1c1b1b","on-secondary-container":"#b7b5b4","on-tertiary-fixed-variant":"#454747","on-error":"#690005","on-secondary":"#303030","surface-dim":"#131313","outline":"#8e9192","primary-fixed":"#e2e2e2","surface-container":"#201f1f","on-primary-fixed":"#1a1c1c","secondary":"#c8c6c5","error":"#ffb4ab","surface-tint":"#c6c6c7","outline-variant":"#444748","tertiary":"#ffffff"},borderRadius:{DEFAULT:"1rem",lg:"2rem",xl:"3rem",full:"9999px"},spacing:{"element-gap":"1rem","stage-margin":"3rem","stage-gutter":"2rem","card-padding":"1.5rem","factor-gap":"0.5rem","dock-padding":"0.75rem"},fontFamily:{"body-sm":["Inter"],"body-md":["Inter"],"label-caps":["Inter"],"headline-sm":["Inter"],"display-xl":["Inter"],"headline-lg-mobile":["Inter"],"display-xl-mobile":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"data-mono":["JetBrains Mono"]},fontSize:{"body-sm":["13px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"16px",letterSpacing:"0.12em",fontWeight:"500"}],"headline-sm":["20px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"500"}],"display-xl":["72px",{lineHeight:"76px",letterSpacing:"-0.025em",fontWeight:"600"}],"headline-lg-mobile":["32px",{lineHeight:"36px",letterSpacing:"-0.015em",fontWeight:"600"}],"display-xl-mobile":["40px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["28px",{lineHeight:"34px",letterSpacing:"-0.015em",fontWeight:"500"}],"headline-lg":["56px",{lineHeight:"60px",letterSpacing:"-0.02em",fontWeight:"600"}],"data-mono":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"400"}]}}}}</script></head><body class="bg-[#050505] font-body-md text-body-md text-on-surface min-h-screen relative selection:bg-primary selection:text-on-primary"><!-- STITCH_SHADER_START:ANIMATION_2 class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" -->
+<div class="absolute inset-0 w-full h-full pointer-events-none opacity-30 fixed" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_2" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_2');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `/* ClipBlitz Silver Aurora Ambient Shader */
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 v_texCoord;
+
+// Simplex noise / fractional brownian motion helpers
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0 + vec2(100.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    // Center glow position
+    vec2 center = vec2(0.5, 0.65);
+    vec2 d = uv - center;
+    d.x *= u_resolution.x / u_resolution.y;
+    
+    float t = u_time * 0.25;
+    
+    // Flowing undulating wave coords
+    vec2 p = uv * 2.5;
+    float n1 = fbm(p + vec2(t * 0.3, -t * 0.15));
+    float n2 = fbm(p * 1.8 + vec2(-t * 0.2, t * 0.25) + n1);
+    
+    // Radial bloom falloff
+    float dist = length(d);
+    float bloom = smoothstep(0.9, 0.05, dist + n2 * 0.22);
+    
+    // Monochrome iridescent silver-white gradients
+    float intensity = pow(bloom, 1.6) * 0.45;
+    
+    // High-frequency subtle silver shimmer
+    float shimmer = smoothstep(0.4, 0.9, n2) * bloom * 0.18;
+    
+    // Core silver light (pure monochrome silver #d8d8d8 to #ffffff)
+    vec3 baseBlack = vec3(0.02, 0.02, 0.02);
+    vec3 silverBloom = vec3(0.85, 0.88, 0.92) * intensity;
+    vec3 highlight = vec3(1.0, 1.0, 1.0) * shimmer;
+    
+    vec3 color = baseBlack + silverBloom + highlight;
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_2 --><aside class="fixed top-6 left-6 bottom-6 w-64 p-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-50 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)]"><div class="flex flex-col gap-8"><div class="flex items-center gap-2.5 px-2"><span class="material-symbols-outlined text-primary text-[22px]">bolt</span><span class="font-headline-sm text-headline-sm text-primary tracking-wider uppercase font-semibold">CLIPBLITZ</span></div><nav class="flex flex-col gap-1.5" data-active-classes="bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]"><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="studio" href="#"><span class="material-symbols-outlined text-[20px]">movie_edit</span>Studio</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="clips" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome_motion</span>Clips</a><a aria-current="page" class="flex items-center gap-3 px-4 py-3 rounded-full transition-all bg-primary text-on-primary font-semibold shadow-[0_0_20px_rgba(255,255,255,0.35)]" data-path="candidates" href="#"><span class="material-symbols-outlined text-[20px]">view_carousel</span>Candidates</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="transcript" href="#"><span class="material-symbols-outlined text-[20px]">transcribe</span>Transcript</a><a class="flex items-center gap-3 px-4 py-3 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-white/[0.06] transition-all font-body-md text-body-md" data-path="connect" href="#"><span class="material-symbols-outlined text-[20px]">hub</span>Connect</a></nav></div><div class="flex flex-col gap-4"><div class="font-label-caps text-label-caps text-white/40 border border-white/10 rounded-full px-3 py-1.5 text-center uppercase tracking-widest bg-white/[0.02]">ProX v5 · brain groq + gemini</div></div></aside><div class="pl-[312px] min-h-screen relative z-10"><header class="fixed top-6 right-8 left-[312px] h-16 px-6 rounded-[24px] bg-white/[0.04] backdrop-blur-2xl border border-white/10 z-40 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.5)]"><div class="flex items-center gap-3"><span class="font-label-caps text-label-caps uppercase text-white/40 tracking-widest">Engine Online</span><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span></div><div class="flex items-center gap-4"><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">tune</span></button><button class="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-on-surface transition-all"><span class="material-symbols-outlined text-[18px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 pr-8 pb-8 pl-0 min-h-screen relative z-10"><div class="flex flex-col w-full max-w-[1400px] mx-auto gap-8">
+<!-- Top Stage Hero Header -->
+<div class="flex flex-col gap-3">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-baseline gap-3">
+<h1 class="font-headline-lg-mobile md:font-headline-md text-headline-lg-mobile md:text-headline-md text-primary tracking-[-0.02em]">
+          Candidates <span class="text-on-surface-variant font-light">— runner-up cuts</span>
+</h1>
+<span class="font-data-mono text-data-mono text-on-surface-variant/60 hidden sm:inline-block">
+          PROX-LAB::POOL_06
+        </span>
+</div>
+<!-- Filter Controls Pill Group -->
+<div class="flex items-center gap-2 bg-surface-container-lowest/80 p-1.5 rounded-full backdrop-blur-xl">
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] leading-tight px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all">
+          All
+        </button>
+<button class="bg-white/[0.04] hover:bg-white/[0.08] text-on-surface font-body-sm text-body-sm px-4 py-1.5 rounded-full transition-all">
+          Verified
+        </button>
+<button class="bg-white/[0.04] hover:bg-white/[0.08] text-on-surface font-body-sm text-body-sm px-4 py-1.5 rounded-full transition-all">
+          Peak events
+        </button>
+</div>
+</div>
+<!-- Keynote Context Hint Bar -->
+<div class="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.03] backdrop-blur-xl max-w-fit">
+<span class="material-symbols-outlined text-primary text-[18px]">auto_awesome</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Runner-ups the judge liked but the podium out-scored — render any of them in one click.
+      </p>
+</div>
+</div>
+<!-- Main Candidate Lab Matrix Floating Surface -->
+<div class="rounded-[24px] bg-white/[0.03] backdrop-blur-2xl p-6 flex flex-col gap-4 shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
+<!-- Column Legend & Diagnostics Header -->
+<div class="hidden lg:grid grid-cols-12 px-5 py-2 text-on-surface-variant/50 font-label-caps text-label-caps uppercase tracking-widest">
+<span class="col-span-6">Segment Analysis / Source Timeline</span>
+<span class="col-span-2 text-center">Span Track</span>
+<span class="col-span-2 text-center">Score Delta</span>
+<span class="col-span-2 text-right">Action Gate</span>
+</div>
+<!-- Candidate List Rows -->
+<div class="flex flex-col gap-2.5">
+<!-- Row 1 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Cinematic night racing shot under Yas Marina floodlights in Abu Dhabi with extreme atmospheric smoke, bright neon overhead illumination, deep black track asphalt, and glistening reflections on racing machinery." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBb1RXOmYbdWYyhAakHiuCpSHF38LaaYsJCleGVNINQbPayFBZyHu45-aOmQ1u6dfGMBiXGZZ04GmkLPlNtwrThzY7SaY8vhKlVjr_lQoYjcN8E9kjVg2Go3_5JKfsrM3ZTTAX1p0EpBkwbUuqnRHzjz9ZwZgmBVNkuPTgCWwBdsWAGe1J0UqsW0ZP-elxRiVJ-6GllKsnFAcii9Q1ztet7zKVdhmTF5q1uUS_2-mIVxNhKEpdIgb7dzg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">videocam</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+              The grid goes green — lights out in Abu Dhabi
+            </span>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: Peak Audio Spike</span>
+<div class="flex items-center gap-1.5" title="Semantic, Audio, Framing alignment">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/70"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/30"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              112–148s
+            </span>
+<!-- Score Ring / Mini Badge -->
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="72, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">72</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">
+            RENDER
+          </button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="High-speed telephoto capture of Formula one cars wheel-to-wheel down a wide asphalt straight, motion blur in backdrop, sharp silver headlights reflection and stark monochrome contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQV47-_A74BURzX_6xX4dJS10bMmu4_yUo6tpWhrmxiZ2vUjQWSFBmaLVoSlCuWReh3RpzHWwaSNclKkBUtxgH06Iz47dBrf3Msu7bd6fgenLhJK6rj1RFgj5Rndoastk7hFlSjr-vV9avr-nh_ZczW_8_LUPlDqBlAvBF3ecrrH840K-GeD2IsbYKh3-tFhvDstJYz4HRlF92uyy857H8-tmgS6wu3_0YZUHoZ4HvodVy2lipT-gV8A"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">speed</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+              Hamilton hunts Perez down the straight
+            </span>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: High Tension Drag</span>
+<div class="flex items-center gap-1.5" title="Factors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary/80"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/20"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              323–367s
+            </span>
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="67, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">67</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">
+            RENDER
+          </button>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Dramatic amber track marshals waving flags by night raceway barriers with safety car emergency flashing lights cutting through thick tyre smoke and shadowed asphalt." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCR1840mpN1Z9OHGIJC35N2r0a28o5q7WE7EkP3mmZUIHRpIcOILtBPyAH0Y3m__KfNs-9kHw3-gr2iOSQoZUj2-gBvQqQ-C-vtRlbXWoxbHKpR16-6QFVAySahCAFYzEXh7jKR9RFbrYYy1wFkjMAuZtVrub05qsHwHpvuc3qMVnniRDMeIN1lBfkFBeSJjaJ_ol56gmIyiJDMWU3w37Oj-_QWMXVDK7NWmmx2SDiCtkz602pdgR6qjA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">warning</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+              Safety car chaos — the title flips
+            </span>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: Event Pivot Rate</span>
+<div class="flex items-center gap-1.5" title="Factors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary/70"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/40"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/20"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              455–490s
+            </span>
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="64, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">64</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">
+            RENDER
+          </button>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Cockpit helmet visor close-up reflection of illuminated steering wheel digital dials and track kerbs under brooding stadium lights in deep monochrome shadow." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1fX5dkQz_rGDfHrEYm_2VZTd5bb9cQ1ajxoo2VjBq8MMfvj_iQ-MImXJaHU5Ob5msgsnBrHmsSwKFOQlvECvMnbDd52jfHMRQbgmRGmwfRhZAQ0vA3StSdUPBM5Qp2TcbBlBrf4FRlcRcX03yKaivUr3lXhdrImK9fhbA3vlW-hr2EPENx9AaEOzFC0S3OgHV0a4gftRZa2xmR23XksOezx_R6Xr6tjzw3J_DNT4cM27U3dMfvt7-EQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">mic</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+              Verstappen's engine mode — team radio
+            </span>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: Voice Pitch Strain</span>
+<div class="flex items-center gap-1.5" title="Factors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/40"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/20"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              560–590s
+            </span>
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="61, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">61</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">
+            RENDER
+          </button>
+</div>
+</div>
+<!-- Row 5 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Slow drifting rear shot of modern racing vehicle creeping past pit lane exit, long shadows on concrete surface, minimal harsh silver rim lighting against matte black backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9C3u4AqjrAB_0B7TAj612JLuUnq-X111SgBZkq2M9AmJrOU0294Mq7kFfqmFrOadBZq52IWL3kgUAn_qXkbi3Mcc1i1Zpp380RD06vIhC7KUVEG8A9jb83JkScNSEgao9meGWmMa_uM1xhgqZVux8phFlwig2EJWtoyWUhxQBb66xADBJc_bs2bNL_lGpdvdzbhaAnFvcmmbb0r5te770V7noxbbdxK-wkWyTL8QdxwuUIKQTnmQtRA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">timer</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+              The slowest lap in history
+            </span>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: Extreme Pacing Drop</span>
+<div class="flex items-center gap-1.5" title="Factors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/30"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/10"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              180–210s
+            </span>
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="58, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">58</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-headline-sm text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-all">
+            RENDER
+          </button>
+</div>
+</div>
+<!-- Row 6 -->
+<div class="group relative rounded-2xl bg-white/[0.02] hover:bg-white/[0.04] p-3 md:px-5 md:py-3.5 transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-70">
+<div class="flex items-center gap-4 min-w-0 flex-1">
+<div class="relative w-24 h-14 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-inner">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Grandstand fireworks explosion lighting up podium victory scene in monochrome black and silver, champagne spray mist backlit against dark nocturnal sky." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBvtnxaY-zSo3A_Rdk2aEyj83oyHBBL9oYX6m0mHRMZ7-OPHIpFzc4ec-MRRy_3yV5A17lxrt7WCQIA2_kATmzmYnqiofQllNENJVyZs4nHY0ZwyPWmOby95UvTeZ26lRrvQdLI6TCYxB-sOIr1gazVbfwUicxZ_cgcSY_S4LLv6NpSAMNeT3lLQxhq_eyQ9_jN5EWxYnTtW7Qe8lpM87FzX9PFKmnv7lqaOL7N73oBDL2LvUgfZk4sA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-1">
+<span class="material-symbols-outlined text-white text-[14px]">sports_score</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">
+                Chequered flag celebrations
+              </span>
+<span class="material-symbols-outlined text-primary text-[14px]">check_circle</span>
+</div>
+<div class="flex items-center gap-3 mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider">Telemetry: Final Climax Arc</span>
+<div class="flex items-center gap-1.5" title="Factors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/80"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-6 shrink-0">
+<div class="flex items-center gap-3">
+<span class="font-data-mono text-data-mono text-on-surface-variant bg-white/[0.05] px-2.5 py-1 rounded-md">
+              694–721s
+            </span>
+<div class="relative flex items-center justify-center w-9 h-9 rounded-full bg-surface-container-lowest">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="74, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute font-data-mono text-[11px] font-semibold text-primary">74</span>
+</div>
+</div>
+<button class="opacity-40 border border-white/20 text-on-surface font-headline-sm text-[12px] font-medium px-4 py-1.5 rounded-full cursor-not-allowed flex items-center gap-1.5 bg-transparent" disabled="">
+<span>RENDERED</span>
+<span class="material-symbols-outlined text-[14px]">done</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Candidate Pipeline Floor Diagnostics -->
+<div class="mt-4 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-on-surface-variant font-label-caps text-label-caps">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary/40"></span>
+<span>ESTIMATED QUEUE DELAY: 2.1s</span>
+</span>
+<span class="text-white/20">/</span>
+<span>RESOLUTION: 9:16 VERTICAL RE-FRAME</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span>BATCH DISPATCH</span>
+<button class="bg-white/[0.05] hover:bg-white/[0.1] text-primary px-3 py-1 rounded-full text-[10px] font-semibold tracking-widest transition-all">
+          RENDER ALL (5)
+        </button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

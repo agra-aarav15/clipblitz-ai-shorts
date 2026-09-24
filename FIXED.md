@@ -181,3 +181,91 @@ the export itself — and cleaned, per your call: keep the glass, kill the fake 
 | Structure bugs found by the visual judge, then fixed | Nested page-shell wrappers inside sections (content offset 312px), the AI-keys card sitting outside its twin-column grid (relocated, depth-tracked), screen switches keeping the old scroll position (headers slid under the top bar), `renderWave` destroying its own `wave-now` span on rebuild (crash), `main` top padding clearing the fixed bar, transcript deep-link showing empty state (full-job fetch now). |
 | Visual gate | All 6 screens re-judged against the Stitch references: **studio, clips podium, connect, candidates, transcript, power-up — pass**. |
 | End-to-end | Fresh demo job: picker `prox-editor`, 1 clip, score 83, QC **verified**, clip serves 200. |
+
+---
+
+## Round 8 — the UI remake (v3.5.0): glitches removed by construction
+
+The Stitch port looked right but glitched, so I went back to the proven app-shell and rebuilt
+`web/` from scratch — same five screens, same buttons, same API. The difference is *how* the
+motion is built: instead of patching the glitches out, the mechanisms that caused them no
+longer exist in the file.
+
+**What was actually broken in v3.4.5** (found by reading the shipped CSS, not by guessing):
+
+| Banned mechanism found | Why it was a real defect |
+|---|---|
+| `.clipcard.enter { opacity: 0 }` + `fill: both` | The stuck-dim class. If the browser pauses its animation clock (backgrounded tab, busy box) the card freezes **invisible** — exactly the historic bug. |
+| `@keyframes screenin` defined **twice** | One silently overrides the other, so the animation you read is not the animation that runs. This exact bug shipped a flickering chip. |
+| `@keyframes fadein` animating `opacity` | Every entrance keyframe touching opacity is a stuck-dim waiting to happen. |
+| `.pv-caption` declared twice with conflicting `position` | Which one won depended on source order — a coin flip for the preview layout. |
+| `.lm.lo` emitted by `app.js`, never defined in CSS | The live-meter "low" state rendered as nothing at all. |
+| orphan `</div>` in `index.html` | Malformed nesting; the parser guessed where the element ended. |
+| `web/gsap.min.js` (72 KB) + `web/tailwind.css` (41 KB) | Dead assets — referenced by nothing, still served by `server.py`. An animation library on disk is an invitation to load it again. |
+
+**What it does now** — the law is enforced by construction, so the gates assert the construction
+held rather than patching symptoms:
+
+| Rule | How the new `web/` makes it impossible |
+|---|---|
+| No `opacity` in any keyframe | Only `transform`, `scale`, `stroke-dashoffset`, `width` and `box-shadow` are animated. A stuck-dim entrance cannot be written. |
+| No duplicate `@keyframes` names | One namespaced registry — nine keyframes, `cb-` prefixed, all unique, asserted by grep before ship. |
+| Chips never flicker | The live indicator pulses `box-shadow` only. No chrome pulses opacity. |
+| Resting state = final state | Every animated element's computed default is the fully-visible state, so a frozen clock leaves a correct page, not a dim one. |
+| No CDN, no animation library | Everything local. `gsap.min.js` and `tailwind.css` deleted, and their routes removed from `server.py`. |
+| Nothing moves under the cursor | No magnetic buttons, no cursor-shifting. |
+
+**Rebuilt, screen by screen** — same five ids and contracts, more that actually works:
+
+| Screen | New in this round |
+|---|---|
+| Studio | 72px `display-xl` hero, dropzone, URL row, options, caption-style gallery, live 9:16 preview, **recent jobs from `/api/jobs`**, processing box with timeline + bar + skeletons |
+| Clips | `#01 ALPHA / #02 BRAVO / #03 CHARLIE` rank badges, circular score dials, `verified` / `unverified` QC badges, hook quote, judge verdict box, factor bars (Hook/Story/Payoff/Energy/Pacing/Event/Laugh), post buttons, metadata editor |
+| Candidates | **filters All / Verified / Peak events**, time chips, **mini score dials**, render buttons |
+| Transcript | timestamped blocks with peak highlights, **waveform timeline with ruler + playhead + markers**, custom cut window, **Export .SRT** (client-side Blob, no backend endpoint) |
+| Connect | API-keys card (Groq / Gemini / YouTube OAuth, per-key Test & save, masked pills), YouTube wizard with live readiness checklist + Diagnose + copy-redirect, assisted platform cards, post queue |
+
+**Fonts are self-hosted now** — Inter (400–800), JetBrains Mono (400–600) and Space Grotesk
+(600/700) as six WOFF2 files in `web/fonts/`, served by a new whitelisted `/fonts/<file>` route
+with `font-display: swap`. No CDN `<link>`, so there is no network latency between paint and
+correct type — a real contributor to the historic "dim first frame".
+
+**The only two backend changes, each with a reason.** `pipeline.py` now persists
+`job["waveform"]` (600 normalised RMS buckets derived from the **already-computed** `energy`
+series — no extra ffmpeg pass) and `job["moments"]` (the already-mined peak regions), because the
+Transcript screen's waveform and peak highlights must show **measured audio**, not decoration.
+`server.py` gained the `/fonts/` route and lost the two dead ones. Everything else in
+`clipblitz/` is byte-identical, proven by a fresh demo run.
+
+**Verification — every gate, with the numbers:**
+
+| # | Gate | Evidence |
+|---|---|---|
+| V1 | Rapid-switch stress: 5 nav buttons × 4 rounds at 25 ms | 20 clicks → **0** visible elements below 0.99 opacity, **0** leftover transforms |
+| V2 | Frozen-clock probe after V1 | 160 visible elements under the active screen → **0** stuck dim, **0** stuck moved |
+| V3 | Headless capture, fresh profile, 1440×900 | mean luminance **29.86** (healthy 26–30; the historic dim bug was ~13), 9.11% bright pixels, 0 void rows |
+| V4 | Console + request sweep over all five screens × 2 rounds | **0** errors, **0** warnings, **0** uncaught page errors, **0** failed requests, all 3 fonts loaded |
+| V5 | Dangling-reference sweep | every `getElementById`, `data-screen`, icon `<use href="#i-…">` and `@keyframes` name resolves; no duplicates |
+| V6 | Computed theme proof (1440×900) | hero computes **72px / 76px / -1.8px**, weight 600 Inter; `label-caps` 11px `1.32px`; `.mono` JetBrains Mono 12px; glass radius **24px**, `blur(30px) saturate(1.4)`, border `rgba(255,255,255,.1)`; primary button radius 9999px white on `#050505` |
+| V7 | Engine untouched | fresh `POST /api/demo` → job `done`, clip served as a **valid MP4** (container signature checked), waveform normalised with real variation, moments persisted |
+| V8 | Banned-pattern grep | **0** opacity keyframes, **0** duplicate keyframe names, **0** CDN `<script>`/`<link>`, **0** emoji, **0** `gsap`, **0** `tailwind` |
+
+Two things were fixed *because* a gate caught them, which is the point of having gates:
+
+- The sidebar ENGINE chip wrapped **mid-token** (`yt-` / `dlp`). Root cause: a 224px sidebar
+  cannot hold `ProX v5 · top 3 · brain groq + gemini · ffmpeg / yt-dlp` on one line, and
+  `white-space: normal` allowed the break. Fixed by restructuring the chip into three
+  `nowrap` rows — the text was never shortened, every value is still real.
+- The console gate's first run reported the sweep only reached **2/5 screens**. The gate was
+  wrong (it clicked `[data-goto]`, while the sidebar nav uses `[data-screen]`), but the failure
+  was worth having: a nav sweep that silently no-ops proves nothing. Fixed the selector,
+  re-ran, **5/5 screens × 2 rounds, 0 errors**.
+
+**End-to-end after the rebuild:** job `57d2d8d4` → `done`, 1 clip (score 80, QC **verified**),
+600 waveform buckets, 1 moment persisted, clip serves 200 as a valid MP4.
+
+**Note on the embedded browser console:** the in-app panel's console recorder could not attach
+on this machine (`recorder not active for this tab`, and new embedded tabs time out), so V4 is
+captured by driving the same app in system Edge via Playwright instead. Same page, same origin,
+real errors — just a working recorder.
+

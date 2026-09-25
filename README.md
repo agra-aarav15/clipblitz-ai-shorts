@@ -1,93 +1,144 @@
-# ✂️ ClipBlitz — AI Shorts Factory
+# ClipBlitz — AI Shorts Factory
 
-> **Long video in → top 3 viral clips out.** Paste a YouTube link or drop a file: the engine
-> segments the episode into *stories*, drafts the tightest cut inside each one, lands every ending
-> on the audience's laughter, then a strict **QC judge** scores the exact final clip — with its
-> verdict shown on every card. Reframed 9:16 with blur-pad framing (nobody gets cut off), animated
-> word-by-word captions, AI-written titles/descriptions/hashtags, and automatic YouTube posting.
+> **Long video in → top clips out.** Paste a YouTube link or drop a file. The engine reads the
+> transcript, finds the *stories*, cuts each clip so it starts on a real sentence and ends on a
+> payoff, and a second pass judges the finished clip and shows its verdict on the card. Vertical
+> 9:16, blur-pad framing, word-by-word captions, AI-written titles and hashtags, optional YouTube
+> posting.
 
-Your own OpusClip — self-hosted, no watermarks, no per-minute fees, honest scores.
+Your own OpusClip — self-hosted, no watermark, no per-minute fees, honest scores.
 
-**Version:** v3.1 · Engine: **ProX v5 "The AI Editor"** · Status: ✅ verified end-to-end on a real 54-minute episode
+**Version:** v3.5.0 · **Engine:** ProX v5 "The AI Editor" · **UI:** Obsidian Keynote (monochrome glass)
+
+**New here? Read the [BEGINNER-GUIDE.md](BEGINNER-GUIDE.md)** — it assumes you have never used a
+terminal or GitHub, and walks you from zero to your first clip.
 
 ---
 
-## Quickstart (5 minutes)
+## Quickstart
 
 ```bash
-# 1. binaries (one-time): ffmpeg + yt-dlp into bin/
-bash scripts/fetch-tools.sh          # Windows Git Bash; or download manually into clipblitz/bin/
+# 1. the two helper tools (ffmpeg + yt-dlp) into bin/ — one time
+powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1   # Windows
+bash scripts/fetch-tools.sh                                        # macOS / Linux / Git Bash
 
-# 2. config
-cp .env.example .env                 # add a free Groq key from console.groq.com
-
-# 3. run
-python run.py                        # → http://localhost:4301
+# 2. run it
+python run.py                                                      # → http://localhost:4301
 ```
 
-Open the **Studio** screen → paste a YouTube link (or drop a file) → pick a caption style →
-**Edit my video**. Clips land in the **Clips** screen with scores, verdicts and captions.
+Open <http://localhost:4301>. The first screen asks for a key — paste a free Groq key
+([console.groq.com/keys](https://console.groq.com/keys)) into the **API keys** card and press
+**Test & save**. Then: **Studio** → paste a link or drop a file → **Edit my video**.
 
-## The ProX v5 editor pipeline
+No key handy? The **Demo** button generates a test video so you can watch the whole pipeline work.
+
+### Screenshots
+
+| Studio | Clips podium |
+|---|---|
+| ![Studio](docs/shots/screen_studio.png) | ![Clips](docs/shots/screen_clips.png) |
+
+| Candidates | Transcript |
+|---|---|
+| ![Candidates](docs/shots/screen_candidates.png) | ![Transcript](docs/shots/screen_transcript.png) |
+
+![Connect](docs/shots/screen_connect.png)
+
+---
+
+## The ProX v5 pipeline
 
 ```
 video ─▶ audio ─▶ Whisper word-level transcription (auto-chunked for long videos)
-              ─▶ acoustic laughter detection (80 regions found in a 54-min podcast)
+              ─▶ acoustic laughter detection
+              ─▶ PEAK MOMENT mining (audio roar + camera-cut density + drama heat)
     ┌─────────┴──────────────────────────────────────────────┐
-    │ 1. STORY PASS    LLM segments the episode into         │
+    │ 1. STORY PASS    the episode is segmented into         │
     │                  self-contained stories                │
-    │ 2. DRAFT PASS    tightest 15-60s cut drafted INSIDE    │
-    │                  each promising story (full context)   │
+    │ 2. DRAFT PASS    the tightest 15-60s cut is drafted    │
+    │                  INSIDE each story, full context       │
     │ 3. EDGE RULES    snap to sentences · no filler starts  │
     │                  · end on punctuation · ride the laugh │
     │ 4. JUDGE PASS    the exact final clip is judged:       │
-    │                  alone? abrupt edges? coherence 0-10   │
+    │                  does it stand alone? abrupt edges?    │
     │                  → one repair redraw, then demotion    │
-    │ 5. SCORE v2      judge ratings of the exact cut +      │
-    │                  measured laughter/energy/pacing       │
+    │ 5. SCORE v2      the judge's ratings of that exact cut │
+    │                  + measured laughter/energy/pacing     │
     └─────────┬──────────────────────────────────────────────┘
-              └─▶ render 9:16 (blur-pad) + captions + metadata + auto-post
+              └─▶ render 9:16 (blur-pad) + captions + metadata + post
 ```
 
-Every clip card shows its **factor bars** (Hook / Story / Payoff / Energy / Pacing / Laugh) and
-the **judge's verdict line** — the score literally follows the content, nothing is invented.
-Clips that don't fully pass the judge are honestly labelled `◐ unverified`.
+Every clip card carries its **factor bars** (Hook / Story / Payoff / Energy / Pacing / Event /
+Laugh) and the **judge's verdict line** — the score follows the content, nothing is invented.
+Clips that do not fully pass are labelled **unverified** rather than dressed up.
 
-## Screens (app shell)
+The podium also enforces *shape*: one cut per story, picks spread across the timeline, and no two
+clips with near-identical titles.
 
-- **Studio** — upload / YouTube URL, caption-style live preview, framing (blur-pad / crop), processing timeline
-- **Clips** — top-3 podium: score dials, factor bars, judge verdicts, metadata editors, post chips
-- **Candidates** — every runner-up with its measured score; one click renders any of them
-- **Transcript** — click a line to jump; drag the handles to cut your own clip (same engine, same honesty)
-- **Connect** — YouTube OAuth with a **live 5-step diagnostic** of the whole auto-post chain
+---
 
-## Social automation
+## The screens
 
-- **YouTube — fully automatic**: one-time OAuth (in-app 4-step wizard with deep links into each
-  Google Cloud page + copy-ready redirect URI + live diagnostics). Uploads fire by themselves with
-  metadata + #Shorts. Free quota ≈ 6 uploads/day.
-- **TikTok / Instagram / Facebook / X — assisted one-click**: caption package auto-copied, upload
-  page opened. Full-auto arrives with a platform dev app or a posting-API key (`CB_POST_KEY`).
+- **Studio** — YouTube URL or dropped file, caption-style gallery with a live 9:16 preview,
+  framing, recent jobs, processing timeline.
+- **Clips** — the podium: rank badges, score dials, verified/unverified QC badges, hook quote,
+  judge verdict, factor bars, metadata editor, post buttons.
+- **Candidates** — every runner-up with its measured score, filters (All / Verified / Peak events),
+  one-click render.
+- **Transcript** — timestamped blocks with peak highlights, waveform timeline with markers,
+  drag-to-cut window, Export .SRT.
+- **Connect** — API keys in the UI (Groq / Gemini / YouTube with live tests), YouTube auto-post
+  wizard with a readiness checklist and Diagnose, assisted platform cards, post queue.
 
-## Dual-brain AI (no more rate-limit walls)
+---
 
-Groq (free) is the primary brain; add a free Gemini key (`CB_GEMINI_KEY` in `.env`,
-[aistudio.google.com/apikey](https://aistudio.google.com/apikey)) and every engine call that gets
-throttled instantly fails over — keys hot-reload, no restart. `CB_AI_PROVIDER=gemini` flips the order.
+## Keys live in the app, not in a file
+
+Every key is managed on the **Connect** screen: paste it, press **Test & save**, and ClipBlitz calls
+the provider live to confirm it works before storing it. Keys hot-reload — no restart, ever.
+`.env.example` documents the optional knobs (port, data folder, model overrides).
+
+**Dual brain:** Groq is the primary; add a free Gemini key and throttled calls fail over
+automatically. Retired models self-heal — if a provider renames a model, ClipBlitz picks up the
+successor from the error and retries.
+
+---
+
+## Social posting
+
+- **YouTube — automatic** once you complete the one-time OAuth setup (the Connect screen walks you
+  through it with deep links into each Google Cloud page, a copy-ready redirect URI, and a live
+  five-step diagnostic). Free quota ≈ 6 uploads/day. See [SETUP-YOUTUBE.md](SETUP-YOUTUBE.md).
+- **TikTok / Instagram / Facebook / X — assisted**: the caption package is copied to your clipboard
+  and the upload page opens.
+
+---
 
 ## Zero-framework core
 
-The server is **pure Python stdlib** (no FastAPI/Flask) + bundled ffmpeg + yt-dlp + Whisper API.
-The UI is vanilla HTML/CSS/JS. Deploy the Dockerfile anywhere.
+Pure Python standard library on the server (no FastAPI/Flask), bundled ffmpeg + yt-dlp, the Whisper
+API for transcription, and a hand-written HTML/CSS/JS front end with self-hosted fonts (no CDN, no
+animation library, no build step). A `Dockerfile` is included.
+
+---
 
 ## Docs
 
-- [SETUP-YOUTUBE.md](SETUP-YOUTUBE.md) — the 4-step OAuth wizard, click by click
-- [FIXED.md](FIXED.md) — the honest changelog: 5 rounds, ~40 recurring errors hunted and closed
-- [.env.example](.env.example) — every knob documented
+- **[BEGINNER-GUIDE.md](BEGINNER-GUIDE.md)** — zero-knowledge install and walkthrough (start here)
+- [SETUP-YOUTUBE.md](SETUP-YOUTUBE.md) — the OAuth wizard, click by click, with error fixes
+- [FIXED.md](FIXED.md) — the honest changelog: every bug found and what it does now
+- [.env.example](.env.example) — every setting documented
 
-## Smoke test
+## Development checks
 
 ```bash
-python scripts/smoke.py   # offline e2e: demo video → stories → cut → captions → ALL GREEN
+python scripts/smoke.py        # offline end-to-end: demo video → stories → cut → captions
+python scripts/e2e_check.py    # live end-to-end against a running server
+python scripts/route_check.py  # every HTTP route answers as expected
+python scripts/ui_check.py     # static front-end sweep (dangling refs, banned patterns)
 ```
+
+## License
+
+See the repository for licensing. Clips you make are yours; respect the rights of the videos you
+process.

@@ -269,3 +269,40 @@ on this machine (`recorder not active for this tab`, and new embedded tabs time 
 captured by driving the same app in system Edge via Playwright instead. Same page, same origin,
 real errors — just a working recorder.
 
+---
+
+## Round 9 — B2 Pro X (the cinematic engine) + documentation
+
+Two more stages on top of the v3.5.0 UI remake:
+
+### Stage B — documentation a beginner can actually follow
+
+| Item | What it does now |
+|---|---|
+| **BEGINNER-GUIDE.md** (new) | Zero-knowledge walkthrough: what a terminal is, per-OS Python installs with the PATH checkbox explained, exactly where ffmpeg/yt-dlp must land, free Groq + Gemini keys, first clip, all five screens, troubleshooting for every error a beginner hits, FAQ, glossary. |
+| **scripts/fetch-tools.ps1 / .sh** (new) | Fixes a real beginner blocker: `bin/` is gitignored, so a fresh clone had **no ffmpeg and no yt-dlp**, and the README pointed at a script that did not exist. Now: one command per OS, correct extraction layout, verification output that ticks both tools. |
+| **README.md** (rewritten) | v3.5.0, no emoji, real screenshots of all five screens captured from the live build, working quickstart, plain-language engine explanation, honest dev-check commands. |
+| **SETUP-YOUTUBE.md** (corrected) | It said *Web application* while the UI wizard assumes *Desktop app* — both are now explained with their redirect-URI implications, the stale "restart ClipBlitz" step is gone (keys hot-reload from the UI), and `access_denied` / `youtubeSignupRequired` fixes were added. |
+
+### Stage C — B2 Pro X, the cinematic engine (`b2prox/`, port 4302)
+
+A new project in its own folder, built on ClipBlitz's verified editorial spine, adding a cinema
+layer that is **all deterministic measurement**:
+
+| Layer | What it does | Proof |
+|---|---|---|
+| **Scene map** | Real shot boundaries so cuts land on an edit | Detected cuts at exactly **3.0 / 6.0 / 9.0 s** on a generated control clip |
+| **Motion map** | Per-second on-screen energy (tblend difference + signalstats YAVG) | 106 motion points on a demo job |
+| **Cinema snap** | Pulls cut edges onto shot boundaries without crossing a sentence start | Live in the candidate pass |
+| **Scene grammar** | Opens on the establishing beat, lands the payoff on the peak shot | Live in the candidate pass |
+| **Cinematic finish** | Restrained film grade: S-curve contrast, black lift, soft vignette, optional grain | Graded frames measured in the render (YAVG ramp 24.6 → 85.4) |
+| **J/L-cut audio lead** | Audio leads the incoming picture by 0.35 s so cuts feel carried, not chopped | In `cut_clip()` |
+| **Multi-ratio export** | 9:16 (default) / 1:1 / 16:9 | Ratio table + sizing verified |
+
+Verification: `python scripts/verify_b2.py` → **PASS 16 · FAIL 0** — health reports engine
+"B2 Pro X", cinema module builds, scene detection finds the control cuts, a live demo job runs to
+`done`, and the rendered file is 1080×1920 with an audio track, a 0–100 score and a recorded QC
+verdict.
+
+The ClipBlitz tree (`clipblitz/`, `web/`) is **byte-identical** in that commit — B2 Pro X is
+additive.

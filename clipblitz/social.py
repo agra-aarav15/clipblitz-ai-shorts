@@ -53,7 +53,9 @@ def _yt_creds():
     takes effect immediately, no server restart needed."""
     cid, sec = CONFIG.get("yt_client_id", ""), CONFIG.get("yt_client_secret", "")
     try:
-        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+        # two levels up from clipblitz/social.py is the project root (where .env lives)
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env_path = os.path.join(root, ".env")
         for line in open(env_path, encoding="utf-8"):
             line = line.strip()
             if line.startswith("CB_YT_CLIENT_ID="):

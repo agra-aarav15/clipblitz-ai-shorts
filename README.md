@@ -15,6 +15,24 @@ terminal or GitHub, and walks you from zero to your first clip.
 
 ---
 
+## NEW — ClipBlitz Studio (v4.0.0): both engines, one window
+
+**[studio/](studio/)** is the flagship app now: one interface where every job picks
+**ProX v5**, **B2 Pro X**, or **Both at once** — one analysis pass, both cuts side by side,
+compare and pick. It runs on any fresh PC (START.bat even installs Python for you), opens on
+your **phone** over Wi-Fi (this machine renders, the phone controls), and refuses gracefully
+with "use your laptop to render" on hardware that can't keep up.
+
+| Studio — engine selector | Both engines, side by side | On a phone |
+|---|---|---|
+| ![Studio](studio/docs/shots/01-studio.png) | ![Compare](studio/docs/shots/03-compare.png) | ![Phone](studio/docs/shots/05-mobile-studio.png) |
+
+Run it: `cd studio` then `START.bat` (Windows) or `bash start.sh` — full guide in
+[studio/SETUP.md](studio/SETUP.md). Port 4300. The classic single-engine apps below stay
+exactly as they are (4301 ClipBlitz, 4302 B2 Pro X).
+
+---
+
 ## Quickstart
 
 ```bash

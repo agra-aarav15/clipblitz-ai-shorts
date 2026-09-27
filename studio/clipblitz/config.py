@@ -1,7 +1,17 @@
 import glob
 import os
+import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def app_root():
+    """The folder that holds web/, bin/ and .env. In a normal checkout that is the repo
+    root; as a frozen EXE (PyInstaller) it is the EXE's own folder."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+ROOT = app_root()
 
 
 def _load_env(path):

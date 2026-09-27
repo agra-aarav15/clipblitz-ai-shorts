@@ -33,7 +33,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import captions, ffmpeg_tools, hardware, pipeline, social, virality
 from .config import CONFIG, ffmpeg_available, stt_mode, ytdlp_available
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .config import app_root
+
+ROOT = app_root()
 WEB = os.path.join(ROOT, "web")
 MAX_UPLOAD = 2 * 1024 ** 3
 

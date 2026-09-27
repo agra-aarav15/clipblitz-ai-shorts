@@ -15,7 +15,9 @@ import time
 import urllib.error
 import urllib.request
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .config import app_root
+
+_ROOT = app_root()
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 GEMINI_MODEL = os.environ.get("CB_GEMINI_MODEL", "").strip() or "gemini-3.6-flash"

@@ -10,7 +10,9 @@ import os
 import re
 import urllib.request
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .config import app_root
+
+_ROOT = app_root()
 ENV_PATH = os.path.join(_ROOT, ".env")
 
 # logical name -> .env variable

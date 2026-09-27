@@ -53,8 +53,9 @@ def _yt_creds():
     takes effect immediately, no server restart needed."""
     cid, sec = CONFIG.get("yt_client_id", ""), CONFIG.get("yt_client_secret", "")
     try:
-        # two levels up from clipblitz/social.py is the project root (where .env lives)
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # the project root (where .env lives) — frozen-EXE aware
+        from .config import app_root
+        root = app_root()
         env_path = os.path.join(root, ".env")
         for line in open(env_path, encoding="utf-8"):
             line = line.strip()

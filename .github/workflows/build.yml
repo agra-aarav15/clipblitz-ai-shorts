@@ -1,0 +1,121 @@
+name: build
+
+# Builds the two ready-to-run distributions and attaches them to the GitHub release:
+#   * ClipBlitzStudio-windows.zip  — a PyInstaller EXE folder (no Python needed on the PC)
+#   * ClipBlitzStudio.apk          — the Android companion app (thin WebView shell)
+# Runs on every push to main and on demand.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    name: Windows EXE
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the packager
+        run: pip install pyinstaller
+
+      - name: Fetch ffmpeg + yt-dlp into studio/bin
+        working-directory: studio
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-tools.ps1
+
+      - name: Build the EXE
+        working-directory: studio
+        run: pyinstaller --noconfirm --clean --name ClipBlitzStudio --onedir run.py
+
+      - name: Assemble the distribution folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/ClipBlitzStudio | Out-Null
+          Copy-Item -Recurse -Force studio/web dist/ClipBlitzStudio/web
+          Copy-Item -Recurse -Force studio/bin  dist/ClipBlitzStudio/bin
+          Copy-Item -Force studio/README.md, studio/SETUP.md dist/ClipBlitzStudio/
+          Compress-Archive -Path dist/ClipBlitzStudio -DestinationPath ClipBlitzStudio-4.0.0-windows.zip
+
+      - name: Smoke-test the EXE
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist/ClipBlitzStudio/ClipBlitzStudio.exe -ArgumentList '4311' -PassThru
+          Start-Sleep -Seconds 12
+          $h = Invoke-RestMethod -Uri 'http://127.0.0.1:4311/api/health' -TimeoutSec 30
+          if (-not $h.hardware.render_capable) { throw 'bundled ffmpeg not found' }
+          Write-Host "health ok: $($h.name) $($h.version) ffmpeg=$($h.ffmpeg)"
+          Stop-Process -Id $p.Id -Force
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v4.0.0 ClipBlitzStudio-4.0.0-windows.zip --clobber -R $env:GITHUB_REPOSITORY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipBlitzStudio-windows
+          path: ClipBlitzStudio-4.0.0-windows.zip
+
+  apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+    env:
+      BT: ${{ github.workspace }}/bt
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Accept SDK licences and install build-tools + platform
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0" "platforms;android-34" >/dev/null
+
+      - name: Build the APK (aapt2 + javac + d8 + apksigner)
+        run: |
+          set -e
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          JAR="$ANDROID_HOME/platforms/android-34/android.jar"
+          mkdir -p build/gen build/classes build/dex
+
+          # resources + binary manifest (no res/ dir yet: manifest only)
+          "$BT/aapt2" link -o build/base.apk -I "$JAR" \
+            --manifest studio/android/AndroidManifest.xml \
+            --java build/gen
+
+          # compile the activity against the platform jar
+          javac -source 11 -target 11 -nowarn \
+            -classpath "$JAR" -d build/classes \
+            $(find studio/android/java -name '*.java')
+
+          # dex
+          "$BT/d8" --release --lib "$JAR" --min-api 24 \
+            --output build/dex $(find build/classes -name '*.class')
+
+          # pack the dex into the apk, align, sign with a fresh release key
+          cd build && zip -j base.apk dex/classes.dex && cd ..
+          "$BT/zipalign" -f 4 build/base.apk build/aligned.apk
+          keytool -genkeypair -v -keystore build/studio.keystore -alias clipblitz \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass clipblitz -keypass clipblitz \
+            -dname "CN=ClipBlitz Studio, OU=ClipBlitz, O=ClipBlitz, L=Local, ST=Local, C=IN"
+          "$BT/apksigner" sign --ks build/studio.keystore \
+            --ks-pass pass:clipblitz --key-pass pass:clipblitz \
+            --out ClipBlitzStudio.apk build/aligned.apk
+          "$BT/apksigner" verify ClipBlitzStudio.apk
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v4.0.0 ClipBlitzStudio.apk --clobber -R "$GITHUB_REPOSITORY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipBlitzStudio-apk
+          path: ClipBlitzStudio.apk

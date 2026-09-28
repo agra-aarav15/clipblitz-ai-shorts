@@ -38,16 +38,16 @@ jobs:
       - name: Assemble the distribution folder
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist/ClipBlitzStudio | Out-Null
-          Copy-Item -Recurse -Force studio/web dist/ClipBlitzStudio/web
-          Copy-Item -Recurse -Force studio/bin  dist/ClipBlitzStudio/bin
-          Copy-Item -Force studio/README.md, studio/SETUP.md dist/ClipBlitzStudio/
-          Compress-Archive -Path dist/ClipBlitzStudio -DestinationPath ClipBlitzStudio-4.0.0-windows.zip
+          $target = "studio/dist/ClipBlitzStudio"
+          Copy-Item -Recurse -Force studio/web "$target/web"
+          Copy-Item -Recurse -Force studio/bin  "$target/bin"
+          Copy-Item -Force studio/README.md, studio/SETUP.md "$target/"
+          Compress-Archive -Path $target -DestinationPath ClipBlitzStudio-4.0.0-windows.zip
 
       - name: Smoke-test the EXE
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist/ClipBlitzStudio/ClipBlitzStudio.exe -ArgumentList '4311' -PassThru
+          $p = Start-Process -FilePath studio/dist/ClipBlitzStudio/ClipBlitzStudio.exe -ArgumentList '4311' -PassThru
           Start-Sleep -Seconds 12
           $h = Invoke-RestMethod -Uri 'http://127.0.0.1:4311/api/health' -TimeoutSec 30
           if (-not $h.hardware.render_capable) { throw 'bundled ffmpeg not found' }

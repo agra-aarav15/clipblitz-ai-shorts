@@ -129,3 +129,54 @@ jobs:
         with:
           name: ClipBlitzStudio-apk
           path: ClipBlitzStudio.apk
+
+  # The phone running the studio itself: CPython + the real engine + its own server,
+  # inside one APK. Experimental, so it publishes an artifact and never touches the
+  # release: the companion APK above stays the shipped one until the milestones in
+  # studio/android-standalone/README.md are done.
+  standalone:
+    name: Android standalone (on-device engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Python 3.12 (must match the app's Python version)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the SDK platform and build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - name: Stage the engine into the app
+        working-directory: studio/android-standalone
+        run: python sync-python.py
+
+      - name: Smoke-test the staged engine through the Android bootstrap
+        working-directory: studio/android-standalone
+        run: python smoke.py
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build the on-device APK
+        working-directory: studio/android-standalone
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify the APK carries CPython, the engine and the studio UI
+        working-directory: studio/android-standalone
+        run: python verify_apk.py app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipBlitzStandalone-debug
+          path: studio/android-standalone/app/build/outputs/apk/debug/app-debug.apk

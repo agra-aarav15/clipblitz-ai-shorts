@@ -1,0 +1,11 @@
+# The engine is staged by sync-python.py from the studio tree. It is a copy, and a copy in
+# git is a copy that drifts, so it is never committed.
+app/src/main/python/
+
+# Gradle
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab

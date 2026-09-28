@@ -1,6 +1,10 @@
 # ClipBlitz — AI Video Clipping Studio
 
 <p align="center">
+  <img src="studio/assets/logo.png" width="104" alt="ClipBlitz Studio" />
+</p>
+
+<p align="center">
   <img src="docs/shots/01-studio.png" width="900" alt="ClipBlitz Studio — One window, two engines" />
 </p>
 

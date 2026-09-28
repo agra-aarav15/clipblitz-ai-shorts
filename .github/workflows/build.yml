@@ -31,9 +31,13 @@ jobs:
         working-directory: studio
         run: powershell -ExecutionPolicy Bypass -File scripts/fetch-tools.ps1
 
+      - name: Check the brand assets are current
+        working-directory: studio
+        run: python scripts/make_icons.py --check
+
       - name: Build the EXE
         working-directory: studio
-        run: pyinstaller --noconfirm --clean --name ClipBlitzStudio --onedir run.py
+        run: pyinstaller --noconfirm --clean --name ClipBlitzStudio --onedir --icon assets/ClipBlitzStudio.ico run.py
 
       - name: Assemble the distribution folder
         shell: pwsh
@@ -41,7 +45,10 @@ jobs:
           $target = "studio/dist/ClipBlitzStudio"
           Copy-Item -Recurse -Force studio/web "$target/web"
           Copy-Item -Recurse -Force studio/bin  "$target/bin"
+          Copy-Item -Recurse -Force studio/assets "$target/assets"
           Copy-Item -Force studio/README.md, studio/SETUP.md "$target/"
+          # the .ico is also copied next to the EXE so a desktop shortcut and the
+          # Start menu entry can borrow the same icon the executable carries.
           Compress-Archive -Path $target -DestinationPath ClipBlitzStudio-4.0.0-windows.zip
 
       - name: Smoke-test the EXE
@@ -84,15 +91,18 @@ jobs:
           JAR="$ANDROID_HOME/platforms/android-34/android.jar"
           mkdir -p build/gen build/classes build/dex
 
-          # resources + binary manifest (no res/ dir yet: manifest only)
+          # resources (the launcher icon) + binary manifest
+          "$BT/aapt2" compile --dir studio/android/res -o build/res.zip
           "$BT/aapt2" link -o build/base.apk -I "$JAR" \
             --manifest studio/android/AndroidManifest.xml \
+            build/res.zip \
             --java build/gen
 
-          # compile the activity against the platform jar
+          # compile the activity against the platform jar, together with the R
+          # aapt2 just generated for the icon it linked in
           javac -source 11 -target 11 -nowarn \
             -classpath "$JAR" -d build/classes \
-            $(find studio/android/java -name '*.java')
+            $(find studio/android/java build/gen -name '*.java')
 
           # dex
           "$BT/d8" --release --lib "$JAR" --min-api 24 \

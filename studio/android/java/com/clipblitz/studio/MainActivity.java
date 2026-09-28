@@ -14,15 +14,16 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
  * ClipBlitz Studio companion app: a thin, honest WebView shell. All rendering happens on
  * the machine that runs the studio (a PC, a laptop, or Termux); this app only controls and
- * previews. First launch asks for the studio's address (printed by the studio on startup,
- * and shown in its Connect screen under "Phone and network"), remembers it, and from then
- * on opens straight into the studio.
+ * previews. First launch shows the app mark and asks for the studio's address (printed by the
+ * studio on startup, and shown in its Connect screen under "Phone and network"), remembers it,
+ * and from then on opens straight into the studio.
  */
 public class MainActivity extends Activity {
 
@@ -47,6 +48,16 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.parseColor("#050505"));
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(28), dp(28), dp(28), dp(28));
+
+        // The app photo, drawn from the same brand asset as the launcher icon.
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.mipmap.ic_launcher);
+        mark.setContentDescription("ClipBlitz Studio");
+        LinearLayout.LayoutParams markParams =
+                new LinearLayout.LayoutParams(dp(96), dp(96));
+        markParams.gravity = Gravity.CENTER_HORIZONTAL;
+        markParams.bottomMargin = dp(14);
+        root.addView(mark, markParams);
 
         TextView title = new TextView(this);
         title.setText("ClipBlitz Studio");
@@ -91,7 +102,24 @@ public class MainActivity extends Activity {
         root.addView(hint, tp);
         root.addView(input, tp);
         root.addView(go, tp);
+
+        TextView footer = new TextView(this);
+        footer.setText("ClipBlitz Studio " + versionName());
+        footer.setTextColor(Color.parseColor("#666666"));
+        footer.setTextSize(12);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, dp(18), 0, 0);
+        root.addView(footer, tp);
         setContentView(root);
+    }
+
+    /** The version the APK was actually built with, not a string we can forget to bump. */
+    private String versionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private void openStudio(String url) {
@@ -99,6 +127,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        web.setBackgroundColor(Color.parseColor("#050505"));   // no white flash before the page paints
         web.setWebViewClient(new WebViewClient());
         web.loadUrl(url);
         setContentView(web);

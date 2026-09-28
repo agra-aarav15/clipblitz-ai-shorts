@@ -259,6 +259,12 @@ textarea { resize: vertical; }
 
 .main { flex: 1; min-width: 0; padding: 18px 30px 80px; max-width: 1280px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 8px 2px 20px; }
+.jobbox { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.jobbox .jobtitle { min-width: 0; }
+/* Below 900px the sidebar becomes the bottom tab bar and its logo goes with it, so the
+   mark rides in the topbar instead — the app keeps a face on a phone. */
+.appmark { display: none; width: 26px; height: 26px; flex: none;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2)); }
 .jobtitle { font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: -0.015em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topchips { display: flex; gap: 8px; flex: none; }
@@ -726,6 +732,7 @@ textarea { resize: vertical; }
     margin: 0; padding: 6px; flex-direction: row; align-items: center; gap: 4px;
     border-radius: 22px; z-index: 60; }
   .sidebar .logo { display: none; }
+  .appmark { display: block; }
   .snav { flex-direction: row; flex: 1; justify-content: space-around; gap: 2px; }
   .snavbtn { flex-direction: column; gap: 3px; flex: 1; padding: 7px 4px;
     min-height: 48px; min-width: 48px; border-radius: 16px; }

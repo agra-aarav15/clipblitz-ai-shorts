@@ -7,10 +7,15 @@
 <meta name="description" content="Turn one long video into vertical shorts. Story segmentation, judge-verified cuts, animated captions." />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#050505" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="ClipBlitz Studio — Two Engines, One Window" />
+<meta property="og:description" content="One long video in. The clips that matter out. ProX v5 and B2 Pro X cut side by side, with honest scores." />
+<meta property="og:image" content="/icons/icon-512.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -79,7 +84,10 @@
   <!-- ================= MAIN ================= -->
   <div class="main">
     <header class="topbar">
-      <div class="jobtitle" id="jobtitle">Studio</div>
+      <div class="jobbox">
+        <svg class="appmark" aria-hidden="true"><use href="#i-mark"/></svg>
+        <div class="jobtitle" id="jobtitle">Studio</div>
+      </div>
       <div class="topchips">
         <span class="chip" id="jobchip" hidden></span>
         <span class="chip" id="livechip">checking…</span>

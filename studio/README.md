@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" width="112" alt="ClipBlitz Studio" />
+</p>
+
 # ClipBlitz Studio
 
 **Two AI clipping engines in one window.** Drop one long video; choose **ProX v5**, **B2 Pro X**,

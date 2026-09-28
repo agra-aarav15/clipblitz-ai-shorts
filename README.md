@@ -1,162 +1,122 @@
-# ClipBlitz — AI Shorts Factory
+# ClipBlitz — AI Video Clipping Studio
 
-> **Long video in → top clips out.** Paste a YouTube link or drop a file. The engine reads the
-> transcript, finds the *stories*, cuts each clip so it starts on a real sentence and ends on a
-> payoff, and a second pass judges the finished clip and shows its verdict on the card. Vertical
-> 9:16, blur-pad framing, word-by-word captions, AI-written titles and hashtags, optional YouTube
-> posting.
+<p align="center">
+  <img src="docs/shots/01-studio.png" width="900" alt="ClipBlitz Studio — One window, two engines" />
+</p>
 
-Your own OpusClip — self-hosted, no watermark, no per-minute fees, honest scores.
+<p align="center">
+  <b>One long video in. The clips that matter out.</b><br />
+  Your own OpusClip — self-hosted, zero watermark, zero monthly fees, honest scores.
+</p>
 
-**Version:** v3.5.0 · **Engine:** ProX v5 "The AI Editor" · **UI:** Obsidian Keynote (monochrome glass)
-
-**New here? Read the [BEGINNER-GUIDE.md](BEGINNER-GUIDE.md)** — it assumes you have never used a
-terminal or GitHub, and walks you from zero to your first clip.
+<p align="center">
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v4.0.0"><b>Download v4.0.0 Release</b></a> ·
+  <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
+  <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
+  <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
+</p>
 
 ---
 
-## NEW — ClipBlitz Studio (v4.0.0): both engines, one window
+## What is this
 
-**[studio/](studio/)** is the flagship app now: one interface where every job picks
-**ProX v5**, **B2 Pro X**, or **Both at once** — one analysis pass, both cuts side by side,
-compare and pick. It runs on any fresh PC (START.bat even installs Python for you), opens on
-your **phone** over Wi-Fi (this machine renders, the phone controls), and refuses gracefully
-with "use your laptop to render" on hardware that can't keep up.
+ClipBlitz is an AI-powered video editor that turns podcasts, interviews, gaming sessions, and long YouTube videos into viral, vertical shorts ready for YouTube Shorts, TikTok, and Instagram Reels.
 
-| Studio — engine selector | Both engines, side by side | On a phone |
-|---|---|---|
-| ![Studio](studio/docs/shots/01-studio.png) | ![Compare](studio/docs/shots/03-compare.png) | ![Phone](studio/docs/shots/05-mobile-studio.png) |
+Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a professional human editor:
 
-Run it: `cd studio` then `START.bat` (Windows) or `bash start.sh` — full guide in
-[studio/SETUP.md](studio/SETUP.md). Port 4300. The classic single-engine apps below stay
-exactly as they are (4301 ClipBlitz, 4302 B2 Pro X).
+1. **Story pass** — segments the episode into complete, self-contained stories (setup, build-up, punchline/payoff).
+2. **Draft pass** — drafts the tightest 15-60s cut inside each story, prioritizing regions with audience laughter and vocal energy.
+3. **Deterministic edge rules** — snaps starts to sentence boundaries (no "um", "so", or mid-word starts) and rides endings through audience reactions.
+4. **Strict QC judge** — an independent LLM pass reads the exact final transcript of the cut and issues a pass/fail verdict (`verified` vs `unverified`).
+5. **Traceable score v2** — computed strictly from the judge's ratings and acoustic factors (energy, laughter, pacing). No fake numbers.
+
+---
+
+## Two engines in one window (ClipBlitz Studio v4.0.0)
+
+With **v4.0.0**, you get both flagship engines in a single interface with side-by-side comparison:
+
+| Engine | How it cuts | Look & Feel | Audio |
+|---|---|---|---|
+| **ProX v5** | Story-first + sentence snap + QC judge | Clean 1080x1920 vertical blur-pad | 0.18s fade in/out |
+| **B2 Pro X** | Shot-boundary snap + scene grammar | Cinematic film grade (S-curve + vignette) | J-cut: audio leads picture by 0.35s |
+| **Both** | **One analysis pass, two cuts side by side** | Compare both grades and timings | Pick your favorite cut |
+
+<p align="center">
+  <img src="docs/shots/03-compare.png" width="850" alt="Both engines side by side in the comparison view" />
+</p>
+
+---
+
+## Works on any fresh PC — and on your phone
+
+<p align="center">
+  <img src="docs/shots/05-mobile-studio.png" width="280" alt="ClipBlitz Studio on mobile" />
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/shots/04-connect.png" width="560" alt="Connect screen with phone address and hardware capability" />
+</p>
+
+- **One-click fresh-PC install:** `START.bat` checks for Python and installs it silently if missing. Bundled `ffmpeg` and `yt-dlp` ship inside the release zip — nothing else is downloaded.
+- **Use it from your phone:** Open the printed `http://192.168.x.x:4300` address in your mobile browser. The computer does all the heavy video rendering; your phone controls the studio and previews the clips. Add to Home Screen for a native app feel.
+- **Hardware-aware protection:** The host machine is measured (CPU cores, RAM, ffmpeg). Weak devices are told immediately: *"This device can't render clips. Use your laptop or PC to render them."* — avoiding mid-render crashes.
 
 ---
 
 ## Quickstart
 
+### Option A: Ready-to-run release (recommended)
+1. Download **`ClipBlitzStudio-4.0.0.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v4.0.0).
+2. Unzip the folder anywhere.
+3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
+4. Open `http://localhost:4300` in your browser.
+
+### Option B: Clone from source
 ```bash
-# 1. the two helper tools (ffmpeg + yt-dlp) into bin/ — one time
+git clone https://github.com/agra-aarav15/clipblitz-ai-shorts.git
+cd clipblitz-ai-shorts/studio
+
+# Fetch the bundled ffmpeg + yt-dlp (one time)
 powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1   # Windows
-bash scripts/fetch-tools.sh                                        # macOS / Linux / Git Bash
+bash scripts/fetch-tools.sh                                        # macOS / Linux
 
-# 2. run it
-python run.py                                                      # → http://localhost:4301
+# Run the studio
+python run.py                                                      # -> http://localhost:4300
 ```
 
-Open <http://localhost:4301>. The first screen asks for a key — paste a free Groq key
-([console.groq.com/keys](https://console.groq.com/keys)) into the **API keys** card and press
-**Test & save**. Then: **Studio** → paste a link or drop a file → **Edit my video**.
-
-No key handy? The **Demo** button generates a test video so you can watch the whole pipeline work.
-
-### Screenshots
-
-| Studio | Clips podium |
-|---|---|
-| ![Studio](docs/shots/screen_studio.png) | ![Clips](docs/shots/screen_clips.png) |
-
-| Candidates | Transcript |
-|---|---|
-| ![Candidates](docs/shots/screen_candidates.png) | ![Transcript](docs/shots/screen_transcript.png) |
-
-![Connect](docs/shots/screen_connect.png)
+Paste your free Groq key ([console.groq.com/keys](https://console.groq.com/keys)) into the **API keys** card, drop a video or paste a YouTube URL, and press **Edit my video**. No keys? Press **Demo video** for a generated end-to-end test run.
 
 ---
 
-## The ProX v5 pipeline
+## Project Layout
 
 ```
-video ─▶ audio ─▶ Whisper word-level transcription (auto-chunked for long videos)
-              ─▶ acoustic laughter detection
-              ─▶ PEAK MOMENT mining (audio roar + camera-cut density + drama heat)
-    ┌─────────┴──────────────────────────────────────────────┐
-    │ 1. STORY PASS    the episode is segmented into         │
-    │                  self-contained stories                │
-    │ 2. DRAFT PASS    the tightest 15-60s cut is drafted    │
-    │                  INSIDE each story, full context       │
-    │ 3. EDGE RULES    snap to sentences · no filler starts  │
-    │                  · end on punctuation · ride the laugh │
-    │ 4. JUDGE PASS    the exact final clip is judged:       │
-    │                  does it stand alone? abrupt edges?    │
-    │                  → one repair redraw, then demotion    │
-    │ 5. SCORE v2      the judge's ratings of that exact cut │
-    │                  + measured laughter/energy/pacing     │
-    └─────────┬──────────────────────────────────────────────┘
-              └─▶ render 9:16 (blur-pad) + captions + metadata + post
+studio/                 # Flagship ClipBlitz Studio (port 4300) — both engines, phone-ready
+  run.py                # Studio server entry point
+  START.bat             # One-click Windows launcher (silent Python install)
+  start.sh              # macOS / Linux / Termux launcher
+  clipblitz/            # Unified engine (pipeline, virality, cinema, hardware, server)
+  web/                  # Obsidian Keynote UI (monochrome glass, PWA manifest, self-hosted fonts)
+  android/              # Android WebView companion app source
+  SETUP.md              # Complete guide for fresh PCs, phones, and Termux
+clipblitz/              # Classic ClipBlitz v3.5 (ProX v5 engine only, port 4301)
+b2prox/                 # Classic B2 Pro X (Cinematic engine only, port 4302)
+docs/shots/             # Unaltered, real screenshots of every screen
+BEGINNER-GUIDE.md       # Zero-terminal guide for non-developers
+SETUP-YOUTUBE.md        # YouTube Data API v3 OAuth walkthrough
 ```
 
-Every clip card carries its **factor bars** (Hook / Story / Payoff / Energy / Pacing / Event /
-Laugh) and the **judge's verdict line** — the score follows the content, nothing is invented.
-Clips that do not fully pass are labelled **unverified** rather than dressed up.
-
-The podium also enforces *shape*: one cut per story, picks spread across the timeline, and no two
-clips with near-identical titles.
-
 ---
 
-## The screens
+## Technology
 
-- **Studio** — YouTube URL or dropped file, caption-style gallery with a live 9:16 preview,
-  framing, recent jobs, processing timeline.
-- **Clips** — the podium: rank badges, score dials, verified/unverified QC badges, hook quote,
-  judge verdict, factor bars, metadata editor, post buttons.
-- **Candidates** — every runner-up with its measured score, filters (All / Verified / Peak events),
-  one-click render.
-- **Transcript** — timestamped blocks with peak highlights, waveform timeline with markers,
-  drag-to-cut window, Export .SRT.
-- **Connect** — API keys in the UI (Groq / Gemini / YouTube with live tests), YouTube auto-post
-  wizard with a readiness checklist and Diagnose, assisted platform cards, post queue.
+- **Backend:** Pure Python 3 standard library `ThreadingHTTPServer`. Zero pip packages required to run from source.
+- **Frontend:** Pure HTML5, CSS3, vanilla JavaScript. Zero build steps, zero npm, zero external CDNs.
+- **Typography:** Self-hosted `Inter`, `JetBrains Mono`, and `Space Grotesk` woff2 fonts.
+- **Video:** Bundled `ffmpeg 9.0.1` and `yt-dlp`. Blur-pad 9:16 framing, ASS word-pop subtitle animations.
+- **AI Dual-Brain:** Groq (`openai/gpt-oss-120b` or `llama-3.3-70b`) as primary brain + Google Gemini (`gemini-2.0-flash`) as automatic failover.
 
 ---
-
-## Keys live in the app, not in a file
-
-Every key is managed on the **Connect** screen: paste it, press **Test & save**, and ClipBlitz calls
-the provider live to confirm it works before storing it. Keys hot-reload — no restart, ever.
-`.env.example` documents the optional knobs (port, data folder, model overrides).
-
-**Dual brain:** Groq is the primary; add a free Gemini key and throttled calls fail over
-automatically. Retired models self-heal — if a provider renames a model, ClipBlitz picks up the
-successor from the error and retries.
-
----
-
-## Social posting
-
-- **YouTube — automatic** once you complete the one-time OAuth setup (the Connect screen walks you
-  through it with deep links into each Google Cloud page, a copy-ready redirect URI, and a live
-  five-step diagnostic). Free quota ≈ 6 uploads/day. See [SETUP-YOUTUBE.md](SETUP-YOUTUBE.md).
-- **TikTok / Instagram / Facebook / X — assisted**: the caption package is copied to your clipboard
-  and the upload page opens.
-
----
-
-## Zero-framework core
-
-Pure Python standard library on the server (no FastAPI/Flask), bundled ffmpeg + yt-dlp, the Whisper
-API for transcription, and a hand-written HTML/CSS/JS front end with self-hosted fonts (no CDN, no
-animation library, no build step). A `Dockerfile` is included.
-
----
-
-## Docs
-
-- **[BEGINNER-GUIDE.md](BEGINNER-GUIDE.md)** — zero-knowledge install and walkthrough (start here)
-- [SETUP-YOUTUBE.md](SETUP-YOUTUBE.md) — the OAuth wizard, click by click, with error fixes
-- [FIXED.md](FIXED.md) — the honest changelog: every bug found and what it does now
-- [.env.example](.env.example) — every setting documented
-
-## Development checks
-
-```bash
-python scripts/smoke.py        # offline end-to-end: demo video → stories → cut → captions
-python scripts/e2e_check.py    # live end-to-end against a running server
-python scripts/route_check.py  # every HTTP route answers as expected
-python scripts/ui_check.py     # static front-end sweep (dangling refs, banned patterns)
-```
 
 ## License
 
-See the repository for licensing. Clips you make are yours; respect the rights of the videos you
-process.
+MIT License. Free to use, modify, and self-host for personal and commercial projects.

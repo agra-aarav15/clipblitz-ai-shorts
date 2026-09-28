@@ -172,11 +172,13 @@ jobs:
         working-directory: studio/android-standalone
         run: gradle --no-daemon assembleDebug
 
-      - name: Verify the APK carries CPython, the engine and the studio UI
-        working-directory: studio/android-standalone
-        run: python verify_apk.py app/build/outputs/apk/debug/app-debug.apk
-
+      # Uploaded before it is verified on purpose: if verification fails, the artifact of
+      # the thing that failed is exactly what someone needs to look at.
       - uses: actions/upload-artifact@v4
         with:
           name: ClipBlitzStandalone-debug
           path: studio/android-standalone/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Verify the APK carries CPython, the engine and the studio UI
+        working-directory: studio/android-standalone
+        run: python verify_apk.py app/build/outputs/apk/debug/app-debug.apk

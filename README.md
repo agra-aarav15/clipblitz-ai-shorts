@@ -62,6 +62,41 @@ With **v4.0.0**, you get both flagship engines in a single interface with side-b
 
 ---
 
+## Rights Guardrails — post what you have the right to post
+
+ClipBlitz makes the safe path the easy path and makes a risky post loud. It never touches
+content matching: there is no pitch shift, speed change, mirror or fingerprint trick anywhere in
+the code, because those are circumvention — Content ID finds unlicensed re-uploads anyway, and
+trying to dodge it is what gets channels terminated.
+
+- **One-time rights gate.** Before the first automatic upload from a job, the Clips screen asks
+  whether the material is your own, licensed, or a transformative fair-use edit, with an honest
+  note on each. The answer is stored on the job and shown on it. Auto-post waits for it; the clip
+  file is never withheld, so posting by hand stays the owner's call.
+- **Source awareness.** A job started from a YouTube link records the uploader channel and video
+  id (from the yt-dlp metadata the download already fetched) and shows them on every clip card,
+  flagging the clip when that is not the channel you connected for posting.
+- **Transformative-edit badge.** Rendered clips list the layers the render actually applied —
+  captions burned into the picture, vertical reframing, the film grade, the J-cut — as one line,
+  so a fair-use claim is anchored to something real and verifiable.
+
+Clipping **your own** long videos is always safe and is the primary use case. Other people's
+material needs a licence or genuine fair use. Full text: **Copyright and strikes** in
+[studio/SETUP.md](studio/SETUP.md).
+
+## A learning loop that stays on your machine
+
+Every choice on a finished clip — posted, re-rendered from the Candidate Lab, hand-cut on the
+Transcript timeline — is logged to a local `data/learning.json`. From **10 choices** on, the
+ranking weights drift toward the endings, hooks and clip lengths this owner keeps, capped at
+**10% per factor** and fully deterministic. Below the threshold nothing moves, so a fresh install
+ranks exactly like the shipped engine. The Connect screen shows the real counts, shares and
+median behind the profile, with a Reset button. No cloud, no external service, no extra scope on
+the YouTube OAuth consent (`youtube.upload` cannot read Analytics, so view/retention feedback is
+intentionally not pulled rather than silently widening what the app is allowed to do).
+
+---
+
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)

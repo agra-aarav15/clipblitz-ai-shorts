@@ -76,6 +76,24 @@ If anything is off, press **Diagnose**: it prints a five-step chain (keys presen
 registered → consent completed → token works → upload quota) and tells you exactly which step is
 missing and how to fix it.
 
+## Copyright and strikes — before you auto-post
+
+The scope this guide sets up is `youtube.upload`: ClipBlitz can add videos to your channel and
+nothing else. It cannot read your Analytics, and it will not silently widen its permissions to
+do so — if view or retention feedback is ever wanted, that is a new scope and a new decision.
+
+- **Your own long videos are always safe to clip.** Upload a stream, podcast or vlog you made
+  and cut shorts out of it; that is the primary use case and there is nothing to clear.
+- **Someone else's material needs a licence or genuine fair use.** Otherwise the rights holder
+  gave you permission, or the clip is a transformative use (real commentary, reaction,
+  criticism, teaching) published for that purpose. A thin edit is not a transformation.
+- **Content ID finds unlicensed re-uploads regardless of edits.** Mirroring, pitch-shifting,
+  speed changes or filters do not hide a match, and trying to evade matching is what gets
+  channels terminated. ClipBlitz does none of that and never will.
+- **The studio asks once per job** — your own content, licensed, or transformative fair use —
+  before the first automatic upload, and stores your answer on the job. The clip file is never
+  withheld, so posting by hand stays your call.
+
 ## Notes
 
 - **Quota:** the free tier allows roughly **6 uploads/day** (YouTube's default 10,000 units ÷ 1,600

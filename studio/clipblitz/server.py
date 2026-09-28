@@ -30,7 +30,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import captions, ffmpeg_tools, hardware, pipeline, social, virality
+from . import captions, ffmpeg_tools, hardware, learning, pipeline, social, virality
 from .config import CONFIG, ffmpeg_available, stt_mode, ytdlp_available
 
 from .config import app_root
@@ -134,6 +134,9 @@ class Handler(BaseHTTPRequestHandler):
                 "ai_picker": bool(brains()), "top_n": CONFIG["top_n"],
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,
                 "brains": [b["name"] for b in brains()],
+                # the rights gate's options come from the server so the UI copy can
+                # never drift from what the backend actually stores
+                "rights": pipeline.RIGHTS, "rights_note": pipeline.RIGHTS_NOTE,
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
@@ -144,8 +147,11 @@ class Handler(BaseHTTPRequestHandler):
                 "stage": j.get("stage"), "progress": j.get("progress"),
                 "clips": len(j.get("clips", [])), "created": j.get("created"),
                 "engine": j.get("engine_id", "b2"),
+                "rights_ok": j.get("rights_ok"),
                 "top_score": max([c.get("score", 0) for c in j.get("clips", [])], default=0),
             } for j in jobs[:20]])
+        if path == "/api/learning":
+            return self._json(200, learning.profile())
         if path == "/api/keys":
             from . import keys
             return self._json(200, keys.status())
@@ -207,7 +213,15 @@ class Handler(BaseHTTPRequestHandler):
 
         media = re.fullmatch(r"/media/([\w.-]+)", path)
         if media:
-            return self._serve_file_stream(os.path.join(CONFIG["data_dir"], "uploads", media.group(1)))
+            # uploads first, then the data dir itself — the generated demo source lives
+            # there, and the Transcript player needs it like any other source video.
+            # [\w.-]+ cannot contain '/' or '..', so both lookups are traversal-safe.
+            name = media.group(1)
+            for base in (os.path.join(CONFIG["data_dir"], "uploads"), CONFIG["data_dir"]):
+                cand = os.path.join(base, name)
+                if os.path.isfile(cand):
+                    return self._serve_file_stream(cand)
+            return self._json(404, {"error": "not found"})
 
         clip = re.fullmatch(r"/clips/([\w.-]+)", path)
         if clip:
@@ -273,6 +287,12 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._json(400, {"error": "bad json"})
             return self._custom(body)
+        if path == "/api/learning/reset":
+            learning.reset()
+            return self._json(200, learning.profile())
+        rights_m = re.fullmatch(r"/api/job/(\w+)/rights", path)
+        if rights_m:
+            return self._rights(rights_m.group(1))
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -350,7 +370,8 @@ class Handler(BaseHTTPRequestHandler):
         job_id = pipeline.new_job("demo_source.mp4", style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], demo=True, framing=o["framing"],
-                                  top_n=o["top_n"], engine=o["engine"])
+                                  top_n=o["top_n"], engine=o["engine"],
+                                  source={"kind": "demo", "label": "generated demo clip"})
         pipeline.start(job_id, demo)
         self._json(200, {"job_id": job_id})
 
@@ -366,7 +387,8 @@ class Handler(BaseHTTPRequestHandler):
         job_id = pipeline.new_job(name, style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], framing=o["framing"],
-                                  top_n=o["top_n"], engine=o["engine"])
+                                  top_n=o["top_n"], engine=o["engine"],
+                                  source={"kind": "url", "url": url})
         pipeline.start_from_url(job_id, url)
         return self._json(200, {"job_id": job_id})
 
@@ -400,7 +422,8 @@ class Handler(BaseHTTPRequestHandler):
         job_id = pipeline.new_job(name, style=o["style"], position=o["position"],
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], framing=o["framing"],
-                                  top_n=o["top_n"], engine=o["engine"])
+                                  top_n=o["top_n"], engine=o["engine"],
+                                  source={"kind": "upload", "label": name})
         pipeline.start(job_id, dest)
         self._json(200, {"job_id": job_id, "bytes": length})
 
@@ -423,10 +446,35 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": err})
         return self._json(200, {"clip": clip})
 
+    def _rights(self, job_id):
+        """The rights gate: record the owner's answer for this job, then resume the
+        auto-post the job was holding if it was waiting on exactly this."""
+        job_ = pipeline.JOBS.get(job_id)
+        if not job_:
+            return self._json(404, {"error": "unknown job"})
+        length = self._safe_length()
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            return self._json(400, {"error": "bad json"})
+        answer = (body.get("answer") or "").strip()
+        if not pipeline.set_rights(job_, answer):
+            return self._json(400, {"error": "answer must be one of: "
+                                           + ", ".join(sorted(pipeline.RIGHTS_IDS))})
+        resumed = pipeline.resume_autopost(job_id)
+        return self._json(200, {"rights_ok": answer, "autopost_resumed": resumed})
+
     def _post_clip(self, body):
         job_ = pipeline.JOBS.get(body.get("job_id", ""))
         if not job_:
             return self._json(404, {"error": "unknown job"})
+        if not job_.get("rights_ok"):
+            # One honest question before anything leaves this machine. Answering it is a
+            # single click; the clip file itself is never withheld, so posting it by hand
+            # stays entirely the owner's call.
+            return self._json(409, {"error": "Confirm your rights for this job first.",
+                                    "rights_required": True,
+                                    "rights": pipeline.RIGHTS, "note": pipeline.RIGHTS_NOTE})
         try:
             index = int(body.get("index", 0))
             platforms = body.get("platforms") or []
@@ -435,6 +483,7 @@ class Handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             return self._json(400, {"error": "bad index"})
         social.post_clip(job_, index, platforms, on_update=pipeline.save)
+        learning.log("post", job_["clips"][index], job_)   # a real choice, worth learning from
         return self._json(200, {"queued": platforms})
 
     # ---------- PATCH ----------

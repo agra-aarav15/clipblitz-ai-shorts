@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 
-from . import captions, cinema, ffmpeg_tools, hardware, social, stt, virality
+from . import captions, cinema, ffmpeg_tools, hardware, learning, social, stt, virality
 from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
@@ -29,6 +29,26 @@ ENGINES = {
     "both": {"id": "both", "name": "Both engines",
              "note": "one analysis pass, both cuts side by side"},
 }
+
+# The rights gate. Consent plus information — never detection evasion. The owner
+# answers once per job, before the first upload goes out; the answer is stored on the
+# job. Nothing here fingerprints, pitches, speeds, mirrors or otherwise tries to
+# trick a platform's content matching, and nothing ever will.
+RIGHTS = [
+    {"id": "own", "label": "It is my own content",
+     "note": "You filmed it, or you own the footage and the audio. Clipping your own "
+             "long videos into shorts is the primary use case and is always safe."},
+    {"id": "licensed", "label": "I have a licence or written permission",
+     "note": "The rights holder gave you permission to cut and publish this material. "
+             "Keep the agreement where you can find it."},
+    {"id": "fair_use", "label": "It is a transformative fair-use edit",
+     "note": "You added genuine commentary, reaction, criticism or teaching and you "
+             "publish for that purpose. That is a judgement call, and it is yours."},
+]
+RIGHTS_IDS = {r["id"] for r in RIGHTS}
+RIGHTS_NOTE = ("YouTube's Content ID finds unlicensed re-uploads no matter how they are "
+               "edited. This studio confirms your rights; it does not and will not try "
+               "to evade content matching.")
 
 
 def _engine_fields(engine):
@@ -51,6 +71,9 @@ def _load_jobs():
                 j["error"] = "Interrupted by a server restart."
             j.setdefault("engine_id", "b2")
             j.setdefault("engine", ENGINES["b2"]["name"])
+            j.setdefault("rights_ok", None)
+            j.setdefault("rights_pending", False)
+            j.setdefault("source", {"kind": "upload", "label": j.get("name") or ""})
             JOBS[j["id"]] = j
     except (OSError, ValueError):
         pass
@@ -71,7 +94,7 @@ _load_jobs()
 
 
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
-            demo=False, framing="blur", top_n=None, engine=None):
+            demo=False, framing="blur", top_n=None, engine=None, source=None):
     engine = engine if engine in ENGINES else CONFIG.get("engine_default", "b2")
     if engine not in ENGINES:
         engine = "b2"
@@ -87,10 +110,45 @@ def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False
         "top_n": int(top_n) if top_n else CONFIG["top_n"],
         "engine_id": engine,
         "engine": ENGINES[engine]["name"],
+        # rights gate: None until the owner answers once on the Clips screen
+        "rights_ok": None, "rights_pending": False,
+        "source": dict(source or {"kind": "upload", "label": name}),
     }
     JOBS[job_id].update(_engine_fields("b2" if engine == "both" else engine))
     save()
     return job_id
+
+
+def set_rights(job, answer):
+    """Store the owner's answer to the rights gate on the job (and log no choice:
+    answering the gate is not a taste signal about the cut)."""
+    if answer not in RIGHTS_IDS:
+        return False
+    job["rights_ok"] = answer
+    job["rights_at"] = time.time()
+    save()
+    return True
+
+
+def resume_autopost(job_id):
+    """Run the auto-post a job was holding back for the rights gate. Runs in a
+    background thread - a real upload blocks for a while."""
+    job_ = JOBS.get(job_id)
+    if not job_ or not job_.get("rights_pending") or not job_.get("rights_ok"):
+        return False
+
+    def runner():
+        targets = (["youtube"] if social.youtube_connected() else []) + ["tiktok"]
+        job_["rights_pending"] = False
+        for i in range(len(job_["clips"])):
+            _set(job_, stage=f"auto-posting clip {i + 1}/{len(job_['clips'])} -> {', '.join(targets)}")
+            social.post_clip(job_, i, targets, on_update=save, wait=True)
+            from . import learning
+            learning.log("post", job_["clips"][i], job_)
+        _set(job_, stage="done", progress=100)
+
+    threading.Thread(target=runner, daemon=True).start()
+    return True
 
 
 def _variant(job, engine):
@@ -174,6 +232,20 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         captions.build_ass(words, (m["start"], m["end"]),
                            job["style"], job["size_scale"], job["position"], ass_path)
         ass_name = base + ".ass"  # relative → ffmpeg runs with cwd=clips_dir (path-safe)
+    # The transformative-edit layers this render actually applied. Every entry is a real
+    # step taken by this render - captions burned into the pixels, a vertical reframe,
+    # the film grade, the J-cut - so the badge on the card is a fact, not a claim about
+    # the law. (Whether a use is fair is the owner's call, made on the rights gate.)
+    layers = []
+    if ass_name:
+        layers.append("captions burned into the picture")
+    layers.append("vertical reframing" + (" with a blur pad" if job.get("framing", "blur") == "blur"
+                                          else " to centre crop"))
+    if fields["cinematic_grade"]:
+        layers.append("film grade (S-curve + vignette)")
+    if fields["audio_lead"]:
+        layers.append("J-cut (the sound leads the picture)")
+
     note = ffmpeg_tools.cut_clip(src_path, m["start"], m["end"],
                                  os.path.join(clips_dir, base + ".mp4"), ass_name,
                                  cwd=clips_dir, framing=job.get("framing", "blur"),
@@ -202,6 +274,8 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "style": job["style"],
         "rank": m.get("rank"),
         "custom": bool(m.get("custom")),
+        "transformative": layers,
+        "laugh_ending": bool(m.get("laugh_ending")),
         "meta": m.get("meta", {}),
         "post": {},
     }
@@ -278,9 +352,10 @@ def process(job_id, src_path):
         for i, m in enumerate(moments):
             m["meta"] = meta.get(i, {})
 
-        # both: two variants per moment from ONE analysis pass - the ProX cut uses the
-        # pre-cinema bounds, the B2 cut uses the cinema-snapped bounds; titles, judge
-        # verdicts and scores are shared (the judge ran once, on the shared analysis).
+        # both: two variants per moment from ONE analysis pass - the ProX cut is the same
+        # edit without the cinema layer (raw_start/raw_end = the pre-cinema window carrying
+        # the full non-cinema polish), the B2 cut uses the cinema-snapped bounds; titles,
+        # judge verdicts and scores are shared (the judge ran once, on the shared analysis).
         variants = []                      # (moment_index, moment, engine_id, start, end)
         for mi, m in enumerate(moments, start=1):
             if eng in ("prox", "both"):
@@ -304,13 +379,21 @@ def process(job_id, src_path):
         _set(job_, status="done", stage=f"top {len(job_['clips'])} clips ready", progress=96)
 
         if job_["auto_post"] and job_["clips"]:
-            platforms = ["youtube"] if social.youtube_connected() else []
-            assisted = ["tiktok"]  # assisted package is always prepared for TikTok
-            targets = platforms + assisted
-            for i in range(len(job_["clips"])):
-                _set(job_, status="running", progress=97,
-                     stage=f"auto-posting clip {i + 1}/{len(job_['clips'])} → {', '.join(targets)}")
-                social.post_clip(job_, i, targets, on_update=save, wait=True)
+            if not job_.get("rights_ok"):
+                # The rights gate. Consent + information, never a bypass: we stop before
+                # the first automatic upload and put the question on the Clips screen.
+                # Answering it resumes this exact post from resume_autopost().
+                _set(job_, rights_pending=True,
+                     stage="auto-post paused — confirm your rights on the Clips screen")
+            else:
+                platforms = ["youtube"] if social.youtube_connected() else []
+                assisted = ["tiktok"]  # assisted package is always prepared for TikTok
+                targets = platforms + assisted
+                for i in range(len(job_["clips"])):
+                    _set(job_, status="running", progress=97,
+                         stage=f"auto-posting clip {i + 1}/{len(job_['clips'])} → {', '.join(targets)}")
+                    social.post_clip(job_, i, targets, on_update=save, wait=True)
+                    learning.log("post", job_["clips"][i], job_)
 
         # QC re-check: if the judge was rate-limited during the run, cool down and retry
         # — verdicts/scores refresh without re-rendering (windows never change here).
@@ -365,6 +448,7 @@ def render_candidate(job_id, cand_index, style=None, position=None, size_scale=N
     clip["rank"] = len(job_["clips"]) + 1
     job_["clips"].append(clip)
     save()
+    learning.log("render", clip, job_)
     return clip, None
 
 
@@ -404,6 +488,7 @@ def render_custom(job_id, start, end, style=None, engine=None):
     clip["rank"] = len(job_["clips"]) + 1
     job_["clips"].append(clip)
     save()
+    learning.log("custom", clip, job_)
     return clip, None
 
 
@@ -437,6 +522,18 @@ def start_from_url(job_id, url):
             src = ingest.download(url, os.path.join(CONFIG["data_dir"], "uploads"))
             JOBS[job_id]["src"] = src
             JOBS[job_id]["src_name"] = os.path.basename(src)
+            # source awareness: keep the uploader/video id yt-dlp already reported, so
+            # the clip card can name the real source and flag a channel that is not the
+            # one connected for posting (a reminder to check your rights, not a verdict)
+            info = ingest.info_for(src)
+            JOBS[job_id]["source"] = {
+                "kind": "youtube" if info.get("id") else "url",
+                "url": url,
+                "video_id": info.get("id") or "",
+                "uploader": info.get("uploader") or info.get("channel") or "",
+                "channel": info.get("channel") or "",
+                "title": info.get("title") or "",
+            }
             base = os.path.splitext(os.path.basename(src))[0]
             pretty = re.sub(r"^yt_[A-Za-z0-9_-]+_\d+_", "", base)  # strip yt_<id>_<ts>_ prefix
             if len(pretty) > 3 and re.fullmatch(r"[A-Za-z0-9_-]{11}", JOBS[job_id].get("name") or ""):

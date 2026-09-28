@@ -76,6 +76,31 @@ leave the machine except to their own provider during a test call.
 
 ---
 
+## Copyright and strikes — read this once
+
+Clipping is only safe when you have the right to publish what you cut.
+
+- **Your own long videos are always safe.** That is the primary use case: point the studio
+  at a stream, podcast or vlog you made and it cuts shorts out of it. Nothing to clear.
+- **Someone else's material needs a licence or genuine fair use.** If it is not yours, either
+  the rights holder gave you permission, or your clip is a transformative use — real
+  commentary, reaction, criticism or teaching, published for that purpose. A thin edit is not
+  a transformation.
+- **Content ID finds unlicensed re-uploads no matter how they are edited.** Mirroring,
+  pitch-shifting, speed changes or filters do not hide a match, and trying to evade matching
+  is what gets channels terminated. This studio deliberately does none of that and never will.
+- **The studio asks once per job.** Before the first automatic upload it asks whether the
+  material is your own, licensed, or a transformative fair-use edit, and stores your answer on
+  the job. The clip file is never withheld, so posting it by hand stays entirely your call.
+- **You can see where a clip came from.** A job started from a YouTube link shows the uploader
+  channel and video id on every clip card, and flags it when that is not the channel you
+  connected for posting.
+
+This is information and consent, not a detector. The studio cannot tell you whether a use is
+fair, and it will not pretend that it can.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |

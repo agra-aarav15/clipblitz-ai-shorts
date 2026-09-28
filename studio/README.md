@@ -42,6 +42,28 @@ fonts are served locally, and your API keys live only in this machine's `.env`.
   experience has no hardware tension. Running the engine *on* an Android phone is supported
   via Termux (`bash start.sh`) and the same hardware check applies there.
 
+## Rights, on purpose
+
+Before the first automatic upload from a job, the Clips screen asks the one question that
+actually matters: is this your own content, licensed, or a transformative fair-use edit? Your
+answer is stored on the job and the post waits for it. The clip file is never withheld, so
+posting by hand stays the owner's call. A job started from a YouTube link also shows the
+uploader channel and video id on every clip card and flags it when that is not the channel you
+connected.
+
+There is deliberately no evasion here: no pitch shift, speed change, mirror or fingerprint
+trick. Content ID finds unlicensed re-uploads anyway, and hiding from it is what gets channels
+terminated. See the **Copyright and strikes** section in [SETUP.md](SETUP.md).
+
+## What I've learned (local, honest)
+
+Every clip you post, re-render from the Candidate Lab or hand-cut on the Transcript screen is
+one logged choice. From **10 choices** on, the ranking weights drift toward what you actually
+keep — laugh endings, question hooks, your clip-length band — by at most **10% per factor**.
+Below that threshold nothing moves, so a fresh install ranks exactly like the shipped engine.
+The Connect screen shows the real counts, shares and median behind it, with a Reset button.
+The store is a local `data/learning.json`; nothing is uploaded and there is no cloud training.
+
 ![Connect screen with the phone and machine cards](docs/shots/04-connect.png)
 
 ## The two engines, technically
@@ -85,6 +107,14 @@ curl http://localhost:4300/api/lan         # the phone address
 
 Or press **Demo video** in the Studio — a generated test video runs the full pipeline
 (transcribe, mine, judge, render) with whichever engine you selected.
+
+The engine split and the learning loop have their own offline test scripts (stdlib only, no
+network, no ffmpeg):
+
+```
+python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouched, both honest
+python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
+```
 
 ## License
 

@@ -6,6 +6,7 @@ Same video URLs are cached by video id — re-running a link never re-downloads 
 
 import glob
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -47,6 +48,25 @@ def _direct(url, dest_dir):
     return dest
 
 
+def info_for(video_path):
+    """The yt-dlp metadata sidecar for a downloaded video ({} when there is none).
+
+    yt-dlp already fetched this during the download - we only ask it to write the
+    info JSON next to the file, so source awareness costs no extra network call.
+    """
+    if not video_path:
+        return {}
+    side = os.path.splitext(video_path)[0] + ".info.json"
+    try:
+        data = json.load(open(side, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: data.get(k) for k in ("id", "title", "uploader", "channel",
+                                     "uploader_id", "webpage_url", "duration")}
+
+
 def _existing_cached(dest_dir, tag):
     """A finished, readable download for this video from an earlier attempt?"""
     for hit in glob.glob(os.path.join(dest_dir, f"{tag}_*.*")):
@@ -75,7 +95,7 @@ def _ytdlp(url, dest_dir):
     last_err = None
     for extra in attempts:
         cmd = [ytdlp(), "--no-playlist", "--no-warnings", "-f", "bv*+ba/b",
-               "--merge-output-format", "mp4", "-o", tpl]
+               "--merge-output-format", "mp4", "--write-info-json", "-o", tpl]
         if ffdir:
             cmd += ["--ffmpeg-location", ffdir]
         cmd += extra

@@ -34,6 +34,9 @@ let WF = [];                       /* measured RMS profile, 0..1 per bucket */
 let MOMENTS = [];                  /* engine-mined peak regions */
 let HEALTH = null;                 /* /api/health cache: engines[], default_engine, hardware */
 let ENGINE = localStorage.getItem('cb.engine') || '';   /* per-job engine choice */
+let RIGHTS = [];                   /* rights-gate options, served by /api/health */
+let RIGHTS_NOTE = '';              /* the honest Content ID line, same source */
+let SOCIAL = {};                   /* /api/social/status cache (connected channel) */
 let lastFrac = 0;                  /* playhead position, 0..1, for repaints */
 let lastFailToast = 0;
 let autoJumped = false;            /* the podium walk happens at most once per job */
@@ -52,7 +55,7 @@ function showScreen(name, fromClick) {
   });
   $('jobtitle').textContent = TITLES[name] || 'ClipBlitz';
   revealCards(name);
-  if (name === 'connect') { refreshSocial(); renderQueue(); }
+  if (name === 'connect') { refreshSocial(); renderQueue(); loadLearning(); }
   if (name === 'studio') loadRecent();
 }
 
@@ -106,7 +109,12 @@ function showError(msg) { $('error').innerHTML = `<div class="error">${esc(msg)}
 async function post(url, body) {
   const res = await fetch(url, { method: 'POST', body: body || '{}' });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.status);
+  if (!res.ok) {
+    const err = new Error(data.error || res.status);
+    err.status = res.status;
+    err.data = data;                  /* the rights gate is a 409 with its own payload */
+    throw err;
+  }
   return data;
 }
 
@@ -131,6 +139,10 @@ fetch('/api/health').then(r => r.json()).then(h => {
     : IC('warn') + ' offline mode';
   live.className = 'chip' + (h.ai_picker ? ' ok' : ' err');
   HEALTH = h;
+  RIGHTS = h.rights || [];
+  RIGHTS_NOTE = h.rights_note || '';
+  renderRightsOptions();
+  renderRightsGate(fullJobCache);   /* the Content ID line arrives with health, not with the job */
   initEngine(h);
   applyHardware(h.hardware);
   fillMachineCard(h.hardware);
@@ -472,6 +484,7 @@ async function poll() {
 
   $('skeletons').hidden = !(job.status !== 'done' && !(job.clips || []).length);
   renderClipsSurgical(job);
+  renderRightsGate(job);
 
   if (job.status === 'done' || job.status === 'error') {
     clearInterval(pollTimer);
@@ -494,6 +507,7 @@ async function loadFull() {
   try {
     const job = await (await fetch(`/api/job/${currentJob}`)).json();
     fullJobCache = job;
+    renderRightsGate(job);
     WF = Array.isArray(job.waveform) ? job.waveform : [];
     MOMENTS = Array.isArray(job.moments) ? job.moments : [];
     wfDur = job.duration || 0;
@@ -597,6 +611,84 @@ function qcBadge(c) {
   return '';
 }
 
+/* ============================ rights gate ============================
+   Consent plus information, asked once per job, before the first upload leaves this
+   machine. It is not a detector and it is not an evasion tool: it records what the
+   owner says about their own rights. The clip file is never withheld, so posting it
+   by hand stays entirely the owner's call. */
+function renderRightsOptions() {
+  const box = $('rightsopts');
+  if (!box) return;
+  box.innerHTML = RIGHTS.map(r =>
+    `<button class="optbtn" data-right="${esc(r.id)}" type="button">
+       <span class="optname">${esc(r.label)}</span>
+       <span class="optnote">${esc(r.note)}</span>
+     </button>`).join('');
+  box.querySelectorAll('[data-right]').forEach(b =>
+    b.addEventListener('click', () => answerRights(b.dataset.right)));
+}
+
+function showRightsGate(job, why) {
+  const bar = $('rightsbar');
+  if (!bar) return;
+  const state = why || (job && job.rights_pending
+    ? 'Auto-post on this job is paused until you answer.'
+    : 'Posting waits for this answer. The clip file is yours either way.');
+  $('rightsnote').textContent = RIGHTS_NOTE ? RIGHTS_NOTE + ' ' + state : state;
+  if (bar.hidden) {
+    bar.hidden = false;
+    bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function renderRightsGate(job) {
+  const bar = $('rightsbar');
+  if (!bar) return;
+  const need = !!job && !job.rights_ok && ((job.clips || []).length > 0);
+  if (!need) { bar.hidden = true; return; }
+  showRightsGate(job);
+}
+
+async function answerRights(answer) {
+  if (!currentJob) return toast('run a job first', true);
+  try {
+    const res = await post(`/api/job/${currentJob}/rights`, JSON.stringify({ answer }));
+    toast(res.autopost_resumed
+      ? 'rights confirmed — auto-post is running'
+      : 'rights confirmed for this job');
+    $('rightsbar').hidden = true;
+    if (fullJobCache) fullJobCache.rights_ok = res.rights_ok;
+    jobFullFetched = false;
+    poll();
+  } catch (e) { toast(String(e.message || e), true); }
+}
+
+/* ---- source awareness + the transformative-edit badge ---------------------- */
+function sourceLine(job) {
+  const s = (job && job.source) || {};
+  if (s.kind !== 'youtube') return '';
+  const who = s.uploader || s.channel || 'unknown channel';
+  const connected = SOCIAL.channel || '';
+  const mine = connected && who.toLowerCase().includes(String(connected).toLowerCase());
+  const flag = !mine;
+  return `<div class="srcline${flag ? ' warn' : ''}">
+    ${IC(flag ? 'warn' : 'check')}
+    <span>source: <b>${esc(who)}</b>${s.video_id ? ` · video ${esc(s.video_id)}` : ''}</span>
+    ${flag ? `<span class="srcflag">${connected
+        ? `not your connected channel (${esc(connected)}) — make sure you have the rights`
+        : 'no channel connected to compare against — make sure you have the rights'}</span>` : ''}
+  </div>`;
+}
+
+function xLine(c) {
+  const layers = c.transformative || [];
+  if (!layers.length) return '';
+  return `<div class="xline">
+    <span class="xbadge">transformative edit</span>
+    <span class="xnote">what this render changed: ${esc(layers.join(' · '))}</span>
+  </div>`;
+}
+
 function clipCardHTML(job, c, i) {
   const styleOpts = STYLES.map(s =>
     `<option value="${esc(s.id)}" ${s.id === (c.style || job.style) ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
@@ -622,6 +714,8 @@ function clipCardHTML(job, c, i) {
       <span>${c.duration}s · from ${fmt(c.start)}${c.custom ? ' · custom cut' : ''}</span>
       ${c.note ? `<span class="dim">${esc(c.note)}</span>` : ''}
     </div>
+    ${sourceLine(job)}
+    ${xLine(c)}
     <div class="metabox">
       <div class="metahead">Title</div>
       <input type="text" data-f="t-${i}" value="${esc(c.meta?.title || '')}" spellcheck="false" />
@@ -762,7 +856,18 @@ async function sendPost(jobId, platform, clipIndex) {
     clearInterval(pollTimer);
     pollTimer = setInterval(poll, 1500);
     poll();
-  } catch (e) { toast(String(e.message || e), true); }
+  } catch (e) {
+    if (e.data && e.data.rights_required) {
+      if (Array.isArray(e.data.rights) && e.data.rights.length) {
+        RIGHTS = e.data.rights;
+        RIGHTS_NOTE = e.data.note || RIGHTS_NOTE;
+        renderRightsOptions();
+      }
+      showRightsGate(fullJobCache, 'Posting waits for this answer.');
+      return;
+    }
+    toast(String(e.message || e), true);
+  }
 }
 
 /* ============================ candidates ============================ */
@@ -1062,6 +1167,8 @@ async function refreshSocial() {
       (await fetch('/api/social/youtube/diagnose')).json(),
     ]);
     const yt = s.youtube || {};
+    SOCIAL = yt;                       /* the connected channel, for the source check */
+    renderRightsGate(fullJobCache);
     const configured = yt.configured && !!health.youtube_ready;
     $('yt-redirect').textContent = `${location.origin}/oauth/youtube/callback`;
     renderDiag(diag);
@@ -1120,6 +1227,49 @@ $('yt-gcreds').addEventListener('click', () => window.open('https://console.clou
 $('yt-gredirect').addEventListener('click', () => window.open('https://console.cloud.google.com/apis/credentials/consent', '_blank'));
 $('tt-test').addEventListener('click', () => window.open('https://www.tiktok.com/upload', '_blank'));
 $('ig-test').addEventListener('click', () => window.open('https://www.instagram.com/', '_blank'));
+
+$('learn-reset').addEventListener('click', async () => {
+  try {
+    renderLearning(await post('/api/learning/reset', '{}'));
+    toast('learning reset — the ranking is back on the base weights');
+  } catch (e) { toast(String(e.message || e), true); }
+});
+
+/* ============================ learning loop ============================
+   Every number on this card is a count, a share or a median of the owner's own
+   logged choices. Nothing is estimated, and below 10 choices nothing at all is
+   nudged — the ranking is byte-for-byte the base weights. */
+async function loadLearning() {
+  try { renderLearning(await (await fetch('/api/learning')).json()); }
+  catch (e) { /* best effort — never block the screen */ }
+}
+
+function renderLearning(L) {
+  const chip = $('learn-chip');
+  if (!chip || !L) return;
+  const stats = $('learn-stats'), note = $('learn-note');
+  const n = L.events || 0;
+  const min = L.min_events || 10;
+  chip.textContent = L.active ? `${n} choices logged` : `${n} of ${min} choices`;
+  chip.className = 'chip' + (L.active ? ' ok' : '');
+  const kept = Object.entries(L.engines || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
+  stats.innerHTML = [
+    `<span class="chip">${IC('check')} laugh endings ${L.laugh_ending.count}/${n}</span>`,
+    `<span class="chip">${IC('bulb')} question hooks ${L.question_hook.count}/${n}</span>`,
+    `<span class="chip">${IC('clock')} median ${L.median_length}s</span>`,
+    kept ? `<span class="chip">${IC('film')} kept: ${esc(kept)}</span>` : '',
+  ].join('');
+  const bar = $('learn-bar');
+  bar.hidden = !n;
+  if (n) $('learn-fill').style.width = Math.min(100, Math.round((n / min) * 100)) + '%';
+  const moves = Object.entries(L.weights || {})
+    .map(([k, v]) => `${k} ${v > 1 ? '+' : ''}${Math.round((v - 1) * 100)}%`);
+  note.textContent = !n
+    ? 'No choices logged yet — post, re-render or hand-cut a clip and this fills in from the real decisions.'
+    : (L.active
+      ? `Active: ranking nudged toward ${moves.length ? moves.join(', ') : 'no single feature yet'} — capped at 10% per factor.`
+      : `${L.remaining} more logged choice${L.remaining === 1 ? '' : 's'} before the weights start moving. The ranking is untouched until then.`);
+}
 
 function renderQueue() {
   const rows = [];
@@ -1257,3 +1407,4 @@ if (wantedJob) {
 }
 loadKeyStates();
 loadLan();
+loadLearning();

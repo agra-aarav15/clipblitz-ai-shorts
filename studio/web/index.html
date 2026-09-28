@@ -232,6 +232,17 @@
         <div class="dim">Run a video in the Studio — the podium lands here with judge verdicts and scores.</div>
         <button class="btn ghost small" data-goto="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg> Back to Studio</button>
       </div>
+      <div class="rightsbar glass" id="rightsbar" hidden>
+        <div class="rightshead">
+          <svg class="ic" aria-hidden="true"><use href="#i-scales"/></svg>
+          <div>
+            <div class="rightstitle">Rights check — asked once per job</div>
+            <div class="rightsq">Is this your own content, licensed, or transformative fair use?</div>
+          </div>
+        </div>
+        <div class="rightsopts" id="rightsopts"></div>
+        <div class="rightsnote" id="rightsnote"></div>
+      </div>
       <div class="podium" id="clips"></div>
     </section>
 
@@ -421,6 +432,20 @@
           <p class="pdesc">Measured on the machine running the studio — nothing simulated. If this
           device can't render, the studio tells you before any job starts.</p>
           <div class="platstatus" id="hw-stats">—</div>
+        </div>
+
+        <div class="glass platcard">
+          <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg></div>
+          <h3>What I've learned <span class="chip" id="learn-chip">counting…</span></h3>
+          <p class="pdesc">Every clip you post, re-render or hand-cut is one logged choice. From
+          <b>10 choices</b> on, the ranking weights drift toward what you actually keep —
+          never more than <b>10% per factor</b>. Local file, no cloud, reversible.</p>
+          <div class="platstatus" id="learn-stats">—</div>
+          <div class="learnbar" id="learn-bar" hidden><i id="learn-fill"></i></div>
+          <div class="row">
+            <button class="btn ghost small" id="learn-reset" type="button"><svg class="ic" aria-hidden="true"><use href="#i-repeat"/></svg> Reset what I've learned</button>
+          </div>
+          <p class="note" id="learn-note">No choices logged yet.</p>
         </div>
 
         <div class="glass platcard">

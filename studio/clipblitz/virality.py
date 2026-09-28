@@ -131,7 +131,22 @@ def mine_moments(segments, duration, energy, laughs, scenes=None, want=12):
 
 
 def _weights(content_type):
-    return WEIGHT_PROFILES.get((content_type or "").lower(), WEIGHTS)
+    """The content-type profile, nudged by the owner's own logged choices.
+
+    learning.adjustment() returns {} until enough real choices exist, so this is a
+    silent no-op on a fresh install. When it does return multipliers they are capped
+    at +/-10% per factor and applied deterministically - the ranking gets biased
+    toward the endings, hooks and lengths this owner actually keeps.
+    """
+    base = dict(WEIGHT_PROFILES.get((content_type or "").lower(), WEIGHTS))
+    try:
+        from . import learning
+        adj = learning.adjustment()
+    except Exception:
+        adj = {}
+    if not adj:
+        return base
+    return {k: v * adj.get(k, 1.0) for k, v in base.items()}
 
 
 def has_brain():
@@ -760,6 +775,39 @@ def rejudge(clips, segments, content_type):
     return verified
 
 
+def _prox_window(c, segments, duration, laughs, energy, moments):
+    """The ProX variant's window for one candidate.
+
+    ProX v5 is this engine with the cinema layer OFF, so its variant is the PRE-CINEMA
+    window carrying exactly the same DETERMINISTIC non-cinema polish the B2 window gets:
+    sentence-edge snapping, riding the laugh out, and the post-roll that completes a
+    reaction. It lives in its own dict on purpose — the B2 window's factors, scores and
+    podium must not move by one byte.
+    """
+    # The pre-cinema window is already snapped by the shared edge pass, and snap() is not
+    # idempotent on a truncated tail - re-snapping here could move the cut away from the
+    # window the judge scored. So the ProX track starts exactly where the B2 track would
+    # have started with the cinema layer off.
+    w = {"start": c["raw_start"], "end": c["raw_end"], "measured": {}}
+    extend_through_laughter([w], laughs, duration, segments)
+    measure([w], segments, energy, laughs, moments)
+    return w
+
+
+def _shift_window(w, d_start, d_end, segments, duration, laughs):
+    """Apply the judge-repair shift to the ProX window, then re-run the edge rules.
+
+    The redraw is one editorial decision taken on the shared analysis; the ProX variant
+    gets the same decision from its own (non-cinema) timing instead of being left behind.
+    """
+    if w is None:
+        return
+    w["start"] = round(max(0.0, w["start"] + d_start), 2)
+    w["end"] = round(min(duration, w["end"] + d_end), 2)
+    snap(w, segments, duration)
+    extend_through_laughter([w], laughs, duration, segments)
+
+
 def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
          cinema_marks=None, motion=None):
     """Full ProX v5 pass. Returns (final_moments, all_candidates, picker, content_type)."""
@@ -803,6 +851,12 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     for c in cands:                      # pre-cinema bounds (ProX variant / comparison)
         if isinstance(c, dict):
             c["raw_start"], c["raw_end"] = c["start"], c["end"]
+    # The ProX variant rides a separate window through every non-cinema pass below, so
+    # "ProX v5" stays the same edit as the B2 cut minus the cinema timing: it never loses
+    # laugh-extension or the post-roll, and it is never a window the judge did not score.
+    prox_track = [(c, _prox_window(c, segments, duration, laughs, energy, moments))
+                  for c in cands if isinstance(c, dict)]
+    prox_of = {id(c): w for c, w in prox_track}
 
     if cinema_marks:
         from . import cinema as _cin
@@ -839,15 +893,22 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
                 dead_ending = bool(j.get("ends_abrupt")) or _score10(j.get("payoff")) < 6
                 complaint = j.get("verdict") or (
                     "starts mid-thought" if j.get("starts_abrupt") else "ends before the payoff")
+                pw = prox_of.get(id(c))
                 # ending failures get the deterministic fix first: ride the next laugh out
                 if dead_ending:
                     extend_through_laughter([c], laughs, duration, segments, max_ext=20.0)
                     measure(c, segments, energy, laughs, moments)
+                    if pw is not None:      # same deterministic fix on the ProX window
+                        extend_through_laughter([pw], laughs, duration, segments, max_ext=20.0)
+                        measure([pw], segments, energy, laughs, moments)
                 if judge_fail(j) or not dead_ending:
+                    before = (c["start"], c["end"])
                     if repair_cut(c, complaint, segments, duration):
                         snap(c, segments, duration)
                         extend_through_laughter([c], laughs, duration, segments)
                         measure(c, segments, energy, laughs, moments)
+                        _shift_window(pw, c["start"] - before[0], c["end"] - before[1],
+                                      segments, duration, laughs)
         try:  # re-judge (windows may have moved)
             judgements = judge_cuts(top_pool, segments)
         except Exception:
@@ -855,6 +916,10 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
 
         # reaction post-roll: weak-tail clips get the laughter that follows their cut,
         # so endings feel complete (the middle-reel fix). Then everything is re-scored.
+        for c in top_pool:                 # mirror the post-roll onto the ProX windows
+            pw = prox_of.get(id(c))
+            if pw is not None:
+                reaction_post_roll([pw], laughs, duration, segments)
         if reaction_post_roll(top_pool, laughs, duration, segments):
             try:
                 judgements = judge_cuts(top_pool, segments)
@@ -949,6 +1014,10 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
         if not _ends_well(c):
             c["qc"] = c.get("qc") or "unverified"
             c["reason"] = (c.get("reason") or "") + " — best available; the ending doesn't fully land."
+    # publish the ProX variant's final bounds: the pipeline renders its prox cut from these
+    for c, w in prox_track:
+        if w is not None:
+            c["raw_start"], c["raw_end"] = w["start"], w["end"]
     return picked, top_pool[:10], picker, content_type
 
 

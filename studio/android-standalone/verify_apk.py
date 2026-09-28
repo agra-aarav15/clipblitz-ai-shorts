@@ -66,7 +66,12 @@ def chunks(buf, start, end):
 
 
 def read_manifest(buf):
-    """Return [(element name, [(attr name, dataType, dataValue)])] from binary XML."""
+    """Return (elements, string pool) from binary XML.
+
+    elements is [(element name, [(attr name, dataType, dataValue)])]. Note that a string
+    attribute's dataValue is an index into the pool, not the string: an unresolved index
+    reads like "27", which is exactly the kind of thing worth getting right once.
+    """
     strings, elements = [], []
     for off, typ, _hsz, _size in chunks(buf, 8, len(buf)):
         if typ == 0x0001:
@@ -81,7 +86,15 @@ def read_manifest(buf):
                 attrs.append((strings[aname], vtype, vdata))
                 a += asize
             elements.append((strings[name], attrs))
-    return elements
+    return elements, strings
+
+
+def attr_string(attrs, pool, wanted):
+    """The text of a string attribute (dataType 0x03), resolved through the pool."""
+    for key, vtype, vdata in attrs:
+        if key == wanted and vtype == 0x03 and 0 <= vdata < len(pool):
+            return pool[vdata]
+    return None
 
 
 def resolve_resource(arsc, rid):
@@ -171,17 +184,16 @@ def main(argv):
 
     # 3. the manifest, parsed rather than scanned
     manifest = apk.read("AndroidManifest.xml")
-    elements = read_manifest(manifest)
+    elements, pool = read_manifest(manifest)
     app = [a for n, a in elements if n == "application"]
-    print("\nbinary manifest: %d elements" % len(elements))
+    print("\nbinary manifest: %d elements, %d pooled strings" % (len(elements), len(pool)))
     if not app:
         problems.append("no <application> in the manifest")
     else:
         app_attrs = {k: (t, v) for k, t, v in app[0]}
-        declared = next((v for k, (t, v) in app_attrs.items()
-                         if k == "name" and t == 0x03), None)
-        label_pool = None
-        print("  application name: %s" % declared)
+        declared = attr_string(app[0], pool, "name")
+        print("  application name : %s" % declared)
+        print("  application label: %s" % attr_string(app[0], pool, "label"))
         if declared != PY_APPLICATION:
             problems.append("the manifest does not start Python at app launch "
                             "(application name is %r, expected %r)" % (declared, PY_APPLICATION))
@@ -199,10 +211,12 @@ def main(argv):
                 problems.append("the manifest declares no launcher icon")
         except KeyError:
             problems.append("no resources.arsc to resolve the icon through")
-    activities = [n for n, _a in elements if n == "activity"]
+    activities = [attr_string(a, pool, "name") or "?" for n, a in elements if n == "activity"]
     print("  activities: %s" % activities)
     if not activities:
         problems.append("the manifest declares no activity")
+    elif not any(a.endswith("MainActivity") for a in activities):
+        problems.append("no MainActivity among the activities: %s" % activities)
 
     # 4. hygiene: nothing private inside the APK
     leaks = [n for n in names

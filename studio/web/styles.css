@@ -226,9 +226,13 @@ textarea { resize: vertical; }
   display: flex; flex-direction: column; gap: 20px;
   position: sticky; top: 16px; height: calc(100vh - 32px);
 }
-.logo { display: flex; align-items: center; gap: 10px; padding: 2px 8px; }
-.logo .mark { width: 30px; height: 30px; filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.22)); }
-.wordmark { font-family: var(--font-wordmark); font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+/* The lockup has to read as one line inside a 224px sidebar: mark 26px, gap 8px, and a
+   wordmark sized to fit the rest. It used to wrap to "ClipBlitz" / "Studio", which is not
+   a lockup, it is a mistake that looks deliberate. */
+.logo { display: flex; align-items: center; gap: 8px; padding: 2px 2px; }
+.logo .mark { width: 26px; height: 26px; flex: none; filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.22)); }
+.wordmark { font-family: var(--font-wordmark); font-size: 20px; font-weight: 700; letter-spacing: -0.025em;
+  white-space: nowrap;
   background: linear-gradient(135deg, #ffffff 0%, #d9d9de 55%, #a8a8ae 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent; }
 

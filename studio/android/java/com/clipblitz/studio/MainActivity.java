@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
 
         final EditText input = new EditText(this);
         input.setHint("http://192.168.x.x:4300");
-        input.setInputType(EditorInfo.TYPE_TEXT_URI);
+        input.setInputType(EditorInfo.TYPE_TEXT_VARIATION_URI);
         input.setTextColor(Color.WHITE);
         input.setSingleLine(true);
 

@@ -347,7 +347,10 @@ textarea { resize: vertical; }
 .stylecard .sdesc { font-size: 10px; color: var(--text-3); margin-top: 3px; line-height: 1.4; }
 
 /* processing */
-.jobbox { margin-top: 22px; }
+/* There used to be a `.jobbox { margin-top: 22px }` here, left over from when the
+   processing card used this class. The class now belongs to the topbar lockup, so the
+   rule did nothing for processing and instead pushed the header lockup 22px below the
+   status chips on every screen. Deleted rather than re-scoped: nothing carries it. */
 .jobhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
 .jobhead b { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; }
 .stage { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
@@ -743,6 +746,13 @@ textarea { resize: vertical; }
   .snavbtn span { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.02em; }
   .snavbtn .ic { width: 18px; height: 18px; }
   .sstatus { display: none; }
+  /* A phone row has about 350px to hold the mark, the screen name and the status chips.
+     The chips are fixed-width furniture ("done · 100%" plus "AI ready · v4.0.0" is ~287px),
+     so on the Clips screen they squeezed the name down to its first letter — a one-letter
+     heading, which is not a heading. Let the chips take their own line when they do not
+     fit, and keep the name intact. Screens with a single chip still fit on one row. */
+  .topbar { flex-wrap: wrap; }
+  .topchips { flex: 1 1 auto; justify-content: flex-end; row-gap: 6px; }
   .main { padding: 0 14px calc(96px + env(safe-area-inset-bottom)); }
   .display { font-size: 40px; line-height: 44px; }
   .podium, .labgrid, .skeletons { grid-template-columns: 1fr; }

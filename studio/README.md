@@ -100,6 +100,12 @@ SETUP.md          fresh PC, phone, Termux, YouTube OAuth
 Ports on this machine: Studio **4300**, classic ClipBlitz 4301, B2 Pro X 4302 (they can run
 side by side; each is self-contained).
 
+## The other two screens
+
+![Candidate lab — every runner-up, measured and judged](docs/shots/07-lab.png)
+
+![Transcript timeline — waveform, markers, and the window you cut](docs/shots/08-transcript.png)
+
 ## Verify it yourself
 
 Health, capability and LAN endpoints (the server is stdlib `ThreadingHTTPServer`):

@@ -176,6 +176,14 @@ The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `e
 API (one writer for `data/jobs.json`); if not, the identical pipeline runs in-process. There is
 no publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.
 
+The ready-to-run Windows release carries `plugin/` next to the EXE, and the EXE is the same
+entry point, so no Python is needed for the agent path either:
+
+```
+ClipBlitzStudio.exe --mcp      # the MCP server on stdio, exactly like the python one
+ClipBlitzStudio.exe --tools    # the tool schemas as JSON
+```
+
 ## License
 
 MIT.

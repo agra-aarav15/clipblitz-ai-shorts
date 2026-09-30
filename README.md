@@ -161,6 +161,10 @@ for `data/jobs.json`; if nothing is listening, the identical pipeline runs in-pr
 the agent feeds the same local learning store you train by hand. There is no publish tool: editing
 is the plugin's job, and publishing stays a human decision made in front of the rights gate.
 
+The ready-to-run Windows release carries `studio/plugin/` next to the EXE, and the EXE is the
+same entry point, so the agent path needs no Python installed either: `ClipBlitzStudio.exe --mcp`
+serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prints the schemas.
+
 ---
 
 ## Quickstart

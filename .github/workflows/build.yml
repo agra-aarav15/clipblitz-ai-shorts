@@ -35,6 +35,15 @@ jobs:
         working-directory: studio
         run: python scripts/make_icons.py --check
 
+      # The release is verified by the same suites a developer runs: engine fidelity,
+      # the learning layers, and the agent/MCP surface. Offline and stdlib only.
+      - name: Run the offline test suites
+        working-directory: studio
+        run: |
+          python scripts/test_engines.py
+          python scripts/test_learning.py
+          python scripts/test_agent.py
+
       - name: Build the EXE
         working-directory: studio
         run: pyinstaller --noconfirm --clean --name ClipBlitzStudio --onedir --icon assets/ClipBlitzStudio.ico run.py
@@ -46,6 +55,10 @@ jobs:
           Copy-Item -Recurse -Force studio/web "$target/web"
           Copy-Item -Recurse -Force studio/bin  "$target/bin"
           Copy-Item -Recurse -Force studio/assets "$target/assets"
+          # The agent plugin rides along: this folder's EXE answers the same MCP server
+          # (ClipBlitzStudio.exe --mcp), so a machine with no Python still has the
+          # "hand it a video, get clips back" front door.
+          Copy-Item -Recurse -Force studio/plugin "$target/plugin"
           Copy-Item -Force studio/README.md, studio/SETUP.md "$target/"
           # the .ico is also copied next to the EXE so a desktop shortcut and the
           # Start menu entry can borrow the same icon the executable carries.
@@ -60,6 +73,24 @@ jobs:
           if (-not $h.hardware.render_capable) { throw 'bundled ffmpeg not found' }
           Write-Host "health ok: $($h.name) $($h.version) ffmpeg=$($h.ffmpeg)"
           Stop-Process -Id $p.Id -Force
+
+      - name: Smoke-test the agent front door in the EXE
+        shell: pwsh
+        run: |
+          $exe = "studio/dist/ClipBlitzStudio/ClipBlitzStudio.exe"
+          $tools = (& $exe --tools | Out-String) | ConvertFrom-Json
+          if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) {
+            throw 'the packaged EXE does not list its agent tools'
+          }
+          $ask = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
+          $reply = ($ask | & $exe --mcp) -join "`n"
+          if (-not $reply.Contains('clipblitz-studio')) {
+            throw 'the packaged EXE does not answer MCP on stdio'
+          }
+          if (-not (Test-Path 'studio/dist/ClipBlitzStudio/plugin/.claude-plugin/plugin.json')) {
+            throw 'the agent plugin folder is missing from the distribution'
+          }
+          Write-Host "agent front door ok: $($tools.Count) tools, MCP answers, plugin folder present"
 
       - name: Upload to the release
         env:

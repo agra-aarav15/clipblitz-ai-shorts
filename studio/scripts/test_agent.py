@@ -21,6 +21,9 @@ What is proven:
   4. BOTH ENGINES CAN LEARN SEPARATELY. Past its own threshold an engine's kept cuts
      pull that engine's weights away from the shared profile, by at most 5%, and the
      global cap of 10% still holds.
+  5. ONE ENTRY POINT REACHES THE AGENT. run.py --tools and run.py --mcp are the same
+     doors as python -m clipblitz.agent, and the studio banner never lands on stdout
+     where the JSON belongs - which is what lets the packaged EXE serve the plugin.
 """
 
 import contextlib
@@ -178,6 +181,43 @@ def test_cli():
     check("cli: the clip count is clamped and the engine falls back to a real one",
           captured.get("clips") == agent.MAX_CLIPS and captured.get("engine") == "b2",
           str(captured))
+
+
+def test_run_entry_point():
+    """run.py is the only entry point, and the packaged Windows EXE is run.py itself. So
+    the agent front door has to be reachable there, and the studio banner must never
+    reach stdout in that mode: an agent host is parsing stdout as JSON."""
+    import subprocess
+
+    def run(*args, stdin=""):
+        return subprocess.run(
+            [sys.executable, os.path.join(STUDIO, "run.py"), *args],
+            input=stdin, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", cwd=STUDIO, timeout=180,
+            env=dict(os.environ, CB_DATA=CONFIG["data_dir"]))
+
+    res = run("--tools")
+    tools = json.loads(res.stdout)
+    check("entry: run.py --tools prints the tool schemas and exits clean",
+          res.returncode == 0 and {t["name"] for t in tools} == {t["name"] for t in agent.TOOLS},
+          f"rc={res.returncode}")
+    check("entry: the studio banner never leaks into the agent modes",
+          "Starting ClipBlitz Studio" not in res.stdout
+          and res.stdout.lstrip().startswith("[") and "Starting" not in res.stderr,
+          res.stdout[:40])
+
+    init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                       "params": {"protocolVersion": agent.MCP_PROTOCOL}})
+    res = run("--mcp", stdin=init + "\n")
+    lines = [ln for ln in res.stdout.splitlines() if ln.strip()]
+    reply = json.loads(lines[0]) if lines else {}
+    check("entry: run.py --mcp answers initialize over real stdio",
+          res.returncode == 0 and len(lines) == 1
+          and reply.get("result", {}).get("serverInfo", {}).get("name") == "clipblitz-studio",
+          f"{len(lines)} line(s), rc={res.returncode}")
+    plain = run("tools")
+    check("entry: the same doors work spelled without the dashes",
+          plain.returncode == 0 and "cut_clips" in plain.stdout, f"rc={plain.returncode}")
 
 
 # --------------------------------------------------------- 3. copyright safety
@@ -452,6 +492,7 @@ def main():
     test_tool_calls_are_data_not_crashes()
     test_stdio_framing()
     test_cli()
+    test_run_entry_point()
     test_risk_report()
     test_missing_transcript_never_invents_a_flag()
     test_licence_record()

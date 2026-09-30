@@ -97,6 +97,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload v4.1.0 ClipBlitzStudio-4.1.0-windows.zip --clobber -R $env:GITHUB_REPOSITORY
 
+      # Everything above tested the folder before it was zipped. This step tests what a
+      # user actually downloads: the published asset, unpacked and executed from scratch.
+      - name: Verify the published bundle as a user would
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v4.1.0 --pattern ClipBlitzStudio-4.1.0-windows.zip --dir published --clobber -R $env:GITHUB_REPOSITORY
+          $built = (Get-FileHash ClipBlitzStudio-4.1.0-windows.zip -Algorithm SHA256).Hash.ToLower()
+          $published = (Get-FileHash published/ClipBlitzStudio-4.1.0-windows.zip -Algorithm SHA256).Hash.ToLower()
+          if ($built -ne $published) { throw "the stored asset is not the built one ($published vs $built)" }
+          Expand-Archive published/ClipBlitzStudio-4.1.0-windows.zip -DestinationPath published/app
+          $root = 'published/app/ClipBlitzStudio'
+          if (-not (Test-Path "$root/plugin/.claude-plugin/plugin.json")) { throw 'the published zip lost the plugin folder' }
+          if (-not (Test-Path "$root/plugin/.mcp.windows.json")) { throw 'the published zip lost the Windows MCP config' }
+          $plugin = @(Get-ChildItem -Recurse -File -Force "$root/plugin").Count
+          if ($plugin -ne 7) { throw "the published zip carries $plugin plugin files, not 7" }
+          $tools = (& "$root/ClipBlitzStudio.exe" --tools | Out-String) | ConvertFrom-Json
+          if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) { throw 'the published EXE cannot list its agent tools' }
+          $ask = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
+          $reply = ($ask | & "$root/ClipBlitzStudio.exe" --mcp) -join "`n"
+          if (-not $reply.Contains('clipblitz-studio')) { throw 'the published EXE cannot serve MCP on stdio' }
+          Write-Host "published bundle verified: digest matches, 7 plugin files, $($tools.Count) tools, MCP answers"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ClipBlitzStudio-4.1.0-windows

@@ -213,3 +213,30 @@ jobs:
       - name: Verify the APK carries CPython, the engine and the studio UI
         working-directory: studio/android-standalone
         run: python verify_apk.py app/build/outputs/apk/debug/app-debug.apk
+
+  # Runs last, and hashes what is actually stored on the release rather than what any
+  # build job produced - the source .zip is assembled by hand on the build machine, and
+  # the APK is signed with a fresh key every run, so a checksums file can only be true if
+  # it is regenerated after every upload. Verified with:  sha256sum -c checksums.txt
+  checksums:
+    name: Release checksums
+    needs: [exe, apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download every published asset and write checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p assets
+          gh release download v4.1.0 --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+          rm -f assets/checksums.txt          # never hash a previous checksums file
+          cd assets && sha256sum * > ../checksums.txt && cd ..
+          cat checksums.txt
+          grep -q "ClipBlitzStudio-4.1.0-windows.zip" checksums.txt
+          grep -q "ClipBlitzStudio.apk" checksums.txt
+
+      - name: Upload checksums.txt to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v4.1.0 checksums.txt --clobber -R "$GITHUB_REPOSITORY"

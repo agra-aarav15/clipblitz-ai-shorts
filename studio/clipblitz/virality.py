@@ -130,18 +130,23 @@ def mine_moments(segments, duration, energy, laughs, scenes=None, want=12):
     return moments
 
 
-def _weights(content_type):
+def _weights(content_type, engine=None):
     """The content-type profile, nudged by the owner's own logged choices.
 
     learning.adjustment() returns {} until enough real choices exist, so this is a
     silent no-op on a fresh install. When it does return multipliers they are capped
     at +/-10% per factor and applied deterministically - the ranking gets biased
-    toward the endings, hooks and lengths this owner actually keeps.
+    toward the endings, hooks and lengths this owner actually keeps, and toward the
+    factors their kept cuts measure above the candidates they were offered.
+
+    engine ("prox"|"b2"|None) adds that engine's own refinement once that engine has
+    its own choices; None is the shared/global profile, which is what a
+    both-engines run uses (one analysis pass must stay one ranking).
     """
     base = dict(WEIGHT_PROFILES.get((content_type or "").lower(), WEIGHTS))
     try:
         from . import learning
-        adj = learning.adjustment()
+        adj = learning.adjustment(engine)
     except Exception:
         adj = {}
     if not adj:
@@ -717,13 +722,13 @@ def _verdict_reason(j, c):
     return f"{bits[0].capitalize()}{(', ' + bits[1]) if len(bits) > 1 else ''} — {dur:.0f}s"
 
 
-def score_v2(cand, j, content_type):
+def score_v2(cand, j, content_type, engine=None):
     """Score from the judge's ratings of the exact cut + measured factors.
     Payoff (the ending) dominates — the owner's taste, learned from real renders.
     A dead ending also caps the whole score: nothing random survives at the top.
     The event factor keeps a cut that contains the video's peak moment ranked even
     when the commentary transcript is sparse (races, gaming, vlogs)."""
-    w = _weights(content_type)
+    w = _weights(content_type, engine)
     factors = {
         "hook": max(0.0, min(1.0, _score10(j.get("hook")) / 10.0)),
         "story": max(0.0, min(1.0, _score10(j.get("coherence")) / 10.0)),
@@ -809,8 +814,14 @@ def _shift_window(w, d_start, d_end, segments, duration, laughs):
 
 
 def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
-         cinema_marks=None, motion=None):
-    """Full ProX v5 pass. Returns (final_moments, all_candidates, picker, content_type)."""
+         cinema_marks=None, motion=None, engine=None):
+    """Full ProX v5 pass. Returns (final_moments, all_candidates, picker, content_type).
+
+    engine is the engine this run will render ("prox"/"b2" for a single-engine job,
+    None for a both-engines run) and only selects which learned weight profile to
+    score with - with an empty learning store every profile is the base one, so the
+    ranking is byte-identical to the pre-learning engine.
+    """
     from .brains import brains  # live check: a key pasted mid-session works without restart
     ai_ok = bool(brains())
     content_type, picker = "other", "prox-offline"
@@ -929,13 +940,13 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
             if not isinstance(c, dict):
                 continue
             j = judgements.get(i) or dict(_OFFLINE_J, verdict="judge unavailable — measured factors only")
-            score_v2(c, j, content_type)
+            score_v2(c, j, content_type, engine)
         top_pool = [c for c in top_pool if isinstance(c, dict)]
         top_pool.sort(key=lambda c: -c["score"])
     else:
         top_pool = [c for c in top_pool if isinstance(c, dict)]
         for c in top_pool:
-            score_v2(c, _OFFLINE_J, content_type)
+            score_v2(c, _OFFLINE_J, content_type, engine)
         top_pool.sort(key=lambda c: -c["score"])
 
     # final pick: the ENDING GATE decides the podium. Only cuts whose ending actually

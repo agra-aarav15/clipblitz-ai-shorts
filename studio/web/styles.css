@@ -703,6 +703,45 @@ textarea { resize: vertical; }
 .optnote { color: var(--text-2); font-size: 12.5px; line-height: 1.6; }
 .rightsnote { margin-top: 14px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
 
+/* ============================ copyright safety ============================
+   The measured side of the rights gate: what can honestly be said about this job
+   before it goes anywhere, the licence record, and the edit receipt. Same panel
+   language as the gate above it, and just as un-closeable: it is information, not
+   a hurdle. */
+.safetybar { border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
+  border-color: var(--line); }
+.safetyhead { display: flex; gap: 12px; align-items: flex-start; }
+.safetyhead .ic { width: 20px; height: 20px; color: var(--text-2); margin-top: 2px; flex: none; }
+.safetytext { flex: 1 1 auto; min-width: 0; }
+.safetytitle { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-3); }
+.safetysub { font-family: var(--font-display); font-size: 17px; font-weight: 600;
+  margin-top: 4px; letter-spacing: -0.01em; }
+.safelev { flex: none; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 6px 10px; border-radius: var(--pill);
+  border: 1px solid var(--line-strong); color: var(--text-2); white-space: nowrap; }
+.safelev.low { color: var(--text); }
+.safelev.review { color: var(--err); }
+.safelev.high { color: var(--void); background: var(--err); border-color: var(--err); }
+.safeflags { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.safeflag { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px;
+  line-height: 1.6; color: var(--text-2); }
+.safeflag .ic { width: 14px; height: 14px; flex: none; margin-top: 3px; color: var(--err); }
+.safeflag.audio, .safeflag.source, .safeflag.licence, .safeflag.rights { color: var(--text); }
+.safetyrow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.licform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  margin-top: 16px; align-items: end; }
+.licfield { display: flex; flex-direction: column; gap: 6px; }
+.licfield span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-3); }
+.licfield input, .licfield select { font: inherit; font-size: 13.5px; color: var(--text);
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 10px 12px; width: 100%; }
+.licfield select { appearance: none; }
+.licfield input::placeholder { color: var(--text-3); }
+.licform .btn { grid-column: 1 / -1; justify-self: start; }
+.safetynote { margin-top: 14px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+
 /* ---- source awareness + transformative-edit badge on a clip card ---------- */
 .srcline, .xline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   margin-top: 10px; font-size: 12px; color: var(--text-2); }
@@ -758,6 +797,10 @@ textarea { resize: vertical; }
   .podium, .labgrid, .skeletons { grid-template-columns: 1fr; }
   .cmpcards { grid-template-columns: 1fr; }
   .rightsopts { grid-template-columns: 1fr; }
+  /* the safety head is a row of three things (icon, text, level chip): on a phone the
+     chip takes its own line rather than squeezing the level text into an ellipsis */
+  .safetyhead { flex-wrap: wrap; }
+  .licform { grid-template-columns: 1fr; }
   .stylegrid { grid-template-columns: repeat(3, 1fr); }
   .hero .display { max-width: none; }
   .engine-seg { width: 100%; }

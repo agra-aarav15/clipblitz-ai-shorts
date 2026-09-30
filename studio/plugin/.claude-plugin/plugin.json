@@ -1,0 +1,11 @@
+{
+  "name": "clipblitz-studio",
+  "version": "4.1.0",
+  "description": "Cut vertical shorts out of a long video with ClipBlitz Studio's own engines, directly from an agent.",
+  "author": {
+    "name": "ClipBlitz Studio"
+  },
+  "homepage": "https://github.com/agra-aarav15/clipblitz-ai-shorts",
+  "license": "MIT",
+  "keywords": ["video", "shorts", "clips", "editing", "ffmpeg"]
+}

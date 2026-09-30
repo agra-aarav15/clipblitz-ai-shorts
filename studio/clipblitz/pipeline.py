@@ -12,7 +12,8 @@ import threading
 import time
 import uuid
 
-from . import captions, cinema, ffmpeg_tools, hardware, learning, social, stt, virality
+from . import (captions, cinema, ffmpeg_tools, hardware, learning, rights, social, stt,
+               virality)
 from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
@@ -73,6 +74,8 @@ def _load_jobs():
             j.setdefault("engine", ENGINES["b2"]["name"])
             j.setdefault("rights_ok", None)
             j.setdefault("rights_pending", False)
+            j.setdefault("licence", None)
+            j.setdefault("receipt", None)
             j.setdefault("source", {"kind": "upload", "label": j.get("name") or ""})
             JOBS[j["id"]] = j
     except (OSError, ValueError):
@@ -112,6 +115,8 @@ def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False
         "engine": ENGINES[engine]["name"],
         # rights gate: None until the owner answers once on the Clips screen
         "rights_ok": None, "rights_pending": False,
+        # copyright safety: the licence record and the written edit receipt
+        "licence": None, "receipt": None,
         "source": dict(source or {"kind": "upload", "label": name}),
     }
     JOBS[job_id].update(_engine_fields("b2" if engine == "both" else engine))
@@ -332,10 +337,14 @@ def process(job_id, src_path):
              stage=f"transcribed via {mode} ({len(segments)} blocks)", progress=40)
 
         _set(job_, stage=f"{ENGINES[eng]['name']}: mining + measuring candidates", progress=52)
+        # engine selects which learned weight profile scores this run. "both" passes
+        # None on purpose: one analysis pass has exactly one ranking, and the two cuts
+        # are two renders of it.
         moments, candidates, picker, content_type = virality.rank(
             segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
             energy=energy, laughs=laughs, scenes=scenes,
-            cinema_marks=cinema_marks, motion=motion)
+            cinema_marks=cinema_marks, motion=motion,
+            engine=eng if eng in ("prox", "b2") else None)
         _set(job_, mode=f"{mode}+{picker}", content_type=content_type, picker=picker,
              engine=ENGINES[eng]["name"], engine_id=eng,
              shots=len(cinema_marks) if cinema_marks else 0,
@@ -408,6 +417,15 @@ def process(job_id, src_path):
             except Exception:
                 pass
 
+        # copyright safety: write the edit receipt now that the clips exist. No source
+        # hash here - a receipt is written on every job, and hashing a long video would
+        # cost real time; the on-demand receipt (API/CLI) hashes both source and renders.
+        try:
+            path = rights.write_receipt(job_, hash_source=False)
+            if path:
+                _set(job_, receipt=path)
+        except Exception:
+            pass
         _set(job_, status="done", stage="done", progress=100)
     except Exception as e:
         import traceback

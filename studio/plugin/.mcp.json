@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "clipblitz": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/clipblitz-mcp.py"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}

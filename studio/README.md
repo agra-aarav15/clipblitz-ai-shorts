@@ -26,7 +26,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v4.0.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v4.1.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -59,14 +59,46 @@ There is deliberately no evasion here: no pitch shift, speed change, mirror or f
 trick. Content ID finds unlicensed re-uploads anyway, and hiding from it is what gets channels
 terminated. See the **Copyright and strikes** section in [SETUP.md](SETUP.md).
 
+## Copyright safety, measured
+
+`GET /api/job/<id>/risk` returns what can honestly be measured about a job before it goes
+anywhere: sustained non-speech audio outside your transcript (the shape of a music bed, theme
+or intro sting, with its timestamps), a source downloaded from somewhere you may not own (with
+the uploader yt-dlp reported), a missing or expired licence, an unanswered rights gate, and any
+clip that carries fewer transformative layers than the rest of the set. Every flag is a
+measurement taken from data the pipeline already produced, and none of it is a legal verdict.
+
+`POST /api/job/<id>/licence` stores the licence record next to your rights answer — who granted
+it, a reference, an expiry date — because a claim is argued with paperwork, not memory.
+
+`GET /api/job/<id>/receipt` writes the edit receipt: the exact window of every cut, the engine
+that rendered it, the transformative work that render actually applied (burned-in captions, the
+reframe, the grade, the J-cut), and sha256 hashes of the source and each output file.
+
+What none of it does is make somebody else's video uncopyrighted. A content-matching system
+matches the work itself, so no crop, caption or re-encode removes the match, and this studio
+will not ship a button that pretends otherwise.
+
+![The Clips screen with the copyright-safety panel: level, measured flags, licence record and edit receipt](docs/shots/02-clips.png)
+
 ## What I've learned (local, honest)
 
 Every clip you post, re-render from the Candidate Lab or hand-cut on the Transcript screen is
-one logged choice. From **10 choices** on, the ranking weights drift toward what you actually
-keep — laugh endings, question hooks, your clip-length band — by at most **10% per factor**.
-Below that threshold nothing moves, so a fresh install ranks exactly like the shipped engine.
-The Connect screen shows the real counts, shares and median behind it, with a Reset button.
-The store is a local `data/learning.json`; nothing is uploaded and there is no cloud training.
+one logged choice. Three layers learn from those choices, each with its own evidence bar:
+
+| Layer | Needs | Moves |
+|---|---|---|
+| Global taste | 10 choices | payoff/hook/pacing/story, up to 10% per factor |
+| Per engine | 15 choices **on that engine** | that engine only, up to 5% more, so B2 and ProX can drift apart into what each does best for you |
+| Factor over-index | 8 choices that carried a candidate pool | the measured factor your kept cuts beat their own pool on, up to 6% |
+
+Older choices count for less (half as much after 45 days), so the engine follows your taste
+instead of being haunted by your first week. Below a threshold nothing moves, so a fresh install
+ranks exactly like the shipped engine, and a `both`-engines run always scores on the shared
+profile because one analysis pass has exactly one ranking. The Connect screen shows the real
+counts, shares, medians and the plain-language *why* behind every multiplier in effect, with a
+Reset button. The store is a local `data/learning.json`; nothing is uploaded and there is no
+cloud training.
 
 ![Connect screen with the phone and machine cards](docs/shots/04-connect.png)
 
@@ -90,8 +122,9 @@ pre-cinema bounds, the B2 cut from the cinema-snapped bounds.
 run.py            one entry point, port 4300 (CLI arg > CB_PORT > default)
 START.bat         one-click Windows launcher (auto-installs Python if missing)
 start.sh          macOS / Linux / Termux launcher
-clipblitz/        the engine package (pipeline, virality, cinema, ffmpeg_tools, server, ...)
+clipblitz/        the engine package (pipeline, virality, cinema, rights, agent, server, ...)
 web/              the single-file UI (vanilla HTML/CSS/JS, self-hosted fonts, PWA manifest)
+plugin/           the agent plugin: MCP server, /cut command, skill (see plugin/README.md)
 bin/              bundled ffmpeg + yt-dlp — nothing is ever downloaded at runtime
 data/             jobs.json + clips + uploads (created on first run; never commit it)
 SETUP.md          fresh PC, phone, Termux, YouTube OAuth
@@ -124,7 +157,24 @@ network, no ffmpeg):
 ```
 python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouched, both honest
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
+python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart
 ```
+
+## Use it from an agent
+
+`plugin/` is a plugin for a coding agent: hand it a video and a number and it cuts the clips.
+
+```
+python -m clipblitz.agent cut episode.mp4 --clips 4 --json    # one shot, prints JSON
+python -m clipblitz.agent risk <job_id>                       # what to check before publishing
+python -m clipblitz.agent receipt <job_id>                    # write and show the edit receipt
+python -m clipblitz.agent mcp                                 # the MCP server itself, on stdio
+```
+
+The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt` and
+`learning_state`. If a Studio is listening on 127.0.0.1 it creates the job through its own HTTP
+API (one writer for `data/jobs.json`); if not, the identical pipeline runs in-process. There is
+no publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.
 
 ## License
 

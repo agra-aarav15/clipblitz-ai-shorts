@@ -251,6 +251,33 @@
         <div class="rightsopts" id="rightsopts"></div>
         <div class="rightsnote" id="rightsnote"></div>
       </div>
+      <div class="safetybar glass" id="safetybar" hidden>
+        <div class="safetyhead">
+          <svg class="ic" aria-hidden="true"><use href="#i-scales"/></svg>
+          <div class="safetytext">
+            <div class="safetytitle">Copyright safety — measured, not promised</div>
+            <div class="safetysub" id="safetysub"></div>
+          </div>
+          <span class="safelev low" id="safelev"></span>
+        </div>
+        <ul class="safeflags" id="safeflags" hidden></ul>
+        <div class="safetyrow">
+          <button class="btn ghost small" id="licbtn" type="button"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg> Add licence details</button>
+          <a class="btn ghost small" id="receiptbtn" href="#" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg> Save the edit receipt</a>
+        </div>
+        <form class="licform" id="licform" hidden>
+          <label class="licfield"><span>Licence</span>
+            <select id="lickind"></select></label>
+          <label class="licfield"><span>Granted by</span>
+            <input id="licholder" type="text" maxlength="120" placeholder="label / creator / client"></label>
+          <label class="licfield"><span>Reference</span>
+            <input id="licref" type="text" maxlength="160" placeholder="contract, invoice or link"></label>
+          <label class="licfield"><span>Expires</span>
+            <input id="licexp" type="text" maxlength="10" placeholder="YYYY-MM-DD (optional)"></label>
+          <button class="btn small" type="submit">Save licence</button>
+        </form>
+        <div class="safetynote" id="safetynote"></div>
+      </div>
       <div class="podium" id="clips"></div>
     </section>
 

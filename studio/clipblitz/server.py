@@ -30,7 +30,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import captions, ffmpeg_tools, hardware, learning, pipeline, social, virality
+from . import (captions, ffmpeg_tools, hardware, learning, pipeline, rights, social,
+               virality)
 from .config import CONFIG, ffmpeg_available, stt_mode, ytdlp_available
 
 from .config import app_root
@@ -119,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
             from .brains import brains
             from . import hardware
             return self._json(200, {
-                "ok": True, "name": "ClipBlitz Studio", "version": "4.0.0",
+                "ok": True, "name": "ClipBlitz Studio", "version": "4.1.0",
                 "engine": "B2 Pro X", "default_engine": CONFIG.get("engine_default", "b2"),
                 "engines": [
                     {"id": "prox", "name": "ProX v5",
@@ -200,6 +201,24 @@ class Handler(BaseHTTPRequestHandler):
         if font:
             return self._file(os.path.join(WEB, "fonts", font.group(1)), "font/woff2",
                               cache="public, max-age=31536000, immutable")
+
+        # copyright safety: the measured risk flags, and the written edit receipt
+        risk_m = re.fullmatch(r"/api/job/(\w+)/risk", path)
+        if risk_m:
+            job_ = pipeline.JOBS.get(risk_m.group(1))
+            if not job_:
+                return self._json(404, {"error": "unknown job"})
+            return self._json(200, rights.risk_report(job_))
+        receipt_m = re.fullmatch(r"/api/job/(\w+)/receipt", path)
+        if receipt_m:
+            job_ = pipeline.JOBS.get(receipt_m.group(1))
+            if not job_:
+                return self._json(404, {"error": "unknown job"})
+            # ?hash=0 skips the file hashing (a long source takes real time)
+            hash_files = (qs.get("hash", ["1"])[0] not in ("0", "false", "no"))
+            written = rights.write_receipt(job_, hash_source=hash_files)
+            data = rights.receipt(job_, hash_source=hash_files)
+            return self._json(200, {"written_to": written, "receipt": data})
 
         job_m = re.fullmatch(r"/api/job/(\w+)", path)
         if job_m:
@@ -293,6 +312,9 @@ class Handler(BaseHTTPRequestHandler):
         rights_m = re.fullmatch(r"/api/job/(\w+)/rights", path)
         if rights_m:
             return self._rights(rights_m.group(1))
+        licence_m = re.fullmatch(r"/api/job/(\w+)/licence", path)
+        if licence_m:
+            return self._licence(licence_m.group(1))
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -464,6 +486,24 @@ class Handler(BaseHTTPRequestHandler):
         resumed = pipeline.resume_autopost(job_id)
         return self._json(200, {"rights_ok": answer, "autopost_resumed": resumed})
 
+    def _licence(self, job_id):
+        """Store the licence record for this source. Part of copyright safety: a claim
+        is argued with paperwork, and this keeps the paperwork next to the job."""
+        job_ = pipeline.JOBS.get(job_id)
+        if not job_:
+            return self._json(404, {"error": "unknown job"})
+        length = self._safe_length()
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            return self._json(400, {"error": "bad json"})
+        ok, err = rights.set_licence(job_, body)
+        if not ok:
+            return self._json(400, {"error": err})
+        pipeline.save()
+        return self._json(200, {"licence": job_["licence"],
+                                "risk": rights.risk_report(job_)})
+
     def _post_clip(self, body):
         job_ = pipeline.JOBS.get(body.get("job_id", ""))
         if not job_:
@@ -571,7 +611,7 @@ def serve(port=None):
         print(f"ClipBlitz Studio is already running -> http://localhost:{port}  "
               f"(open that tab; or kill the old instance first)")
         sys.exit(0)
-    print(f"ClipBlitz Studio v4.0.0 (engines: ProX v5 / B2 Pro X / Both)  ->  "
+    print(f"ClipBlitz Studio v4.1.0 (engines: ProX v5 / B2 Pro X / Both)  ->  "
           f"http://localhost:{port}", flush=True)
     from . import hardware
     hw = hardware.profile()

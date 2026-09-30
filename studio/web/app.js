@@ -142,7 +142,9 @@ fetch('/api/health').then(r => r.json()).then(h => {
   RIGHTS = h.rights || [];
   RIGHTS_NOTE = h.rights_note || '';
   renderRightsOptions();
+  initSafety();
   renderRightsGate(fullJobCache);   /* the Content ID line arrives with health, not with the job */
+  renderSafety(fullJobCache);
   initEngine(h);
   applyHardware(h.hardware);
   fillMachineCard(h.hardware);
@@ -485,6 +487,7 @@ async function poll() {
   $('skeletons').hidden = !(job.status !== 'done' && !(job.clips || []).length);
   renderClipsSurgical(job);
   renderRightsGate(job);
+  renderSafety(job);
 
   if (job.status === 'done' || job.status === 'error') {
     clearInterval(pollTimer);
@@ -508,6 +511,7 @@ async function loadFull() {
     const job = await (await fetch(`/api/job/${currentJob}`)).json();
     fullJobCache = job;
     renderRightsGate(job);
+    renderSafety(job);
     WF = Array.isArray(job.waveform) ? job.waveform : [];
     MOMENTS = Array.isArray(job.moments) ? job.moments : [];
     wfDur = job.duration || 0;
@@ -659,8 +663,97 @@ async function answerRights(answer) {
     $('rightsbar').hidden = true;
     if (fullJobCache) fullJobCache.rights_ok = res.rights_ok;
     jobFullFetched = false;
+    /* the answer changes the safety report (the rights flag clears), so re-read it
+       instead of showing the copy fetched before the answer */
+    SAFETY_JOB = null;
+    SAFETY = null;
     poll();
   } catch (e) { toast(String(e.message || e), true); }
+}
+
+/* =================== copyright safety: risk, licence, receipt ==================
+   The measured half of the rights conversation. Every line here comes from
+   /api/job/<id>/risk, which reads data this pipeline already produced - a span of
+   sustained non-speech audio, where the source came from, whether a licence is on
+   file, how many transformative layers each clip carries. It never claims a video is
+   uncopyrighted and never promises protection from a claim; that is not a thing any
+   tool can do, and the note under the flags says so in as many words. */
+let SAFETY_JOB = null;         /* which job the panel is currently describing */
+let SAFETY = null;             /* last report for that job */
+
+function renderSafety(job) {
+  const bar = $('safetybar');
+  if (!bar) return;
+  const has = !!currentJob && !!((job && job.clips || []).length);
+  if (!has) { bar.hidden = true; SAFETY_JOB = null; SAFETY = null; return; }
+  if (SAFETY_JOB === currentJob && SAFETY) { paintSafety(SAFETY); return; }
+  SAFETY_JOB = currentJob;                 /* claim it before the fetch: one panel per job */
+  fetch(`/api/job/${currentJob}/risk`).then(r => r.json()).then(d => {
+    if (SAFETY_JOB !== currentJob) return;  /* a newer job landed while this was in flight */
+    SAFETY = d;
+    paintSafety(d);
+  }).catch(() => {});
+}
+
+function paintSafety(d) {
+  const bar = $('safetybar');
+  if (!bar || !d) return;
+  const lev = $('safelev');
+  const words = { low: 'no flags', review: 'review', high: 'do not publish' };
+  lev.textContent = words[d.level] || d.level;
+  lev.className = 'safelev ' + (d.level || 'review');
+  $('safetysub').textContent = d.headline || '';
+  const flags = d.flags || [];
+  $('safeflags').innerHTML = flags.map(f =>
+    `<li class="safeflag ${esc(f.kind)}">${IC('warn')}<span>${esc(f.text)}</span></li>`).join('');
+  $('safeflags').hidden = !flags.length;
+  $('receiptbtn').href = `/api/job/${esc(currentJob)}/receipt`;
+  $('safetynote').textContent = [d.note, d.rights_note].filter(Boolean).join(' ');
+  fillLicence(d);
+  bar.hidden = false;
+}
+
+function fillLicence(d) {
+  const sel = $('lickind');
+  if (!sel) return;
+  const kinds = d.licence_kinds || {};
+  const current = d.licence || {};
+  sel.innerHTML = ['<option value="">not stated</option>'].concat(
+    Object.keys(kinds).map(k =>
+      `<option value="${esc(k)}"${current.kind === k ? ' selected' : ''}>${esc(k)} — ${esc(kinds[k])}</option>`)
+  ).join('');
+  $('licholder').value = current.holder || '';
+  $('licref').value = current.reference || '';
+  $('licexp').value = current.expires || '';
+  $('licbtn').textContent = current.kind || current.holder
+    ? 'Licence on file — edit it' : 'Add licence details';
+}
+
+function initSafety() {
+  const form = $('licform');
+  if (!form || form.dataset.built) return;
+  form.dataset.built = '1';
+  $('licbtn').addEventListener('click', () => {
+    form.hidden = !form.hidden;
+    if (!form.hidden) $('licholder').focus();
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentJob) return;
+    const body = {
+      kind: $('lickind').value,
+      holder: $('licholder').value.trim(),
+      reference: $('licref').value.trim(),
+      expires: $('licexp').value.trim(),
+    };
+    try {
+      const res = await post(`/api/job/${currentJob}/licence`, JSON.stringify(body));
+      SAFETY = res.risk;
+      paintSafety(res.risk);
+      form.hidden = true;
+      toast('licence recorded for this job');
+    } catch (err) { toast(String(err.message || err), true); }
+  });
 }
 
 /* ---- source awareness + the transformative-edit badge ---------------------- */

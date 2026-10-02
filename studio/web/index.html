@@ -251,6 +251,26 @@
         <div class="rightsopts" id="rightsopts"></div>
         <div class="rightsnote" id="rightsnote"></div>
       </div>
+      <div class="gatebar glass" id="gatebar" hidden>
+        <div class="safetyhead">
+          <svg class="ic" aria-hidden="true"><use href="#i-scales"/></svg>
+          <div class="safetytext">
+            <div class="safetytitle">Clearance gate <span class="chip" id="gatechip">advisory</span></div>
+            <div class="safetysub" id="gatestate"></div>
+          </div>
+          <span class="safelev" id="gatestatus"></span>
+        </div>
+        <div class="safetyrow">
+          <button class="btn ghost small" id="certbtn" type="button"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg> Save the clearance certificate</button>
+        </div>
+        <div class="certout" id="certout" hidden></div>
+        <form class="licform" id="ovform" hidden>
+          <label class="licfield"><span>Override reason</span>
+            <input id="ovreason" type="text" maxlength="300" placeholder="why you are proceeding without clearing this media"></label>
+          <button class="btn small" type="submit">Record override</button>
+        </form>
+        <div class="safetynote" id="gatenote"></div>
+      </div>
       <div class="safetybar glass" id="safetybar" hidden>
         <div class="safetyhead">
           <svg class="ic" aria-hidden="true"><use href="#i-scales"/></svg>

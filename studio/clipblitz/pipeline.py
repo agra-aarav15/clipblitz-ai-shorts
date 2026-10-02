@@ -66,7 +66,7 @@ def _load_jobs():
     try:
         data = json.load(open(JOBS_FILE, encoding="utf-8"))
         for j in data:
-            if j.get("status") in ("queued", "running", "posting"):
+            if j.get("status") in ("queued", "running", "posting") and not j.get("rights_hold"):
                 j["status"] = "error"
                 j["stage"] = "server restarted — re-run this job"
                 j["error"] = "Interrupted by a server restart."
@@ -76,6 +76,11 @@ def _load_jobs():
             j.setdefault("rights_pending", False)
             j.setdefault("licence", None)
             j.setdefault("receipt", None)
+            if rights.enabled():
+                # a job the strict clearance gate is holding across a restart stays
+                # answerable: the rights question (or an override) resumes it, and the
+                # override record rides in the certificate
+                j.setdefault("rights_override", None)
             j.setdefault("source", {"kind": "upload", "label": j.get("name") or ""})
             JOBS[j["id"]] = j
     except (OSError, ValueError):
@@ -139,7 +144,7 @@ def resume_autopost(job_id):
     """Run the auto-post a job was holding back for the rights gate. Runs in a
     background thread - a real upload blocks for a while."""
     job_ = JOBS.get(job_id)
-    if not job_ or not job_.get("rights_pending") or not job_.get("rights_ok"):
+    if not job_ or not job_.get("rights_pending") or not rights.cleared(job_):
         return False
 
     def runner():
@@ -388,7 +393,7 @@ def process(job_id, src_path):
         _set(job_, status="done", stage=f"top {len(job_['clips'])} clips ready", progress=96)
 
         if job_["auto_post"] and job_["clips"]:
-            if not job_.get("rights_ok"):
+            if not rights.cleared(job_):
                 # The rights gate. Consent + information, never a bypass: we stop before
                 # the first automatic upload and put the question on the Clips screen.
                 # Answering it resumes this exact post from resume_autopost().
@@ -442,6 +447,9 @@ def render_candidate(job_id, cand_index, style=None, position=None, size_scale=N
     job_ = JOBS.get(job_id)
     if not job_:
         return None, "unknown job"
+    held, why = rights.render_hold(job_)
+    if held:
+        return None, why
     cands = job_.get("candidates") or []
     if not isinstance(cand_index, int) or not 0 <= cand_index < len(cands):
         return None, "unknown candidate"
@@ -475,6 +483,9 @@ def render_custom(job_id, start, end, style=None, engine=None):
     job_ = JOBS.get(job_id)
     if not job_:
         return None, "unknown job"
+    held, why = rights.render_hold(job_)
+    if held:
+        return None, why
     try:
         start, end = float(start), float(end)
     except (TypeError, ValueError):
@@ -521,8 +532,19 @@ def _find_source(job_id):
 
 
 def start(job_id, src_path):
-    JOBS[job_id]["src"] = src_path
-    JOBS[job_id]["src_name"] = os.path.basename(src_path)
+    job_ = JOBS[job_id]
+    job_["src"] = src_path
+    job_["src_name"] = os.path.basename(src_path)
+    job_.pop("rights_hold", None)
+    rights.remember_source(job_, path=src_path)      # the registry: where this came from
+    held, why = rights.render_hold(job_)
+    if held:
+        # the strict clearance gate: imported media does not even render until the
+        # owner has answered the rights question or recorded an override. Resume
+        # happens from resume_render() the moment it is cleared by hand.
+        job_.update(status="queued", stage=why, progress=0, rights_hold=True)
+        save()
+        return job_id
     save()
     threading.Thread(target=process, args=(job_id, src_path), daemon=True).start()
     return job_id
@@ -532,6 +554,15 @@ def start_from_url(job_id, url):
     """Download a video from a URL (YouTube via yt-dlp, or a direct media link),
     then run the normal pipeline on it."""
     from . import ingest
+
+    job_ = JOBS[job_id]
+    job_.pop("rights_hold", None)
+    rights.remember_source(job_, url=url)
+    held, why = rights.render_hold(job_)
+    if held:
+        job_.update(status="queued", stage=why, progress=0, rights_hold=True)
+        save()
+        return job_id
 
     def runner():
         job_ = JOBS[job_id]
@@ -552,6 +583,7 @@ def start_from_url(job_id, url):
                 "channel": info.get("channel") or "",
                 "title": info.get("title") or "",
             }
+            rights.remember_source(JOBS[job_id], path=src, url=url)
             base = os.path.splitext(os.path.basename(src))[0]
             pretty = re.sub(r"^yt_[A-Za-z0-9_-]+_\d+_", "", base)  # strip yt_<id>_<ts>_ prefix
             if len(pretty) > 3 and re.fullmatch(r"[A-Za-z0-9_-]{11}", JOBS[job_id].get("name") or ""):
@@ -563,6 +595,29 @@ def start_from_url(job_id, url):
 
     threading.Thread(target=runner, daemon=True).start()
     return job_id
+
+
+def resume_render(job_id):
+    """Start a render the strict clearance gate was holding, now cleared by hand.
+    Returns True when the render was (re)started."""
+    job_ = JOBS.get(job_id)
+    if not job_ or not job_.get("rights_hold"):
+        return False
+    src = job_.get("src")
+    if src and os.path.isfile(src):
+        job_["rights_hold"] = False
+        save()
+        start(job_id, src)
+        return True
+    url = (job_.get("source") or {}).get("url")
+    if url:
+        job_["rights_hold"] = False
+        save()
+        start_from_url(job_id, url)
+        return True
+    _set(job_, rights_hold=False, status="error", stage="failed",
+         error="the held source is no longer on disk - re-import it")
+    return False
 
 
 def stt_mode():

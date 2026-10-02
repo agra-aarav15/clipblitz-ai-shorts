@@ -36,6 +36,7 @@ let HEALTH = null;                 /* /api/health cache: engines[], default_engi
 let ENGINE = localStorage.getItem('cb.engine') || '';   /* per-job engine choice */
 let RIGHTS = [];                   /* rights-gate options, served by /api/health */
 let RIGHTS_NOTE = '';              /* the honest Content ID line, same source */
+let GATE = { enabled: false, mode: 'advisory' };   /* the clearance gate, same source */
 let SOCIAL = {};                   /* /api/social/status cache (connected channel) */
 let lastFrac = 0;                  /* playhead position, 0..1, for repaints */
 let lastFailToast = 0;
@@ -141,10 +142,13 @@ fetch('/api/health').then(r => r.json()).then(h => {
   HEALTH = h;
   RIGHTS = h.rights || [];
   RIGHTS_NOTE = h.rights_note || '';
+  GATE = h.gate || GATE;
   renderRightsOptions();
   initSafety();
+  initGate();
   renderRightsGate(fullJobCache);   /* the Content ID line arrives with health, not with the job */
   renderSafety(fullJobCache);
+  renderGateCard(fullJobCache);
   initEngine(h);
   applyHardware(h.hardware);
   fillMachineCard(h.hardware);
@@ -488,6 +492,13 @@ async function poll() {
   renderClipsSurgical(job);
   renderRightsGate(job);
   renderSafety(job);
+  renderGateCard(job);
+  if (job.rights_hold && !autoJumped && !userPicked) {
+    /* the strict gate has a question and its actions live on the Clips screen:
+       walk there once instead of leaving the owner staring at "queued" */
+    autoJumped = true;
+    showScreen('clips');
+  }
 
   if (job.status === 'done' || job.status === 'error') {
     clearInterval(pollTimer);
@@ -512,6 +523,7 @@ async function loadFull() {
     fullJobCache = job;
     renderRightsGate(job);
     renderSafety(job);
+    renderGateCard(job);
     WF = Array.isArray(job.waveform) ? job.waveform : [];
     MOMENTS = Array.isArray(job.moments) ? job.moments : [];
     wfDur = job.duration || 0;
@@ -648,9 +660,12 @@ function showRightsGate(job, why) {
 function renderRightsGate(job) {
   const bar = $('rightsbar');
   if (!bar) return;
-  const need = !!job && !job.rights_ok && ((job.clips || []).length > 0);
+  const held = !!job && !!job.rights_hold;   /* strict gate: held BEFORE it renders */
+  const need = !!job && !job.rights_ok && (held || ((job.clips || []).length > 0));
   if (!need) { bar.hidden = true; return; }
-  showRightsGate(job);
+  showRightsGate(job, held
+    ? 'Strict clearance gate: nothing renders from this source until you answer.'
+    : undefined);
 }
 
 async function answerRights(answer) {
@@ -669,6 +684,95 @@ async function answerRights(answer) {
     SAFETY = null;
     poll();
   } catch (e) { toast(String(e.message || e), true); }
+}
+
+/* ============================ clearance gate ============================
+   The honest inverse of "make everything uncopyrighted": in strict mode imported
+   media is held BEFORE it renders until you answer the rights question or record a
+   written override, and the certificate bundles the risk report, the licence, the
+   receipt and the sha256 of every file so a third party can re-check it against the
+   files themselves. Nothing here clears anything by itself. */
+function gateCleared(job) {
+  return !!(job && (job.rights_ok ||
+    (job.rights_override && job.rights_override.reason)));
+}
+
+function renderGateCard(job) {
+  const bar = $('gatebar');
+  if (!bar) return;
+  if (!GATE.enabled || !currentJob || !job) { bar.hidden = true; return; }
+  const chip = $('gatechip');
+  chip.textContent = GATE.mode === 'strict' ? 'strict' : 'advisory';
+  chip.className = 'chip' + (GATE.mode === 'strict' ? ' gold' : '');
+  const cleared = gateCleared(job);
+  const over = job.rights_override || null;
+  const status = $('gatestatus');
+  let words, tone;
+  if (job.rights_ok) { words = `cleared - rights: ${job.rights_ok}`; tone = 'low'; }
+  else if (over) { words = 'override recorded'; tone = 'review'; }
+  else if (job.rights_hold) { words = 'holding this render'; tone = 'high'; }
+  else { words = 'waiting for your rights answer'; tone = 'review'; }
+  status.textContent = words;
+  status.className = 'safelev ' + tone;
+  let state;
+  if (job.rights_ok) {
+    state = GATE.mode === 'strict'
+      ? 'This source is cleared: it renders, and publishing proceeds under your answer.'
+      : 'Answer recorded. Publishing proceeds; rendering is never held in advisory mode.';
+  } else if (over) {
+    state = `Proceeding on your written override: “${over.reason}”.`;
+  } else if (job.rights_hold) {
+    state = 'Strict gate: nothing renders from this source until you answer the rights question above or record an override below.';
+  } else {
+    state = GATE.mode === 'strict'
+      ? 'Strict gate: this source is held before it renders - answer above, or record an override below.'
+      : 'Advisory gate: measurements only. Renders are never held; publishing waits for your rights answer.';
+  }
+  $('gatestate').textContent = state;
+  $('gatenote').textContent = 'A strict gate holds imported media before the render and before any publish. The certificate bundles the risk report, the licence, the receipt and the sha256 of every file - it proves what was measured, not that a use is safe.';
+  $('ovform').hidden = !(GATE.mode === 'strict' && !cleared);
+  bar.hidden = false;
+}
+
+async function makeCertificate() {
+  if (!currentJob) return toast('run a job first', true);
+  try {
+    const res = await (await fetch(`/api/job/${currentJob}/certificate`)).json();
+    if (!res || res.certificate === undefined) {
+      return toast((res && res.error) || 'no certificate', true);
+    }
+    const c = res.certificate;
+    const out = $('certout');
+    out.hidden = false;
+    out.textContent = `certificate written to ${res.written_to || '(not saved)'} · digest ` +
+      `${String((c.digest || {}).value || '').slice(0, 16)}… · re-check with ` +
+      `scripts/verify_certificate.py against the files`;
+    toast('clearance certificate written');
+  } catch (e) { toast(String(e.message || e), true); }
+}
+
+function initGate() {
+  const form = $('ovform');
+  if (!form || form.dataset.built) return;
+  form.dataset.built = '1';
+  $('certbtn').addEventListener('click', makeCertificate);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentJob) return;
+    const reason = $('ovreason').value.trim();
+    if (reason.length < 8) {
+      return toast('write why you are proceeding (at least 8 characters)', true);
+    }
+    try {
+      const res = await post(`/api/job/${currentJob}/override`, JSON.stringify({ reason }));
+      toast(res.render_resumed ? 'override recorded - the render is starting'
+                               : 'override recorded for this job');
+      $('ovreason').value = '';
+      jobFullFetched = false;
+      SAFETY_JOB = null; SAFETY = null;
+      poll();
+    } catch (err) { toast(String(err.message || err), true); }
+  });
 }
 
 /* =================== copyright safety: risk, licence, receipt ==================
@@ -956,7 +1060,13 @@ async function sendPost(jobId, platform, clipIndex) {
         RIGHTS_NOTE = e.data.note || RIGHTS_NOTE;
         renderRightsOptions();
       }
-      showRightsGate(fullJobCache, 'Posting waits for this answer.');
+      if (e.data.gate && e.data.gate.mode) {
+        GATE = { enabled: !!e.data.gate.enabled, mode: e.data.gate.mode };
+      }
+      renderGateCard(fullJobCache);
+      showRightsGate(fullJobCache, e.data.gate && e.data.gate.mode === 'strict'
+        ? 'Strict gate: ' + (e.data.error || 'posting waits for an answer or a written override.')
+        : 'Posting waits for this answer.');
       return;
     }
     toast(String(e.message || e), true);
@@ -1492,7 +1602,7 @@ async function loadRecent() {
     box.querySelectorAll('[data-job]').forEach(b => b.addEventListener('click', () => {
       fetch(`/api/job/${b.dataset.job}?light=1`).then(r => r.json()).then(job => {
         watch(job.id, job.name || job.id);
-        if ((job.clips || []).length) showScreen('clips', true);
+        if ((job.clips || []).length || job.rights_hold) showScreen('clips', true);
       }).catch(() => toast('that job is gone', true));
     }));
   } catch (e) { /* best effort */ }

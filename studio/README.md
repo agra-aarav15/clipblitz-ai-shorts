@@ -75,6 +75,25 @@ it, a reference, an expiry date — because a claim is argued with paperwork, no
 that rendered it, the transformative work that render actually applied (burned-in captions, the
 reframe, the grade, the J-cut), and sha256 hashes of the source and each output file.
 
+`GET /api/job/<id>/certificate` bundles all of it — the risk report, the licence record, the
+edit receipt and the sha256 of the source and every render — into one artifact with its own
+digest, written to `data/certificates/`. Anyone can re-check it against the files without
+trusting this studio:
+
+```
+python scripts/verify_certificate.py data/certificates/<job>.json --root data
+```
+
+The **clearance gate** is the other half of the same idea. Advisory is the shipped default and
+keeps exactly the behaviour above: the report measures, publishing asks first, a render is
+never held. With `CB_RIGHTS=strict` imported media stops even earlier — nothing renders and
+nothing publishes until you answer the rights question or record an **override with a written
+reason**, which is stored on the job and quoted in the certificate. No clearance ever happens
+automatically, and the demo video the studio generates itself is exempt. Every import is also
+recorded in `data/sources.json` (where it came from, its size, a quick identity, the jobs it
+fed), and the Clips screen shows the gate's mode, its current state and the certificate button
+next to the rights panel; `GET /api/gate` exposes the same read to anything else.
+
 What none of it does is make somebody else's video uncopyrighted. A content-matching system
 matches the work itself, so no crop, caption or re-encode removes the match, and this studio
 will not ship a button that pretends otherwise.
@@ -169,6 +188,7 @@ python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouch
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
 python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart
 python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit, holdout gate, CB_LAB off
+python scripts/test_rights.py     # gate modes, source registry, override record, hold/resume, certificate + verifier
 ```
 
 ## Use it from an agent
@@ -179,11 +199,12 @@ python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit
 python -m clipblitz.agent cut episode.mp4 --clips 4 --json    # one shot, prints JSON
 python -m clipblitz.agent risk <job_id>                       # what to check before publishing
 python -m clipblitz.agent receipt <job_id>                    # write and show the edit receipt
+python -m clipblitz.agent certificate <job_id>                # write and show the clearance certificate
 python -m clipblitz.agent mcp                                 # the MCP server itself, on stdio
 ```
 
 The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt`,
-`learning_state` and `train_model`. If a Studio is listening on 127.0.0.1 it creates the job
+`learning_state`, `train_model` and `clearance_certificate`. If a Studio is listening on 127.0.0.1 it creates the job
 through its own HTTP API (one writer for `data/jobs.json`); if not, the identical pipeline runs
 in-process. `train_model` fits the local taste model and reports the gate decision; there is no
 publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.

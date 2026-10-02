@@ -50,6 +50,13 @@ LEVELS = {"low": "No measured risk flags on this job.",
           "review": "Review the flags below before you publish.",
           "high": "Do not publish until you clear the flags below."}
 
+GATE_MODES = ("advisory", "strict")
+SOURCE_VERSION = 1
+MAX_SOURCES = 200         # registry entries kept (oldest dropped first)
+OVERRIDE_MIN = 8          # a written override reason has to actually say something
+OVERRIDE_MAX = 300
+CERT_VERSION = 1
+
 
 def _mmss(seconds):
     try:
@@ -239,7 +246,7 @@ def risk_report(job):
     if not measured_audio:
         headline += (" The audio layer was not measured on this copy of the job, so no "
                      "claim is made about music or other third-party audio.")
-    return {
+    out = {
         "level": level,
         "headline": headline,
         "flags": flags,
@@ -252,6 +259,11 @@ def risk_report(job):
         "note": ("These are measurements, not legal advice. A claim is decided by the "
                  "platform, and whether a use is fair is the owner's call."),
     }
+    if enabled():
+        # the clearance gate rides in the same report the UI already reads. With the
+        # lab off there is no gate key at all: exactly the v4.1.0 payload.
+        out["gate"] = gate_state(job)
+    return out
 
 
 def _rights_note():
@@ -376,6 +388,339 @@ def write_receipt(job, hash_source=True):
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except OSError:
+        return None
+    return path
+
+
+# ------------------------------------------------------------------ clearance gate
+#
+# The honest inverse of "make everything uncopyrighted". Advisory (the shipped
+# default) keeps the v4.1.0 behavior: the report measures, the publish path asks
+# before anything leaves the machine, and a render is never held. Strict - the
+# rights.mode toggle - additionally holds IMPORTED media before it renders: nothing
+# renders or publishes until the owner has answered the rights question or recorded an
+# override with a written reason. Nothing here is ever cleared automatically, and
+# nothing fingerprints, pitches, speeds or re-encodes a source to dodge matching.
+
+
+def enabled():
+    """The clearance layer lives behind the same master switch as the rest of the lab.
+    CB_LAB=0 removes it entirely: advisory behavior, no registry, no overrides, no
+    certificate - the studio behaves exactly like v4.1.0."""
+    return bool(CONFIG.get("lab", True))
+
+
+def gate_mode():
+    """advisory (shipped default) or strict. Anything unrecognised stays advisory, and
+    with the lab off the gate can never be strict."""
+    if not enabled():
+        return "advisory"
+    mode = str(CONFIG.get("rights_mode", "advisory") or "").strip().lower()
+    return "strict" if mode == "strict" else "advisory"
+
+
+def _sources_path():
+    return os.path.join(CONFIG["data_dir"], "sources.json")
+
+
+def _read_sources():
+    try:
+        data = json.load(open(_sources_path(), encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("sources"), list):
+            return data
+    except (OSError, ValueError):
+        pass
+    return {"version": SOURCE_VERSION, "sources": []}
+
+
+def _write_sources(data):
+    try:
+        os.makedirs(CONFIG["data_dir"], exist_ok=True)
+        tmp = _sources_path() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, _sources_path())
+        return True
+    except OSError:
+        return False
+
+
+def _quick_hash(path):
+    """Fast identity for a media file: size plus its first and last 256 KiB. Labelled
+    as quick on purpose - it is how the registry recognises a re-import, not evidence
+    (the certificate carries the full sha256)."""
+    try:
+        size = os.path.getsize(path)
+        h = hashlib.sha256()
+        h.update(str(size).encode())
+        with open(path, "rb") as f:
+            h.update(f.read(1 << 18))
+            if size > (1 << 18):
+                f.seek(max(0, size - (1 << 18)))
+                h.update(f.read(1 << 18))
+        return h.hexdigest()[:32]
+    except OSError:
+        return ""
+
+
+def remember_source(job, path=None, url=None):
+    """Record where this import came from, in data/sources.json. Provenance the
+    certificate can quote, written once per import and deduplicated by fingerprint; a
+    no-op when the lab is off (v4.1.0 keeps no registry)."""
+    if not enabled() or not job:
+        return None
+    src = dict(job.get("source") or {})
+    kind = src.get("kind") or ("url" if url else "upload")
+    if kind == "demo":
+        return None                  # the studio generated the demo itself; nothing imported
+    path = path or job.get("src") or ""
+    url = url or src.get("url") or ""
+    size = os.path.getsize(path) if path and os.path.isfile(path) else None
+    quick = _quick_hash(path) if path else ""
+    raw = (f"url:{url.strip()}" if url else
+           f"file:{quick}:{size}:{os.path.basename(path)}")
+    fp = hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:16]
+    now = time.time()
+    data = _read_sources()
+    entry = next((s for s in data["sources"] if s.get("fingerprint") == fp), None)
+    if entry is None:
+        entry = {"fingerprint": fp, "kind": kind, "first_seen": now,
+                 "jobs": [], "file": os.path.basename(path) if path else "",
+                 "size": size, "quick_sha256": quick,
+                 "quick_note": ("quick identity (size + head/tail), not a full hash - "
+                                "the clearance certificate carries the full sha256")}
+        for key in ("url", "video_id", "uploader", "channel", "title", "label"):
+            if src.get(key):
+                entry[key] = src[key]
+        data["sources"].append(entry)
+        del data["sources"][:-MAX_SOURCES]     # keep the newest MAX_SOURCES entries
+    entry["last_seen"] = now
+    if job.get("id") and job["id"] not in entry["jobs"]:
+        entry["jobs"].append(job["id"])
+        entry["jobs"] = entry["jobs"][-20:]
+    _write_sources(data)
+    job["source_fp"] = fp
+    return entry
+
+
+def sources(limit=50):
+    """The registry, newest first. Pure read."""
+    try:
+        rows = _read_sources()["sources"]
+    except Exception:
+        return []
+    return list(reversed(rows[-max(1, int(limit)):]))
+
+
+def source_entry(job):
+    fp = (job or {}).get("source_fp")
+    if not fp:
+        return None
+    return next((s for s in _read_sources()["sources"]
+                 if s.get("fingerprint") == fp), None)
+
+
+def external(job):
+    """Media the studio did not make itself. The generated demo is the only source
+    the studio produces, so everything else has an owner to answer for."""
+    if not job:
+        return False
+    if job.get("demo"):
+        return False
+    return ((job.get("source") or {}).get("kind") or "upload") != "demo"
+
+
+def _override(job):
+    record = (job or {}).get("rights_override")
+    return record if isinstance(record, dict) and record.get("reason") else None
+
+
+def cleared(job):
+    """An answer on the job, or a hand-written override. Never anything else."""
+    return bool(job and (job.get("rights_ok") or _override(job)))
+
+
+def set_override(job, reason, by=""):
+    """Record the owner's own decision to proceed without clearing. This is the only
+    path past a strict gate that is not an answer, it demands a written reason, and the
+    record rides in the certificate. Nothing is ever cleared automatically."""
+    if not enabled():
+        return False, "the clearance layer is off (CB_LAB=0)"
+    if not job:
+        return False, "unknown job"
+    text = str(reason or "").strip()
+    if len(text) < OVERRIDE_MIN:
+        return False, (f"the override reason must say why you are proceeding "
+                       f"(at least {OVERRIDE_MIN} characters)")
+    job["rights_override"] = {"reason": text[:OVERRIDE_MAX],
+                              "by": str(by or "").strip()[:60] or None,
+                              "at": time.time(),
+                              "at_iso": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    return True, None
+
+
+def render_hold(job):
+    """(held, why) - strict mode holds imported media BEFORE it renders until the
+    owner has answered or recorded an override. Advisory never holds; neither does the
+    demo the studio generates itself."""
+    if gate_mode() != "strict" or not external(job) or cleared(job):
+        return False, None
+    return True, ("strict clearance gate - this source is held before rendering until "
+                  "you answer the rights question or record an override on the Clips "
+                  "screen")
+
+
+def publish_block(job):
+    """(blocked, why) on every publish path, in both modes. Advisory keeps the v4.1.0
+    rule (the rights answer comes first); strict additionally refuses to publish a job
+    whose measured report says high while nothing has been cleared by hand."""
+    if not job:
+        return True, "unknown job"
+    if job.get("rights_ok"):
+        if gate_mode() == "strict" and risk_report(job).get("level") == "high":
+            return True, ("strict clearance gate - the risk report on this job is high; "
+                          "clear it or record an override before publishing")
+        return False, None
+    if _override(job):
+        return False, None
+    if gate_mode() == "strict":
+        return True, ("strict clearance gate - answer the rights question or record an "
+                      "override with a reason before this clip can be published")
+    return True, "Confirm your rights for this job first."
+
+
+def gate_state(job):
+    """The gate as the UI and the certificate show it: the mode, what is holding this
+    job, and the override if one was recorded. Pure read."""
+    if not job:
+        return None
+    held, why = render_hold(job)
+    ov = _override(job)
+    return {
+        "enabled": enabled(),
+        "mode": gate_mode(),
+        "external": external(job),
+        "answered": job.get("rights_ok"),
+        "cleared": cleared(job),
+        "basis": ("rights_answer" if job.get("rights_ok") else
+                  ("override" if ov else "none")),
+        "held": bool(job.get("rights_hold")),
+        "blocked": held,
+        "reason": why,
+        "override": ov,
+    }
+
+
+def gate_overview():
+    """The whole clearance layer in one read, for /api/gate and the UI."""
+    from .pipeline import RIGHTS, RIGHTS_NOTE
+    return {
+        "enabled": enabled(),
+        "mode": gate_mode(),
+        "modes": {"advisory": "Records the measured risk and asks before publishing. "
+                              "Renders are never held.",
+                  "strict": "Also holds imported media before rendering: nothing "
+                            "renders or publishes until the rights question is "
+                            "answered or an override with a written reason is recorded."},
+        "rights": RIGHTS,
+        "rights_note": RIGHTS_NOTE,
+        "sources": len(_read_sources()["sources"]) if enabled() else 0,
+        "override_min_chars": OVERRIDE_MIN,
+        "note": ("The gate records what the owner decides. It never clears anything by "
+                 "itself, and it does not and will not try to evade content matching."),
+    }
+
+
+# ------------------------------------------------------------------- certificate
+
+def certificate(job):
+    """One artifact a third party can hold: the risk report, the licence record, the
+    edit receipt and the sha256 of the source and every render, bundled with a digest
+    of itself. Re-checkable against the files alone (scripts/verify_certificate.py) -
+    it proves what this studio measured and which bytes it produced, nothing more."""
+    if not enabled() or not job:
+        return None
+    rep = receipt(job, hash_source=True)      # one hashing pass, reused below
+    clips_dir = os.path.join(CONFIG["data_dir"], "clips")
+    src_path = job.get("src") or ""
+    files = [{
+        "role": "source", "name": rep.get("source_file") or None,
+        "path": src_path or None,
+        "exists": bool(src_path and os.path.isfile(src_path)),
+        "size": os.path.getsize(src_path) if src_path and os.path.isfile(src_path) else None,
+        "sha256": rep.get("source_sha256"),
+    }]
+    for i, c in enumerate(rep.get("clips") or []):
+        name = os.path.basename((c.get("file") or "").split("?")[0])
+        path = os.path.join(clips_dir, name) if name else ""
+        files.append({
+            "role": "clip", "index": i + 1, "name": name or None,
+            "path": path or None,
+            "exists": bool(path and os.path.isfile(path)),
+            "size": os.path.getsize(path) if path and os.path.isfile(path) else None,
+            "sha256": c.get("sha256"),
+        })
+    payload = {
+        "certificate": "ClipBlitz Studio clearance certificate",
+        "format": CERT_VERSION,
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "job": job.get("id"), "job_name": job.get("name"),
+        "engine": job.get("engine_id"),
+        "gate": gate_state(job),
+        "source_record": source_entry(job),
+        "rights_answer": job.get("rights_ok"),
+        "licence": job.get("licence"),
+        "risk": risk_report(job),
+        "receipt": rep,
+        "files": files,
+        "verification": {
+            "digest_algorithm": "sha256",
+            "digest_over": ("every other field of this certificate, serialised as JSON "
+                             "with sorted keys and compact separators"),
+            "re_check": ("python scripts/verify_certificate.py <this file> --root "
+                         "<folder holding the files>"),
+            "proves": ("the studio measured these files at this moment, the listed "
+                       "bytes match these sha256 digests, and this certificate is "
+                       "unaltered"),
+            "does_not_prove": ("that a use is licensed, fair or claim-proof. A claim "
+                               "is decided by the platform; a fair-use call is the "
+                               "owner's."),
+        },
+    }
+    payload["digest"] = {"algorithm": "sha256", "value": _digest(payload)}
+    return payload
+
+
+def _digest(payload):
+    """The certificate's own sha256: every field except the digest itself, JSON sorted
+    and compact. scripts/verify_certificate.py recomputes exactly this."""
+    body = {k: v for k, v in payload.items() if k != "digest"}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def certificate_dir():
+    d = os.path.join(CONFIG["data_dir"], "certificates")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def certificate_path(job_id):
+    return os.path.join(certificate_dir(), f"{job_id}.json")
+
+
+def write_certificate(job, data=None):
+    """Persist the certificate so the owner can hand it to anyone."""
+    data = data or certificate(job)
+    if not data or not data.get("job"):
+        return None
+    path = certificate_path(data["job"])
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp, path)
     except OSError:
         return None

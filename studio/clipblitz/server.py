@@ -139,6 +139,10 @@ class Handler(BaseHTTPRequestHandler):
                 # the rights gate's options come from the server so the UI copy can
                 # never drift from what the backend actually stores
                 "rights": pipeline.RIGHTS, "rights_note": pipeline.RIGHTS_NOTE,
+                # the clearance gate rides only when the lab layer is on: with CB_LAB=0
+                # the health payload has no gate key at all, exactly as v4.1.0 shipped it
+                **({"gate": {"enabled": True, "mode": rights.gate_mode()}}
+                   if rights.enabled() else {}),
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
@@ -154,6 +158,10 @@ class Handler(BaseHTTPRequestHandler):
             } for j in jobs[:20]])
         if path == "/api/learning":
             return self._json(200, learning.profile())
+        if path == "/api/gate":
+            # the whole clearance layer in one read: mode, the options it stores, and
+            # how much provenance the source registry has recorded
+            return self._json(200, rights.gate_overview())
         if path == "/api/keys":
             from . import keys
             return self._json(200, keys.status())
@@ -220,6 +228,17 @@ class Handler(BaseHTTPRequestHandler):
             written = rights.write_receipt(job_, hash_source=hash_files)
             data = rights.receipt(job_, hash_source=hash_files)
             return self._json(200, {"written_to": written, "receipt": data})
+        cert_m = re.fullmatch(r"/api/job/(\w+)/certificate", path)
+        if cert_m:
+            job_ = pipeline.JOBS.get(cert_m.group(1))
+            if not job_:
+                return self._json(404, {"error": "unknown job"})
+            data = rights.certificate(job_)      # one hashing pass, then persist it
+            if not data:
+                return self._json(409, {"error": "the clearance certificate is part of "
+                                                 "the lab layer - CB_LAB=0 turns it off"})
+            written = rights.write_certificate(job_, data=data)
+            return self._json(200, {"written_to": written, "certificate": data})
 
         job_m = re.fullmatch(r"/api/job/(\w+)", path)
         if job_m:
@@ -321,6 +340,9 @@ class Handler(BaseHTTPRequestHandler):
         licence_m = re.fullmatch(r"/api/job/(\w+)/licence", path)
         if licence_m:
             return self._licence(licence_m.group(1))
+        override_m = re.fullmatch(r"/api/job/(\w+)/override", path)
+        if override_m:
+            return self._override(override_m.group(1))
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -490,7 +512,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "answer must be one of: "
                                            + ", ".join(sorted(pipeline.RIGHTS_IDS))})
         resumed = pipeline.resume_autopost(job_id)
-        return self._json(200, {"rights_ok": answer, "autopost_resumed": resumed})
+        # the other hold the answer releases: a strict-gate render that never started
+        render_resumed = pipeline.resume_render(job_id)
+        out = {"rights_ok": answer, "autopost_resumed": resumed,
+               "render_resumed": render_resumed}
+        state = rights.gate_state(job_)
+        if state and state.get("enabled"):
+            out["gate"] = state
+        return self._json(200, out)
 
     def _licence(self, job_id):
         """Store the licence record for this source. Part of copyright safety: a claim
@@ -510,17 +539,44 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, {"licence": job_["licence"],
                                 "risk": rights.risk_report(job_)})
 
+    def _override(self, job_id):
+        """Record the owner's written reason for proceeding without clearing. The only
+        path past a strict gate that is not an answer, and it demands a reason."""
+        job_ = pipeline.JOBS.get(job_id)
+        if not job_:
+            return self._json(404, {"error": "unknown job"})
+        length = self._safe_length()
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            return self._json(400, {"error": "bad json"})
+        ok, err = rights.set_override(job_, body.get("reason"), by=body.get("by"))
+        if not ok:
+            return self._json(400, {"error": err})
+        pipeline.save()
+        render_resumed = pipeline.resume_render(job_id)
+        autopost_resumed = pipeline.resume_autopost(job_id)
+        return self._json(200, {"override": job_["rights_override"],
+                                "render_resumed": render_resumed,
+                                "autopost_resumed": autopost_resumed,
+                                "gate": rights.gate_state(job_)})
+
     def _post_clip(self, body):
         job_ = pipeline.JOBS.get(body.get("job_id", ""))
         if not job_:
             return self._json(404, {"error": "unknown job"})
-        if not job_.get("rights_ok"):
+        blocked, why = rights.publish_block(job_)
+        if blocked:
             # One honest question before anything leaves this machine. Answering it is a
             # single click; the clip file itself is never withheld, so posting it by hand
-            # stays entirely the owner's call.
-            return self._json(409, {"error": "Confirm your rights for this job first.",
-                                    "rights_required": True,
-                                    "rights": pipeline.RIGHTS, "note": pipeline.RIGHTS_NOTE})
+            # stays entirely the owner's call. Under strict, a written override is the
+            # other way through - never an automatic clearance.
+            payload = {"error": why, "rights_required": True,
+                       "rights": pipeline.RIGHTS, "note": pipeline.RIGHTS_NOTE}
+            state = rights.gate_state(job_)
+            if state and state.get("enabled"):
+                payload["gate"] = state
+            return self._json(409, payload)
         try:
             index = int(body.get("index", 0))
             platforms = body.get("platforms") or []

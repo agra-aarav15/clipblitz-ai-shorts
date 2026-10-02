@@ -74,9 +74,10 @@ def test_mcp_handshake():
 def test_tool_surface():
     tools = agent.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/list"})["result"]["tools"]
     names = {t["name"] for t in tools}
-    check("tools: the seven tools are declared",
+    check("tools: the eight tools are declared",
           names == {"cut_clips", "job_status", "job_clips", "risk_report",
-                    "edit_receipt", "learning_state", "train_model"}, str(sorted(names)))
+                    "edit_receipt", "learning_state", "train_model",
+                    "clearance_certificate"}, str(sorted(names)))
     check("tools: every tool has a description and a JSON schema",
           all(t.get("description") and isinstance(t.get("inputSchema"), dict)
               and "properties" in t["inputSchema"] for t in tools))
@@ -153,7 +154,7 @@ def test_cli():
         rc = agent.main(["tools"])
     tools = json.loads(buf.getvalue())
     check("cli: 'tools' prints the schemas as JSON",
-          rc == 0 and len(tools) == 7 and tools[0]["name"] == "cut_clips")
+          rc == 0 and len(tools) == 8 and tools[0]["name"] == "cut_clips")
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):

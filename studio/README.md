@@ -26,7 +26,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v4.1.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v4.2.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -159,6 +159,29 @@ From a terminal or an agent: `python -m clipblitz.agent scout "podcast clips"`, 
 never judges for you. `CB_SCOUT=off` turns the scout off, `CB_LAB=0` removes all of it, and
 `GET /api/scout` plus `POST /api/scout/search|judge|make` are the API underneath.
 
+## ClipBench — the scoreboard
+
+Every ranking claim in this studio gets scored on the same held-out pairs by
+`clipblitz/clipbench.py`. It reads the stores, changes nothing and writes no model. Each
+family faces the split its own model is gated on — the newest fifth of the pairs, chronological
+— and every contender is scored on exactly those pairs:
+
+| Family | Baseline | Fixed, never learns | Learned |
+|---|---|---|---|
+| Taste (judge verdicts + your choices) | `virality` — the mean of the measured factors | `one-shot` — one plausible weight set, chosen once | `taste-model`, when one is active |
+| Scout (make/pass calls) | `measured` — the mean of the measured features | `one-shot` — reach and freshness, nothing else | `scout-model`, when one is active |
+
+Accuracy is strict pairwise: the contender has to rank the kept cut above the one it beat. **A
+tie is not a win** — so a constant scorer scores 0.00 and a coin flip is the 0.50 reference —
+and every row carries its pair count and tie count next to the number. Below six held-out pairs
+the row says `insufficient evidence` instead of printing something flattering, and with no
+active model the board scores the baselines only and says so. The verdict line is allowed to
+report that the learned model **lost**. Same data in, same board out.
+
+Run it from the Scout screen, `GET /api/clipbench` (last board) or `POST` (run now), `python
+run.py --bench`, `python -m clipblitz.agent clipbench`, or the `clipbench` MCP tool.
+`CB_CLIPBENCH=off` switches the board off; `CB_LAB=0` removes it with the rest of the lab.
+
 ## The two engines, technically
 
 One codebase, branched per job — B2 Pro X is a strict superset of ProX v5:
@@ -179,7 +202,7 @@ pre-cinema bounds, the B2 cut from the cinema-snapped bounds.
 run.py            one entry point, port 4300 (CLI arg > CB_PORT > default)
 START.bat         one-click Windows launcher (auto-installs Python if missing)
 start.sh          macOS / Linux / Termux launcher
-clipblitz/        the engine package (pipeline, virality, cinema, rights, agent, server, ...)
+clipblitz/        the engine package (pipeline, virality, cinema, rights, scout, clipbench, agent, server, ...)
 web/              the single-file UI (vanilla HTML/CSS/JS, self-hosted fonts, PWA manifest)
 plugin/           the agent plugin: MCP server, /cut command, skill (see plugin/README.md)
 bin/              bundled ffmpeg + yt-dlp — nothing is ever downloaded at runtime
@@ -218,6 +241,8 @@ python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/rece
 python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit, holdout gate, CB_LAB off
 python scripts/test_rights.py     # gate modes, source registry, override record, hold/resume, certificate + verifier
 python scripts/test_scout.py      # metadata-only fetch, measured features, judgment pairs, holdout gate, MCP + CLI
+python scripts/test_clipbench.py  # same split as the gate, ties are not wins, a losing model is reported as losing
+python scripts/test_marketplace.py # one-command install, plugin manifest, tool table == code, bundle hygiene
 ```
 
 ## Use it from an agent
@@ -230,17 +255,24 @@ python -m clipblitz.agent risk <job_id>                       # what to check be
 python -m clipblitz.agent receipt <job_id>                    # write and show the edit receipt
 python -m clipblitz.agent certificate <job_id>                # write and show the clearance certificate
 python -m clipblitz.agent scout "podcast clips"               # metadata-only discovery for a niche
+python -m clipblitz.agent clipbench --run                     # score every ranking claim on held-out pairs
 python -m clipblitz.agent mcp                                 # the MCP server itself, on stdio
 ```
 
+Install it in one command — `sh plugin/install.sh` or `plugin\install.bat` registers the
+marketplace this repo publishes (`.claude-plugin/marketplace.json`, entry `clipblitz-studio`)
+and installs the plugin; with no `claude` on PATH it prints the two commands to run by hand.
+Working on the checkout itself, `claude --plugin-dir <studio>\plugin` loads it in place.
+
 The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt`,
-`learning_state`, `train_model`, `clearance_certificate`, `scout_search` and `scout_queue`.
+`learning_state`, `train_model`, `clearance_certificate`, `scout_search`, `scout_queue` and
+`clipbench`.
 If a Studio is listening on 127.0.0.1 it creates the job
 through its own HTTP API (one writer for `data/jobs.json`); if not, the identical pipeline runs
 in-process. `train_model` fits the local taste model and reports the gate decision; `scout_search`
-and `scout_queue` are the metadata-only discovery surface. There is no publish tool and no judge
-tool, on purpose: editing is the plugin's job, the scout's Make/Pass and keep-versus-reject calls
-stay in the studio, and publishing stays a human decision.
+and `scout_queue` are the metadata-only discovery surface; `clipbench` runs the scoreboard.
+There is no publish tool and no judge tool, on purpose: editing is the plugin's job, the scout's
+Make/Pass and keep-versus-reject calls stay in the studio, and publishing stays a human decision.
 
 The ready-to-run Windows release carries `plugin/` next to the EXE, and the EXE is the same
 entry point, so no Python is needed for the agent path either:

@@ -19,6 +19,8 @@
   POST /api/scout/judge        {proposal, verdict: make|pass}  the owner's call
   POST /api/scout/make         {proposal, engine?, top_n?}  judge make + import it
   POST /api/judge              {job_id, mine, other}  clip head-to-head → the taste model
+ GET  /api/clipbench          the last board: every ranking claim on the same held-out pairs
+ POST /api/clipbench          run the board now (reads the stores, scores, writes no model)
   GET  /api/social/status      YouTube connection state
   GET  /api/social/youtube/start        -> {url} to open Google consent
   GET  /oauth/youtube/callback?code=    -> stores token, shows success page
@@ -36,9 +38,10 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (captions, ffmpeg_tools, hardware, learning, pipeline, rights, scout,
-               social, virality)
-from .config import CONFIG, ffmpeg_available, stt_mode, ytdlp_available
+from . import (captions, clipbench, ffmpeg_tools, hardware, learning, pipeline, rights,
+               scout, social, virality)
+from .config import (APP_VERSION, CONFIG, ffmpeg_available, stt_mode,
+                     ytdlp_available)
 
 from .config import app_root
 
@@ -126,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
             from .brains import brains
             from . import hardware
             return self._json(200, {
-                "ok": True, "name": "ClipBlitz Studio", "version": "4.1.0",
+                "ok": True, "name": "ClipBlitz Studio", "version": APP_VERSION,
                 "engine": "B2 Pro X", "default_engine": CONFIG.get("engine_default", "b2"),
                 "engines": [
                     {"id": "prox", "name": "ProX v5",
@@ -151,6 +154,9 @@ class Handler(BaseHTTPRequestHandler):
                 # same for the scout: the surface simply is not there when it is off
                 **({"scout": {"enabled": True}}
                    if scout.enabled() else {}),
+                # and the scoreboard, which is off with the same two switches
+                **({"clipbench": {"enabled": True}}
+                   if clipbench.enabled() else {}),
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
@@ -180,6 +186,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/keys":
             from . import keys
             return self._json(200, keys.status())
+        if path == "/api/clipbench":
+            return self._json(200, clipbench.state())
         if path == "/api/social/status":
             return self._json(200, {
                 "youtube": {"connected": social.youtube_connected(),
@@ -382,6 +390,12 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._json(400, {"error": "bad json"})
             return self._judge(body)
+        if path == "/api/clipbench":
+            json_body()   # consume the body: an unread one corrupts the NEXT request
+                          # on this keep-alive connection (the UI runs, then refreshes)
+            if not clipbench.enabled():
+                return self._json(409, {"error": "the scoreboard is off (CB_CLIPBENCH=off or CB_LAB=0)"})
+            return self._json(200, clipbench.run(reason="api"))
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -768,7 +782,7 @@ def serve(port=None):
         print(f"ClipBlitz Studio is already running -> http://localhost:{port}  "
               f"(open that tab; or kill the old instance first)")
         sys.exit(0)
-    print(f"ClipBlitz Studio v4.1.0 (engines: ProX v5 / B2 Pro X / Both)  ->  "
+    print(f"ClipBlitz Studio v{APP_VERSION} (engines: ProX v5 / B2 Pro X / Both)  ->  "
           f"http://localhost:{port}", flush=True)
     from . import hardware
     hw = hardware.profile()

@@ -345,6 +345,7 @@ def test_api():
     httpd = studio_server.QuietServer(("127.0.0.1", 0), studio_server.Handler)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    saved_profile = studio_server.hardware.profile
     try:
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
 
@@ -369,14 +370,25 @@ def test_api():
         check("api: a real call is recorded", status == 200 and res["verdict"] == "pass")
         status, res = req("POST", "/api/scout/make", {"proposal": "nope"})
         check("api: making an unknown proposal is a clean 404", status == 404)
+        # Whether this machine can render is the hardware layer's business, not this
+        # suite's: pin both branches so a bare checkout without bin/ passes the same as
+        # a full one (the suite is offline and needs no engine of its own).
+        studio_server.hardware.profile = lambda refresh=False: {
+            "render_capable": False, "reason": "this suite owns no engine"}
+        status, res = req("POST", "/api/scout/make", {"proposal": pid, "top_n": 2})
+        check("api: make refuses to start a render on a machine that cannot render",
+              status == 503 and res.get("render_capable") is False, f"{status}")
+        studio_server.hardware.profile = lambda refresh=False: {
+            "render_capable": True, "reason": "ready"}
         status, res = req("POST", "/api/scout/make", {"proposal": pid, "top_n": 2})
         check("api: make judges the proposal and imports through the normal path",
-              status == 200 and res["job_id"] and res["verdict"] == "make"
+              status == 200 and res.get("job_id") and res["verdict"] == "make"
               and pipeline.JOBS[res["job_id"]]["status"] == "queued", f"{status}")
         check("api: the make imported the proposal's own URL",
               pipeline.JOBS[res["job_id"]]["source"]["url"] ==
               scout.proposal(pid)["url"])
     finally:
+        studio_server.hardware.profile = saved_profile
         scout._fetch = saved_fetch
         pipeline.start_from_url = saved_start
         httpd.shutdown()

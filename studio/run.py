@@ -5,6 +5,7 @@
     python run.py --tools    the MCP tool schemas as JSON, then exit
     python run.py --mcp      the MCP server on stdio - what the agent plugin launches
     python run.py --train    one fit of the local taste model, then exit
+    python run.py --bench    one ClipBench board over this install's own stores, then exit
 
 The packaged Windows EXE is this very script, so `ClipBlitzStudio.exe --mcp` is the
 plugin with no Python installed. The two agent modes own stdout (an agent host reads
@@ -17,6 +18,7 @@ import sys
 ARG = sys.argv[1].strip().lower() if len(sys.argv) > 1 else ""
 AGENT_MODES = {"--tools": "tools", "tools": "tools", "--mcp": "mcp", "mcp": "mcp"}
 TRAIN_MODES = ("--train", "train")
+BENCH_MODES = ("--bench", "bench")
 
 
 def utf8_console():
@@ -40,6 +42,12 @@ def main():
         utf8_console()
         from clipblitz import trainer
         print(json.dumps(trainer.run_fit(reason="cli"), indent=2, ensure_ascii=False))
+        return 0
+    if ARG in BENCH_MODES:
+        # one board; JSON on stdout, no banner, same payload as POST /api/clipbench
+        utf8_console()
+        from clipblitz import clipbench
+        print(json.dumps(clipbench.run(reason="cli"), indent=2, ensure_ascii=False))
         return 0
     print("Starting ClipBlitz Studio ...", flush=True)
     utf8_console()

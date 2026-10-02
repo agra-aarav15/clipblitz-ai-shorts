@@ -787,6 +787,21 @@ textarea { resize: vertical; }
   border-bottom: 1px dashed var(--line); padding-bottom: 5px; }
 .trendrow span { color: var(--text-3); }
 .pairlist { display: grid; gap: 14px; margin-top: 10px; }
+/* clipbench: one board, every claim, the same held-out pairs */
+.benchtop { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.benchbody { display: grid; gap: 12px; margin-top: 12px; }
+.benchfam { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px;
+  display: grid; gap: 8px; }
+.benchtitle { font-family: var(--font-display); font-size: 13.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em; }
+.benchverdict { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.benchtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.benchtable th { text-align: left; color: var(--text-3); font-weight: 500; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .08em; padding: 2px 0; }
+.benchtable td { padding: 2px 0; color: var(--text); }
+.benchtable td:nth-child(2), .benchtable td:nth-child(3),
+.benchtable th:nth-child(2), .benchtable th:nth-child(3) { text-align: right; width: 84px; }
+
 .paircard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px;
   display: grid; gap: 10px; background: rgba(255, 255, 255, 0.02); }
 .pairtop { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }

@@ -1,0 +1,20 @@
+{
+  "name": "clipblitz",
+  "owner": {
+    "name": "agra-aarav15",
+    "url": "https://github.com/agra-aarav15/clipblitz-ai-shorts"
+  },
+  "metadata": {
+    "description": "ClipBlitz Studio's agent plugin: hand an agent a video, get measured vertical clips back, on your own machine.",
+    "version": "4.2.0"
+  },
+  "plugins": [
+    {
+      "name": "clipblitz-studio",
+      "source": "./studio/plugin",
+      "description": "Cut N clips from a video or URL with ClipBlitz Studio's own stdlib engines, then measure them: risk reports, edit receipts, clearance certificates, a self-training taste model, metadata-only scouting and the ClipBench scoreboard. No cloud, no API key, no upload. Nothing is published unless you ask and the clearance gate is answered.",
+      "category": "video",
+      "tags": ["video", "shorts", "clips", "editing", "ffmpeg", "mcp"]
+    }
+  ]
+}

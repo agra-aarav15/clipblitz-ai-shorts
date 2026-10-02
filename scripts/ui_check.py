@@ -14,7 +14,8 @@ import os
 import re
 import sys
 
-WEB = r"E:\clipping\clipblitz\web"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB = os.path.join(ROOT, "web")
 html = open(os.path.join(WEB, "index.html"), encoding="utf-8").read()
 css_raw = open(os.path.join(WEB, "styles.css"), encoding="utf-8").read()
 js = open(os.path.join(WEB, "app.js"), encoding="utf-8").read()

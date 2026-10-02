@@ -31,6 +31,11 @@ The active model only ever touches the ranking through learning.adjustment(), as
 +/-6% layer inside the existing +/-10% cap; the two engines' render paths are not
 involved at all. CB_LAB=0 removes the whole layer: no siblings are stored, nothing
 refits, learning.profile() carries no model block, and the studio is v4.1.0 again.
+
+The fit itself is deliberately generic: fit_pairs / rate / recency operate on any
+six-feature space of 0..100 measurements, so the scout's proposal model
+(clipblitz/scout.py) reuses exactly this deterministic core against its own metadata
+features instead of forking a second, silently drifting implementation.
 """
 
 import json
@@ -103,7 +108,7 @@ def _vec(factors):
     return out
 
 
-def _recency(t, newest):
+def recency(t, newest):
     """Half-life weighting against the newest logged choice, so a fit is a pure
     function of the store rather than of the clock."""
     age_days = max(0.0, (newest - float(t or 0.0)) / 86400.0)
@@ -157,7 +162,7 @@ def _human_pairs(events):
         if kept is None:
             continue
         t = float(e.get("t") or 0.0)
-        w = _recency(t, newest)
+        w = recency(t, newest)
         seen = 0
         for s in (e.get("sib") or []):
             sib = _vec((s or {}).get("factors"))
@@ -182,7 +187,7 @@ def _sigmoid(x):
     return z / (1.0 + z)
 
 
-def _fit(pairs):
+def fit_pairs(pairs):
     """Deterministic full-batch pairwise logistic fit.
 
     The loss is  sum(w * log(1 + exp(-(s(kept) - s(other))))) + L2 * ||theta||^2 ,
@@ -230,9 +235,10 @@ def _fit(pairs):
     return theta, scale
 
 
-def _rate(theta, scale, pairs):
-    """Strict kept-beats-sibling rate on these pairs: a tie is not a win, because the
-    model only earns its place by actually separating the kept cut from the rest."""
+def rate(theta, scale, pairs):
+    """Strict win rate on these pairs (kept-beats-sibling for the taste model,
+    make-beats-pass for the scout): a tie is not a win, because a model only earns its
+    place by actually separating what the owner chose from what they did not."""
     if not pairs:
         return None
     wins = 0
@@ -308,7 +314,7 @@ def run_fit(reason="manual"):
         return {"enabled": True, "attempted": False, "activated": False, "day": day,
                 "reason": "nothing to fit yet: no logged choices and no judged candidates"}
 
-    fitted = _fit(train)
+    fitted = fit_pairs(train)
     record = {
         "day": day,
         "version": max([r.get("version") or 0 for r in _fits()] or [0]) + 1,
@@ -327,7 +333,7 @@ def run_fit(reason="manual"):
         theta = scale = None
     else:
         theta, scale = fitted
-        cand_rate = _rate(theta, scale, [(w, l) for w, l, *_ in hold])
+        cand_rate = rate(theta, scale, [(w, l) for w, l, *_ in hold])
         record["holdout"] = round(cand_rate, 4) if cand_rate is not None else None
         record["holdout_n"] = hold_n
         incumbent = _model()
@@ -335,9 +341,9 @@ def run_fit(reason="manual"):
         if incumbent and hold:
             iw, isc = incumbent.get("weights") or {}, incumbent.get("scale") or {}
             try:
-                inc_rate = _rate([float(iw[k]) for k in FEATURES],
-                                 [float(isc[k]) for k in FEATURES],
-                                 [(w, l) for w, l, *_ in hold])
+                inc_rate = rate([float(iw[k]) for k in FEATURES],
+                                [float(isc[k]) for k in FEATURES],
+                                [(w, l) for w, l, *_ in hold])
             except (KeyError, TypeError, ValueError, ZeroDivisionError):
                 inc_rate = None
         activated, why = _decide(cand_rate, inc_rate, hold_n)

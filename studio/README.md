@@ -131,6 +131,34 @@ like v4.1.0.
 
 ![Connect screen with the phone and machine cards](docs/shots/04-connect.png)
 
+## Scout the next video (metadata only)
+
+The **Scout** screen answers "what should I cut next?" without touching a single byte of
+media. Type a niche and the bundled yt-dlp answers with metadata only — titles, channels,
+view counts, publish dates, durations. Every result is measured into six features: velocity
+(views/day, log scale), reach, freshness (30-day half-life), duration fit around the
+~20-minute sweet spot, curiosity signals actually present in the title, and channel fit from
+your own `data/jobs.json`. Nothing is imputed: a field the source did not report stays
+unmeasured, is shown as unmeasured, and is excluded from the score.
+
+Judging a proposal is one click — **Make** or **Pass**. Each call is stored with the features
+measured at judgment time, and pairwise evidence is mined from it (within one search, every
+make against every pass), then fit with the same deterministic core as the taste model: the
+newest fifth is held out, and a scout model activates only at 0.55+ make-beats-pass and
+strictly above the incumbent, one line per attempt in `data/scout_model_log.json`. An active
+model shifts a proposal's score by at most 8 points — it never touches a render.
+
+**Make this** is the only place the scout causes a download: it records your make first and
+then runs the normal import, so the whole rights layer applies exactly as it always does.
+The **judgment queue** also offers the strongest evidence the taste model can get — the same
+moment cut by both engines in one `both` job — for a real kept-versus-rejected call with
+measured factors on both sides.
+
+From a terminal or an agent: `python -m clipblitz.agent scout "podcast clips"`, or the
+`scout_search` and `scout_queue` MCP tools — an agent can search and read the queue, but it
+never judges for you. `CB_SCOUT=off` turns the scout off, `CB_LAB=0` removes all of it, and
+`GET /api/scout` plus `POST /api/scout/search|judge|make` are the API underneath.
+
 ## The two engines, technically
 
 One codebase, branched per job — B2 Pro X is a strict superset of ProX v5:
@@ -189,6 +217,7 @@ python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, 
 python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart
 python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit, holdout gate, CB_LAB off
 python scripts/test_rights.py     # gate modes, source registry, override record, hold/resume, certificate + verifier
+python scripts/test_scout.py      # metadata-only fetch, measured features, judgment pairs, holdout gate, MCP + CLI
 ```
 
 ## Use it from an agent
@@ -200,14 +229,18 @@ python -m clipblitz.agent cut episode.mp4 --clips 4 --json    # one shot, prints
 python -m clipblitz.agent risk <job_id>                       # what to check before publishing
 python -m clipblitz.agent receipt <job_id>                    # write and show the edit receipt
 python -m clipblitz.agent certificate <job_id>                # write and show the clearance certificate
+python -m clipblitz.agent scout "podcast clips"               # metadata-only discovery for a niche
 python -m clipblitz.agent mcp                                 # the MCP server itself, on stdio
 ```
 
 The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt`,
-`learning_state`, `train_model` and `clearance_certificate`. If a Studio is listening on 127.0.0.1 it creates the job
+`learning_state`, `train_model`, `clearance_certificate`, `scout_search` and `scout_queue`.
+If a Studio is listening on 127.0.0.1 it creates the job
 through its own HTTP API (one writer for `data/jobs.json`); if not, the identical pipeline runs
-in-process. `train_model` fits the local taste model and reports the gate decision; there is no
-publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.
+in-process. `train_model` fits the local taste model and reports the gate decision; `scout_search`
+and `scout_queue` are the metadata-only discovery surface. There is no publish tool and no judge
+tool, on purpose: editing is the plugin's job, the scout's Make/Pass and keep-versus-reject calls
+stay in the studio, and publishing stays a human decision.
 
 The ready-to-run Windows release carries `plugin/` next to the EXE, and the EXE is the same
 entry point, so no Python is needed for the agent path either:

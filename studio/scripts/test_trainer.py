@@ -223,7 +223,7 @@ def test_fit_activates_and_is_deterministic():
     events = learning.events()
     train = trainer._machine_pairs() + trainer._human_pairs(events)[0]
     check("determinism: the same pairs fit the same weights",
-          trainer._fit(train) == trainer._fit(train))
+          trainer.fit_pairs(train) == trainer.fit_pairs(train))
     check("determinism: a refit on the same pairs records the same holdout",
           trainer.run_fit()["holdout"] == first["holdout"])
 

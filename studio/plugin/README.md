@@ -56,6 +56,8 @@ routing to a running studio, the learning store next to the app - behaves identi
 | `learning_state` | What each engine has learned from this owner's kept cuts. |
 | `train_model` | Fits the local taste model from the owner's real choices and reports the gate decision. |
 | `clearance_certificate` | Writes the clearance certificate: risk report, licence, receipt and sha256 of every file, with a digest a third party can re-check. |
+| `scout_search` | Metadata-only discovery for a niche: titles, channels, views, dates, durations — nothing downloads. Ranks what it finds with measured features and the owner's judged history. |
+| `scout_queue` | The scout queue as the owner sees it: ranked proposals, the measured trend, and the clip head-to-heads waiting for a human call. |
 
 Where the work runs: if a Studio server is listening on `127.0.0.1:4300`, the job
 goes through its API (one writer for `data/jobs.json`). Otherwise the identical
@@ -64,8 +66,12 @@ the same file the app uses, so an agent's use trains the same two engines.
 
 ## Two rules the plugin does not bend
 
-1. **It only edits.** There is no publish, post or upload tool. The rights gate and
-   the publish buttons stay in the studio, in front of a human.
+1. **It only edits.** There is no publish, post or upload tool, and no judge tool: the
+   scout's Make/Pass and keep-versus-reject calls belong to the owner in the studio.
+   `scout_search` and `scout_queue` download nothing and clear nothing; the one place a
+   proposal's video is fetched is the owner pressing Make, which runs the normal import
+   with the rights gate in front of it. The publish buttons stay in the studio, in front
+   of a human.
 2. **It does not make anything uncopyrighted.** `risk_report` measures real things —
    third-party-looking music spans, where the source came from, a missing or expired
    licence, clips that carry fewer transformative layers — and stores the owner's

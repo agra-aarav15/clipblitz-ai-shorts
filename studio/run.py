@@ -4,16 +4,19 @@
     python run.py [port]     the studio server itself (default port 4300)
     python run.py --tools    the MCP tool schemas as JSON, then exit
     python run.py --mcp      the MCP server on stdio - what the agent plugin launches
+    python run.py --train    one fit of the local taste model, then exit
 
 The packaged Windows EXE is this very script, so `ClipBlitzStudio.exe --mcp` is the
 plugin with no Python installed. The two agent modes own stdout (an agent host reads
 JSON there), which is why they are answered before the server banner is printed.
 """
 
+import json
 import sys
 
 ARG = sys.argv[1].strip().lower() if len(sys.argv) > 1 else ""
 AGENT_MODES = {"--tools": "tools", "tools": "tools", "--mcp": "mcp", "mcp": "mcp"}
+TRAIN_MODES = ("--train", "train")
 
 
 def utf8_console():
@@ -32,6 +35,12 @@ def main():
         utf8_console()
         from clipblitz.agent import main as agent_main
         return agent_main([AGENT_MODES[ARG]])
+    if ARG in TRAIN_MODES:
+        # one explicit fit; JSON on stdout, no banner, same payload as POST /api/train
+        utf8_console()
+        from clipblitz import trainer
+        print(json.dumps(trainer.run_fit(reason="cli"), indent=2, ensure_ascii=False))
+        return 0
     print("Starting ClipBlitz Studio ...", flush=True)
     utf8_console()
     from clipblitz.config import CONFIG

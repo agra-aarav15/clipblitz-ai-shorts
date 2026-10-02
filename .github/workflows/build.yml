@@ -43,6 +43,7 @@ jobs:
           python scripts/test_engines.py
           python scripts/test_learning.py
           python scripts/test_agent.py
+          python scripts/test_trainer.py
 
       - name: Build the EXE
         working-directory: studio

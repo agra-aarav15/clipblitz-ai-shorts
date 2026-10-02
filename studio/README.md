@@ -100,6 +100,16 @@ counts, shares, medians and the plain-language *why* behind every multiplier in 
 Reset button. The store is a local `data/learning.json`; nothing is uploaded and there is no
 cloud training.
 
+A fourth layer sits on top of those three: the trained model (`clipblitz/trainer.py`). It is a
+local pairwise ranker over the same measured factors, pre-trained on this install's own judge
+verdicts and post-trained on your real choices. It only activates when the newest fifth of your
+choices says it ranks the kept cut above the candidates it beat, at 0.55 or better, and it
+moves ranking weights by at most 6% per factor inside the same 10% cap. Every fit is one line
+in `data/model_log.json`; a fit that cannot prove itself leaves the previous model exactly as
+it was. Re-train on demand from the card, `run.py --train`, `POST /api/train` or the
+`train_model` agent tool. With `CB_LAB=0` the whole layer is off and the studio behaves exactly
+like v4.1.0.
+
 ![Connect screen with the phone and machine cards](docs/shots/04-connect.png)
 
 ## The two engines, technically
@@ -158,6 +168,7 @@ network, no ffmpeg):
 python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouched, both honest
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
 python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart
+python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit, holdout gate, CB_LAB off
 ```
 
 ## Use it from an agent
@@ -171,10 +182,11 @@ python -m clipblitz.agent receipt <job_id>                    # write and show t
 python -m clipblitz.agent mcp                                 # the MCP server itself, on stdio
 ```
 
-The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt` and
-`learning_state`. If a Studio is listening on 127.0.0.1 it creates the job through its own HTTP
-API (one writer for `data/jobs.json`); if not, the identical pipeline runs in-process. There is
-no publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.
+The MCP server exposes `cut_clips`, `job_status`, `job_clips`, `risk_report`, `edit_receipt`,
+`learning_state` and `train_model`. If a Studio is listening on 127.0.0.1 it creates the job
+through its own HTTP API (one writer for `data/jobs.json`); if not, the identical pipeline runs
+in-process. `train_model` fits the local taste model and reports the gate decision; there is no
+publish tool, on purpose: editing is the plugin's job and publishing stays a human decision.
 
 The ready-to-run Windows release carries `plugin/` next to the EXE, and the EXE is the same
 entry point, so no Python is needed for the agent path either:

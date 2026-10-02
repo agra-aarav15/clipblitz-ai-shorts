@@ -17,7 +17,7 @@ cuts, film grade, J-cut audio), or **Both at once** — one analysis pass, both 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v4.1.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v4.2.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 

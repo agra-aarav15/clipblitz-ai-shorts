@@ -402,6 +402,14 @@
         <div class="label-caps scoutsep">Judgment queue <span class="chip" id="paircount">-</span></div>
         <div class="dim">The same moment cut by both engines. Your call here is the strongest evidence the taste model gets: a real kept-versus-rejected pair with measured factors on both sides.</div>
         <div id="pairlist" class="pairlist"></div>
+        <div class="label-caps scoutsep">ClipBench <span class="chip" id="benchchip">not run</span></div>
+        <div class="dim">One board for every ranking claim: the shipped baselines, the taste model, the scout model and a fixed one-shot weight set that never learns - the same pairs, the same rule, and a tie is not a win.</div>
+        <div class="benchtop">
+          <button class="btn small" id="benchrun" type="button">Run the board</button>
+          <span class="dim" id="benchwhen"></span>
+        </div>
+        <div id="benchbody" class="benchbody"></div>
+        <div class="dim" id="benchnote"></div>
       </div>
     </section>
 

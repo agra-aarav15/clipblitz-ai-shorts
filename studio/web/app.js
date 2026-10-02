@@ -1389,6 +1389,7 @@ async function loadScout() {
     const data = await (await fetch('/api/scout')).json();
     SCOUT = data;
     renderScout(data);
+    loadBench();
   } catch (e) { toast('scout unavailable — retrying…', true); }
 }
 
@@ -1496,6 +1497,67 @@ function renderScoutModel(m) {
   ].filter(Boolean).map(t => `<div class="dim">${t}</div>`).join('');
 }
 
+/* --------- clipbench ---------
+   One board for every ranking claim this studio makes: the shipped baselines, the taste
+   model, the scout model and a fixed one-shot weight set that never learns, all scored
+   on the same chronologically held-out pairs. A tie is not a win, so a constant scorer
+   is 0.00 and a coin flip is reported as 0.50. Reading the board scores nothing;
+   "Run the board" is the one button here, and it writes one line to the log. */
+let BENCH = null;
+
+async function loadBench() {
+  try {
+    const data = await (await fetch('/api/clipbench')).json();
+    BENCH = data;
+    renderBench(data);
+  } catch (e) { /* the scout panel already reports the whole layer being down */ }
+}
+
+function benchPct(row) {
+  if (!row || row.accuracy === null || row.accuracy === undefined) return '—';
+  return row.accuracy.toFixed(2);
+}
+
+function benchFamily(name, fam) {
+  const rows = Object.keys(fam.contenders || {}).map(k => {
+    const c = fam.contenders[k];
+    const mark = k === fam.challenger ? ' <span class="dim">model</span>'
+      : (k === fam.baseline ? ' <span class="dim">baseline</span>' : '');
+    return `<tr><td>${esc(k)}${mark}</td><td>${benchPct(c.holdout)}</td>`
+      + `<td class="dim">${benchPct(c.train)}</td></tr>`;
+  }).join('');
+  return `<div class="benchfam">
+    <div class="benchtitle">${esc(name)}
+      <span class="dim">${fam.pairs} pair(s) · ${fam.holdout_pairs} held out</span></div>
+    <div class="benchverdict${fam.status === 'scored' ? '' : ' dim'}">${esc(fam.verdict || '')}</div>
+    <table class="benchtable"><thead><tr><th>contender</th><th>held-out</th><th>train</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="dim">chance ${(fam.chance === undefined ? 0.5 : fam.chance).toFixed(2)}</div>
+  </div>`;
+}
+
+function renderBench(d) {
+  const chip = $('benchchip'), body = $('benchbody'), note = $('benchnote'), when = $('benchwhen');
+  if (!chip) return;
+  if (!d || !d.enabled) {
+    chip.textContent = 'off';
+    chip.className = 'chip err';
+    body.innerHTML = '';
+    note.textContent = 'the scoreboard is off (CB_CLIPBENCH=off or CB_LAB=0)';
+    if (when) when.textContent = '';
+    return;
+  }
+  const b = d.board;
+  chip.textContent = b ? `v${b.version}` : 'not run';
+  chip.className = 'chip' + (b ? ' ok' : '');
+  if (when) when.textContent = b ? `${b.day} · run ${d.runs} time(s)` : (d.next || '');
+  body.innerHTML = b
+    ? ['taste', 'scout'].filter(k => b.families[k])
+        .map(k => benchFamily(k, b.families[k])).join('')
+    : '<div class="note">No board yet — press Run the board. It scores whatever this install already has and writes one line to the log.</div>';
+  note.textContent = (b && b.note) || d.note || '';
+}
+
 function pairCard(pp) {
   const side = (s) => `<div class="pairvideo">
     <video controls preload="metadata" src="${esc(s.file || '')}" playsinline></video>
@@ -1546,6 +1608,20 @@ async function makeProposal(id) {
 }
 
 function initScout() {
+  const benchBtn = $('benchrun');
+  if (benchBtn && !benchBtn.dataset.built) {
+    benchBtn.dataset.built = '1';
+    benchBtn.addEventListener('click', async () => {
+      benchBtn.disabled = true;
+      try {
+        const res = await post('/api/clipbench', JSON.stringify({}));
+        const first = ((res.families && res.families.taste) || {}).verdict;
+        toast(first || 'board written');
+        await loadBench();
+      } catch (e) { toast(String(e.message || e), true); }
+      finally { benchBtn.disabled = false; }
+    });
+  }
   const form = $('scoutform');
   if (!form || form.dataset.built) return;
   form.dataset.built = '1';

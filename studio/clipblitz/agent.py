@@ -37,10 +37,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import learning, pipeline, rights, scout, trainer
-from .config import CONFIG
+from . import clipbench, learning, pipeline, rights, scout, trainer
+from .config import CONFIG, APP_VERSION
 
-VERSION = "4.1.0"
+VERSION = APP_VERSION
 DEFAULT_CLIPS = 3
 MAX_CLIPS = 8
 MCP_PROTOCOL = "2024-11-05"
@@ -200,6 +200,26 @@ class Studio:
     def scout_queue(self):
         try:
             return self._call("/api/scout")
+        except Exception:
+            return None
+
+    def clipbench(self, run=False):
+        """The last board, or a fresh one. The scoring pass stays in the studio that
+        owns the stores; a refused run comes back as its payload, never as a guess."""
+        if run:
+            try:
+                return self._call("/api/clipbench", data=b"{}", method="POST",
+                                  headers={"Content-Type": "application/json"},
+                                  timeout=240)
+            except urllib.error.HTTPError as e:
+                try:
+                    return json.loads(e.read().decode("utf-8", "replace"))
+                except (ValueError, OSError):
+                    return None
+            except Exception:
+                return None
+        try:
+            return self._call("/api/clipbench")
         except Exception:
             return None
 
@@ -428,6 +448,19 @@ TOOLS = [
                      "measured features, the trend read from the metadata, and the clip "
                      "head-to-heads waiting for a human call. An agent never judges."),
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "clipbench",
+     "description": ("The ClipBench scoreboard: every ranking claim this studio makes - "
+                     "the shipped baselines, the taste model, the scout model and a "
+                     "fixed one-shot weight set that never learns - scored on the same "
+                     "chronologically held-out pairs, where a tie is not a win. Reading "
+                     "it scores nothing and changes nothing; {\"run\": true} writes one "
+                     "board and one log line. It is allowed to report that a model "
+                     "lost."),
+     "inputSchema": {"type": "object",
+                     "properties": {
+                         "run": {"type": "boolean", "default": False,
+                                 "description": ("score the stores now instead of "
+                                                 "returning the last board")}}}},
 ]
 
 
@@ -500,6 +533,13 @@ def call_tool(name, args):
         res = st.scout_queue() if port_open(st.port) else None
         if res is None:
             res = scout.queue()
+        return res, False
+    if name == "clipbench":
+        st = Studio()
+        want = bool(args.get("run"))
+        res = st.clipbench(run=want) if port_open(st.port) else None
+        if res is None:
+            res = clipbench.run(reason="mcp") if want else clipbench.state()
         return res, False
     if name == "learning_state":
         return learning.profile(), False
@@ -654,6 +694,11 @@ def main(argv=None):
     sc.add_argument("--limit", type=int, default=10)
     sc.add_argument("--json", action="store_true")
 
+    cb = sub.add_parser("clipbench", help="the scoreboard: every ranking claim on held-out pairs")
+    cb.add_argument("--run", action="store_true",
+                    help="score a fresh board now (default: the last board)")
+    cb.add_argument("--json", action="store_true")
+
     sub.add_parser("mcp", help="run the MCP server on stdio")
     sub.add_parser("tools", help="print the MCP tool definitions as JSON")
 
@@ -671,6 +716,14 @@ def main(argv=None):
         res = scout.search(args.query, args.limit)
         _print(res, args.json)
         return 0 if not res.get("error") else 1
+    if cmd == "clipbench":
+        if not clipbench.enabled():
+            print(json.dumps({"enabled": False,
+                              "reason": "the scoreboard is off (CB_CLIPBENCH=off or CB_LAB=0)"}))
+            return 1
+        res = clipbench.run(reason="cli") if args.run else clipbench.state()
+        _print(res, args.json)
+        return 0
     if cmd in ("status", "clips"):
         job = _job_or_error(args.job)
         if not job:

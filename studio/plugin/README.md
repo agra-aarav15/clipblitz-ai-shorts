@@ -11,9 +11,21 @@ the measured reason it was picked.
 
 ## Install
 
-**Claude Code.** The plugin folder is meant to be loaded as a local plugin:
+**Claude Code, one command.** The repo publishes a marketplace (`clipblitz`, entry
+`clipblitz-studio` at `.claude-plugin/marketplace.json`), so installing is one command
+from a clone:
 
-    claude plugin marketplace add <path-to-this-repo>      # if you publish a marketplace entry
+    sh plugin/install.sh        # macOS / Linux / Git Bash
+    plugin\install.bat          # Windows
+
+Either script registers the marketplace, installs the plugin, and tells you where it
+landed. With no `claude` on PATH it prints the two commands to run by hand:
+
+    claude plugin marketplace add agra-aarav15/clipblitz-ai-shorts
+    claude plugin install clipblitz-studio@clipblitz
+
+Working on the checkout itself? Load the folder without publishing anything:
+
     claude --plugin-dir <studio>\plugin
 
 Once loaded you get:
@@ -34,7 +46,7 @@ If you copied this folder out of the checkout, set `CB_ROOT` to the studio folde
 
 Point a generic MCP client at `python <studio>\plugin\clipblitz-mcp.py`.
 
-**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-4.1.0-windows.zip`
+**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-4.2.0-windows.zip`
 ships this folder next to `ClipBlitzStudio.exe`, and the EXE answers the same MCP server
 itself, because the EXE is the same entry point:
 
@@ -58,6 +70,7 @@ routing to a running studio, the learning store next to the app - behaves identi
 | `clearance_certificate` | Writes the clearance certificate: risk report, licence, receipt and sha256 of every file, with a digest a third party can re-check. |
 | `scout_search` | Metadata-only discovery for a niche: titles, channels, views, dates, durations — nothing downloads. Ranks what it finds with measured features and the owner's judged history. |
 | `scout_queue` | The scout queue as the owner sees it: ranked proposals, the measured trend, and the clip head-to-heads waiting for a human call. |
+| `clipbench` | The scoreboard: every contender ranked on the same held-out pairs, with the count of pairs behind each number and the baseline's share of wins. |
 
 Where the work runs: if a Studio server is listening on `127.0.0.1:4300`, the job
 goes through its API (one writer for `data/jobs.json`). Otherwise the identical

@@ -1,0 +1,5 @@
+# Shell scripts must stay LF: a CRLF shebang or `set -e` line does not run on Linux,
+# macOS or Git Bash, and the release ships install.sh to those machines.
+*.sh text eol=lf
+# Windows batch files must stay CRLF: cmd.exe parses them line by line.
+*.bat text eol=crlf

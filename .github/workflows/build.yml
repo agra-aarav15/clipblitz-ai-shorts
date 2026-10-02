@@ -46,6 +46,8 @@ jobs:
           python scripts/test_trainer.py
           python scripts/test_rights.py
           python scripts/test_scout.py
+          python scripts/test_clipbench.py
+          python scripts/test_marketplace.py
 
       - name: Build the EXE
         working-directory: studio
@@ -65,7 +67,7 @@ jobs:
           Copy-Item -Force studio/README.md, studio/SETUP.md "$target/"
           # the .ico is also copied next to the EXE so a desktop shortcut and the
           # Start menu entry can borrow the same icon the executable carries.
-          Compress-Archive -Path $target -DestinationPath ClipBlitzStudio-4.1.0-windows.zip
+          Compress-Archive -Path $target -DestinationPath ClipBlitzStudio-4.2.0-windows.zip
 
       - name: Smoke-test the EXE
         shell: pwsh
@@ -85,6 +87,9 @@ jobs:
           if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) {
             throw 'the packaged EXE does not list its agent tools'
           }
+          if ($tools.Count -ne 11) {
+            throw "the packaged EXE lists $($tools.Count) tools, not 11"
+          }
           $ask = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
           $reply = ($ask | & $exe --mcp) -join "`n"
           if (-not $reply.Contains('clipblitz-studio')) {
@@ -95,10 +100,24 @@ jobs:
           }
           Write-Host "agent front door ok: $($tools.Count) tools, MCP answers, plugin folder present"
 
+      # Uploading needs the tag to exist. One idempotent step, so a version bump cannot
+      # fail late on a release nobody created yet.
+      - name: Ensure the release tag exists
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v4.2.0 -R $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create v4.2.0 -R $env:GITHUB_REPOSITORY `
+              --title "ClipBlitz Studio 4.2.0" `
+              --notes "Built from main by the release workflow."
+          }
+
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v4.1.0 ClipBlitzStudio-4.1.0-windows.zip --clobber -R $env:GITHUB_REPOSITORY
+        run: gh release upload v4.2.0 ClipBlitzStudio-4.2.0-windows.zip --clobber -R $env:GITHUB_REPOSITORY
 
       # Everything above tested the folder before it was zipped. This step tests what a
       # user actually downloads: the published asset, unpacked and executed from scratch.
@@ -107,27 +126,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v4.1.0 --pattern ClipBlitzStudio-4.1.0-windows.zip --dir published --clobber -R $env:GITHUB_REPOSITORY
-          $built = (Get-FileHash ClipBlitzStudio-4.1.0-windows.zip -Algorithm SHA256).Hash.ToLower()
-          $published = (Get-FileHash published/ClipBlitzStudio-4.1.0-windows.zip -Algorithm SHA256).Hash.ToLower()
+          gh release download v4.2.0 --pattern ClipBlitzStudio-4.2.0-windows.zip --dir published --clobber -R $env:GITHUB_REPOSITORY
+          $built = (Get-FileHash ClipBlitzStudio-4.2.0-windows.zip -Algorithm SHA256).Hash.ToLower()
+          $published = (Get-FileHash published/ClipBlitzStudio-4.2.0-windows.zip -Algorithm SHA256).Hash.ToLower()
           if ($built -ne $published) { throw "the stored asset is not the built one ($published vs $built)" }
-          Expand-Archive published/ClipBlitzStudio-4.1.0-windows.zip -DestinationPath published/app
+          Expand-Archive published/ClipBlitzStudio-4.2.0-windows.zip -DestinationPath published/app
           $root = 'published/app/ClipBlitzStudio'
           if (-not (Test-Path "$root/plugin/.claude-plugin/plugin.json")) { throw 'the published zip lost the plugin folder' }
           if (-not (Test-Path "$root/plugin/.mcp.windows.json")) { throw 'the published zip lost the Windows MCP config' }
           $plugin = @(Get-ChildItem -Recurse -File -Force "$root/plugin").Count
-          if ($plugin -ne 7) { throw "the published zip carries $plugin plugin files, not 7" }
+          if ($plugin -ne 9) { throw "the published zip carries $plugin plugin files, not 9" }
           $tools = (& "$root/ClipBlitzStudio.exe" --tools | Out-String) | ConvertFrom-Json
           if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) { throw 'the published EXE cannot list its agent tools' }
+          if ($tools.Count -ne 11) { throw "the published EXE lists $($tools.Count) tools, not 11" }
           $ask = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
           $reply = ($ask | & "$root/ClipBlitzStudio.exe" --mcp) -join "`n"
           if (-not $reply.Contains('clipblitz-studio')) { throw 'the published EXE cannot serve MCP on stdio' }
-          Write-Host "published bundle verified: digest matches, 7 plugin files, $($tools.Count) tools, MCP answers"
+          Write-Host "published bundle verified: digest matches, 9 plugin files, $($tools.Count) tools, MCP answers"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ClipBlitzStudio-4.1.0-windows
-          path: ClipBlitzStudio-4.1.0-windows.zip
+          name: ClipBlitzStudio-4.2.0-windows
+          path: ClipBlitzStudio-4.2.0-windows.zip
 
   apk:
     name: Android APK
@@ -178,10 +198,19 @@ jobs:
             --out ClipBlitzStudio.apk build/aligned.apk
           "$BT/apksigner" verify ClipBlitzStudio.apk
 
+      - name: Ensure the release tag exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v4.2.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create v4.2.0 --repo "$GITHUB_REPOSITORY" \
+              --title "ClipBlitz Studio 4.2.0" \
+              --notes "Built from main by the release workflow."
+
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v4.1.0 ClipBlitzStudio.apk --clobber -R "$GITHUB_REPOSITORY"
+        run: gh release upload v4.2.0 ClipBlitzStudio.apk --clobber -R "$GITHUB_REPOSITORY"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -256,14 +285,14 @@ jobs:
         run: |
           set -e
           mkdir -p assets
-          gh release download v4.1.0 --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+          gh release download v4.2.0 --repo "$GITHUB_REPOSITORY" --dir assets --clobber
           rm -f assets/checksums.txt          # never hash a previous checksums file
           cd assets && sha256sum * > ../checksums.txt && cd ..
           cat checksums.txt
-          grep -q "ClipBlitzStudio-4.1.0-windows.zip" checksums.txt
+          grep -q "ClipBlitzStudio-4.2.0-windows.zip" checksums.txt
           grep -q "ClipBlitzStudio.apk" checksums.txt
 
       - name: Upload checksums.txt to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v4.1.0 checksums.txt --clobber -R "$GITHUB_REPOSITORY"
+        run: gh release upload v4.2.0 checksums.txt --clobber -R "$GITHUB_REPOSITORY"

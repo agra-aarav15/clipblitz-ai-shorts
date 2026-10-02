@@ -13,6 +13,11 @@ def app_root():
 
 ROOT = app_root()
 
+# One number for the product: the health payload, the server banner, the MCP
+# serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
+# release cannot ship half-bumped.
+APP_VERSION = "4.2.0"
+
 
 def _load_env(path):
     """Tiny .env loader (stdlib) — real environment variables still win."""
@@ -61,6 +66,9 @@ CONFIG = {
     # the scout: metadata-only discovery (no media download) plus the judgment queue.
     # CB_SCOUT=off removes it on its own, CB_LAB=0 removes the whole lab layer.
     "scout_mode": os.environ.get("CB_SCOUT", "on").strip().lower(),
+    # the scoreboard: one board that scores every ranking claim on the same held-out
+    # pairs. CB_CLIPBENCH=off removes it on its own, CB_LAB=0 removes the whole layer.
+    "bench_mode": os.environ.get("CB_CLIPBENCH", "on").strip().lower(),
 }
 
 # The whisper model name depends on the provider: OpenAI = whisper-1,

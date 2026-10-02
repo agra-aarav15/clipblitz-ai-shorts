@@ -48,6 +48,11 @@ CONFIG = {
     "engine_default": os.environ.get("CB_ENGINE", "b2"),
     "yt_client_id": os.environ.get("CB_YT_CLIENT_ID", ""),
     "yt_client_secret": os.environ.get("CB_YT_CLIENT_SECRET", ""),
+    # v4.2 lab layer - additive, gated and removable. CB_LAB=0 removes it entirely:
+    # no sibling vectors are stored, nothing refits, and the studio behaves exactly
+    # like v4.1.0. CB_LEARNING=off removes only the trainer, not the store schema.
+    "lab": os.environ.get("CB_LAB", "1").strip().lower() not in ("0", "off", "false", "no"),
+    "learning_mode": os.environ.get("CB_LEARNING", "full").strip().lower(),
 }
 
 # The whisper model name depends on the provider: OpenAI = whisper-1,

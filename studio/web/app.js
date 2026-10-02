@@ -1328,6 +1328,16 @@ $('learn-reset').addEventListener('click', async () => {
   } catch (e) { toast(String(e.message || e), true); }
 });
 
+$('learn-train').addEventListener('click', async () => {
+  try {
+    const res = await post('/api/train', '{}');
+    renderLearning(await (await fetch('/api/learning')).json());
+    toast(res.activated
+      ? `model v${res.version} activated — kept-beats-sibling ${res.holdout} on real choices`
+      : (res.attempted ? `fit done — ${res.reason}` : res.reason));
+  } catch (e) { toast(String(e.message || e), true); }
+});
+
 /* ============================ learning loop ============================
    Every number on this card is a count, a share or a median of the owner's own
    logged choices. Nothing is estimated, and below 10 choices nothing at all is
@@ -1341,6 +1351,9 @@ function renderLearning(L) {
   const chip = $('learn-chip');
   if (!chip || !L) return;
   const stats = $('learn-stats'), note = $('learn-note');
+  const model = L.model && L.model.enabled ? L.model : null;
+  const trainBtn = $('learn-train');
+  if (trainBtn) trainBtn.hidden = !model;
   const n = L.events || 0;
   const min = L.min_events || 10;
   chip.textContent = L.active ? `${n} choices logged` : `${n} of ${min} choices`;
@@ -1351,17 +1364,24 @@ function renderLearning(L) {
     `<span class="chip">${IC('bulb')} question hooks ${L.question_hook.count}/${n}</span>`,
     `<span class="chip">${IC('clock')} median ${L.median_length}s</span>`,
     kept ? `<span class="chip">${IC('film')} kept: ${esc(kept)}</span>` : '',
+    model ? `<span class="chip">${IC('bolt')} model ${model.active ? 'v' + model.version : 'warming'}</span>` : '',
   ].join('');
   const bar = $('learn-bar');
   bar.hidden = !n;
   if (n) $('learn-fill').style.width = Math.min(100, Math.round((n / min) * 100)) + '%';
   const moves = Object.entries(L.weights || {})
     .map(([k, v]) => `${k} ${v > 1 ? '+' : ''}${Math.round((v - 1) * 100)}%`);
-  note.textContent = !n
+  const modelLine = !model ? ''
+    : (model.active
+      ? ` Model v${model.version}: kept-beats-sibling ${model.holdout} on ${model.holdout_n} held-out choices; refits every ${model.refit_every} new ones.`
+      : (model.remaining
+        ? ` Model: ${model.remaining} more choice${model.remaining === 1 ? '' : 's'} before the next fit.`
+        : ' Model: a fit is due on the next logged choice.'));
+  note.textContent = (!n
     ? 'No choices logged yet — post, re-render or hand-cut a clip and this fills in from the real decisions.'
     : (L.active
       ? `Active: ranking nudged toward ${moves.length ? moves.join(', ') : 'no single feature yet'} — capped at 10% per factor.`
-      : `${L.remaining} more logged choice${L.remaining === 1 ? '' : 's'} before the weights start moving. The ranking is untouched until then.`);
+      : `${L.remaining} more logged choice${L.remaining === 1 ? '' : 's'} before the weights start moving. The ranking is untouched until then.`)) + modelLine;
 }
 
 function renderQueue() {

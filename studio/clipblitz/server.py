@@ -13,6 +13,7 @@
   POST /api/custom             {job_id, start, end, style?}   cut a user-dragged window
   PATCH /api/job/<id>/meta/<i> {title, description, hashtags}   edit before posting
   POST /api/post               {job_id, index, platforms:[...]}  queue a post
+  POST /api/train              one fit of the local taste model (the day-by-day loop)
   GET  /api/social/status      YouTube connection state
   GET  /api/social/youtube/start        -> {url} to open Google consent
   GET  /oauth/youtube/callback?code=    -> stores token, shows success page
@@ -309,6 +310,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/learning/reset":
             learning.reset()
             return self._json(200, learning.profile())
+        if path == "/api/train":
+            from . import trainer
+            json_body()   # consume the body: an unread one corrupts the NEXT request
+                          # on this keep-alive connection (the UI trains, then refreshes)
+            return self._json(200, trainer.run_fit(reason="api"))
         rights_m = re.fullmatch(r"/api/job/(\w+)/rights", path)
         if rights_m:
             return self._rights(rights_m.group(1))

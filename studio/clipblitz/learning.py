@@ -7,6 +7,11 @@ Every choice made on a FINISHED clip is one preference event:
   post     the owner decided this cut was worth publishing
   render   a lab runner-up or a restyle was worth rendering
   custom   the owner dragged a window by hand
+  judge    the owner picked one cut over another (the rejected one rides in as `other`)
+
+Since v3 each event also carries up to MAX_SIBLINGS of the offered alternatives the cut
+was chosen over - their judge score and measured factor vector - which is what lets the
+local taste model (clipblitz/trainer.py) learn "kept versus offered", not just "kept".
 
 We store the MEASURED features of that clip — engine, score, length, whether the
 ending actually rode out on a laugh, whether the opening was a real question — plus
@@ -32,6 +37,11 @@ instead of being haunted by the first week of use. Nothing is nudged below the
 thresholds: a fresh install behaves exactly as it did before the first event.
 Every nudge is reproducible from the store alone, and Reset empties everything.
 
+A fourth gate sits on top of the three layers: the trained model (clipblitz/trainer.py)
+contributes at most +/-6% per factor, and only while a held-out slice of the owner's
+real choices says it improved their ranking. It is additive and removable; with the
+lab off, or before its own thresholds are met, nothing here changes.
+
 The "What I've learned" card shows counts, shares, medians and the multipliers
 computed from these same events. Nothing here is invented.
 """
@@ -50,10 +60,11 @@ MAX_DELTA = 0.10         # never more than +/-10% on a single factor (all layers
 MAX_ENGINE_DELTA = 0.05  # the engine refinement's own slice of that budget
 MAX_FACTOR_DELTA = 0.06  # the factor-over-index layer's own slice
 MAX_EVENTS = 500         # the store keeps the owner's most recent choices
+MAX_SIBLINGS = 8         # offered alternatives stored per choice (the trainer's evidence)
 HALF_LIFE_DAYS = 45.0    # a choice this old counts half as much as today's
 MIN_POOL_GAP = 1.0       # keep a candidate pool only if it had alternatives to beat
 MIN_FACTOR_DELTA = 5.0   # a factor must beat its pool by this much (0-100 scale)
-STORE_VERSION = 2
+STORE_VERSION = 3        # v3 adds the `sib` sibling vectors; v2 events still load
 
 QUESTION_OPENERS = ("how ", "why ", "what ", "when ", "who ", "which ", "did ",
                     "can ", "will ", "is ", "are ")
@@ -90,6 +101,21 @@ def _save(data):
         os.replace(tmp, _file())
     except OSError:
         pass
+
+
+def events():
+    """The logged choices, oldest first - the store the model is fit from."""
+    return _load().get("events") or []
+
+
+def _lab():
+    """The trainer module when the lab is on and importable, else None. The store has
+    to keep working even if the optional layer is missing or broken."""
+    try:
+        from . import trainer
+        return trainer if trainer.enabled() else None
+    except Exception:
+        return None
 
 
 def question_hook(clip):
@@ -135,8 +161,63 @@ def _pool_mean(job):
     return out
 
 
-def log(kind, clip=None, job=None):
-    """Record one real choice. Called from the posting and rendering paths only."""
+def _same_window(cand, start, end, tol=0.75):
+    """Is this candidate the very window that was kept? Then it is no alternative."""
+    try:
+        return (abs(float(cand.get("start")) - start) <= tol
+                and abs(float(cand.get("end")) - end) <= tol)
+    except (TypeError, ValueError):
+        return False
+
+
+def _sib_entry(item):
+    """One offered alternative, compact: its judge score and its measured factors."""
+    if not isinstance(item, dict):
+        return None
+    factors = _clean_factors(item.get("factors"))
+    if not factors:
+        return None
+    score = item.get("score")
+    return {"score": score if (isinstance(score, (int, float))
+                               and not isinstance(score, bool)) else None,
+            "factors": factors}
+
+
+def _siblings(clip, job, other):
+    """Up to MAX_SIBLINGS real alternatives the kept cut was chosen over: the head-to-
+    head loser when this was a judgement (`other`), then the job's candidate pool,
+    strongest score first - the near-misses matter most. The kept window itself is
+    excluded; a cut cannot be an alternative to itself. Every value is measured."""
+    out = []
+    if other:
+        entry = _sib_entry(other)
+        if entry:
+            out.append(entry)
+    clip = clip or {}
+    try:
+        k_start, k_end = float(clip.get("start")), float(clip.get("end"))
+    except (TypeError, ValueError):
+        k_start = k_end = None
+    rows = []
+    for c in ((job or {}).get("candidates") or []):
+        if not isinstance(c, dict):
+            continue
+        if k_start is not None and _same_window(c, k_start, k_end):
+            continue
+        entry = _sib_entry(c)
+        if entry:
+            rows.append(entry)
+    rows.sort(key=lambda e: -(e.get("score") or 0))
+    out.extend(rows)
+    return out[:MAX_SIBLINGS]
+
+
+def log(kind, clip=None, job=None, other=None):
+    """Record one real choice. Called from the posting, rendering and judging paths.
+
+    kind: post | render | custom | judge. A judge event is a head-to-head call, so the
+    rejected cut rides in as `other` and is stored as a sibling against the winner.
+    """
     clip = clip or {}
     job = job or {}
     try:
@@ -162,15 +243,29 @@ def log(kind, clip=None, job=None):
         event["pool"] = pool
         event["pool_n"] = len([c for c in (job.get("candidates") or [])
                                if isinstance(c, dict)])
+    lab = _lab()
+    if lab:
+        siblings = _siblings(clip, job, other)
+        if siblings:
+            event["sib"] = siblings
     data = _load()
     data["events"] = (data.get("events") or [])[-MAX_EVENTS + 1:] + [event]
     data["version"] = STORE_VERSION
     _save(data)
+    if lab:
+        try:
+            lab.auto_fit()          # the day-by-day cadence; a no-op until it is earned
+        except Exception:
+            pass                    # a fit is an optimisation - it must never break a post
     return event
 
 
 def reset():
+    """Empty the store and forget the model it trained - 'back to base' means both."""
     _save({"events": [], "version": STORE_VERSION})
+    lab = _lab()
+    if lab:
+        lab.reset()
 
 
 def _median(values):
@@ -327,6 +422,10 @@ def adjustment(engine=None):
     if engine:
         for k, mult in engine_refinement(events, engine, now).items():
             adj[k] = adj.get(k, 1.0) * mult
+    lab = _lab()
+    if lab:                        # the trained model's slice, while one is active
+        for k, mult in lab.blend().items():
+            adj[k] = adj.get(k, 1.0) * mult
     return {k: round(_clamp(v), 4) for k, v in adj.items()}
 
 
@@ -399,7 +498,7 @@ def profile():
                            for k, v in engine_refinement(events, eng, now).items()},
         }
 
-    return {
+    out = {
         "version": STORE_VERSION,
         "events": n,
         "min_events": MIN_EVENTS,
@@ -429,6 +528,10 @@ def profile():
         "why": _why(events, adj, evidence, now),
         "last": events[-1]["t"] if events else None,
     }
+    lab = _lab()
+    if lab:
+        out["model"] = lab.state()
+    return out
 
 
 def _why(events, adj, evidence, now):

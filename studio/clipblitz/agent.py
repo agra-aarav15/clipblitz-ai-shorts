@@ -37,7 +37,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import learning, pipeline, rights
+from . import learning, pipeline, rights, trainer
 from .config import CONFIG
 
 VERSION = "4.1.0"
@@ -171,6 +171,15 @@ class Studio:
         second looks like a gap, which would invent a music-bed flag out of missing data.
         """
         return self.job(job_id, light=False)
+
+    def train(self):
+        """Fit the taste model through the studio that owns the store, so one writer
+        stays one truth. Returns None when the studio will not answer."""
+        try:
+            return self._call("/api/train", data=b"{}", method="POST",
+                              headers={"Content-Type": "application/json"})
+        except Exception:
+            return None
 
 
 # ------------------------------------------------------------------- start + wait
@@ -354,6 +363,13 @@ TOOLS = [
                      "far, per engine, including how many more choices each engine needs "
                      "before it starts adapting."),
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "train_model",
+     "description": ("Fit or refresh the local taste model from this install's own "
+                     "judge history and the user's real choices, and report the gate "
+                     "decision - it activates only when a held-out slice of real choices "
+                     "says it ranks kept cuts above the candidates they beat. Local, "
+                     "deterministic, stdlib only; it never touches the render engines."),
+     "inputSchema": {"type": "object", "properties": {}}},
 ]
 
 
@@ -404,6 +420,13 @@ def call_tool(name, args):
         return {"written_to": path, "receipt": data}, False
     if name == "learning_state":
         return learning.profile(), False
+    if name == "train_model":
+        st = Studio()
+        res = st.train() if port_open(st.port) else None
+        if res is not None:
+            return res, False
+        # no studio answering: the same fit, in this process, against the same store
+        return trainer.run_fit(reason="mcp"), False
     return {"error": f"unknown tool: {name}"}, True
 
 

@@ -54,6 +54,7 @@ routing to a running studio, the learning store next to the app - behaves identi
 | `risk_report` | Measured copyright-safety flags for a job. |
 | `edit_receipt` | Writes the edit manifest (windows, engine, transformative work, sha256). |
 | `learning_state` | What each engine has learned from this owner's kept cuts. |
+| `train_model` | Fits the local taste model from the owner's real choices and reports the gate decision. |
 
 Where the work runs: if a Studio server is listening on `127.0.0.1:4300`, the job
 goes through its API (one writer for `data/jobs.json`). Otherwise the identical

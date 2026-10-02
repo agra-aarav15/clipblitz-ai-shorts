@@ -45,6 +45,7 @@ jobs:
           python scripts/test_agent.py
           python scripts/test_trainer.py
           python scripts/test_rights.py
+          python scripts/test_scout.py
 
       - name: Build the EXE
         working-directory: studio

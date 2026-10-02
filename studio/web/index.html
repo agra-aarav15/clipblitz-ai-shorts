@@ -73,6 +73,7 @@
       <button class="snavbtn" data-screen="clips" type="button"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg><span>Clips</span></button>
       <button class="snavbtn" data-screen="lab" type="button"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Candidates</span></button>
       <button class="snavbtn" data-screen="transcript" type="button"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg><span>Transcript</span></button>
+      <button class="snavbtn" data-screen="scout" type="button"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg><span>Scout</span></button>
       <button class="snavbtn" data-screen="connect" type="button"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><span>Connect</span></button>
     </nav>
     <div class="sstatus">
@@ -366,6 +367,41 @@
             <div class="transcript" id="transcript"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ================= SCOUT ================= -->
+    <section class="screen" id="screen-scout" hidden>
+      <div class="glass panel" id="scoutwrap">
+        <div class="scouthead">
+          <div>
+            <div class="label-caps">Metadata-only scout</div>
+            <div class="dim">Search a niche and judge what you see. Nothing is downloaded until you press Make - and the rights layer then applies exactly as it always does.</div>
+          </div>
+          <span class="chip" id="scoutstate">ready</span>
+        </div>
+        <form class="scoutsearch" id="scoutform">
+          <input id="scoutq" type="text" maxlength="120" placeholder="a niche - podcast clips, gaming fails, cooking shorts">
+          <label class="licfield"><span>Results</span>
+            <select id="scoutlimit"><option>6</option><option selected>10</option><option>20</option></select></label>
+          <button class="btn small" type="submit">Search</button>
+          <span class="dim" id="scoutstatus"></span>
+        </form>
+        <div class="scoutgrid">
+          <div class="scoutcol">
+            <div class="label-caps">Proposals <span class="chip" id="scoutcount">-</span></div>
+            <div id="scoutlist" class="scoutlist"></div>
+          </div>
+          <div class="scoutcol">
+            <div class="label-caps">What the metadata says</div>
+            <div id="scouttrend" class="scouttrend dim">no search yet</div>
+            <div class="label-caps scoutsep">Scout model <span class="chip" id="scoutmodel">warming</span></div>
+            <div id="scoutmodelnote" class="dim"></div>
+          </div>
+        </div>
+        <div class="label-caps scoutsep">Judgment queue <span class="chip" id="paircount">-</span></div>
+        <div class="dim">The same moment cut by both engines. Your call here is the strongest evidence the taste model gets: a real kept-versus-rejected pair with measured factors on both sides.</div>
+        <div id="pairlist" class="pairlist"></div>
       </div>
     </section>
 

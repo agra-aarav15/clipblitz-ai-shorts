@@ -15,8 +15,8 @@ const IC = (n) => '<svg class="ic" aria-hidden="true"><use href="#i-' + n + '"/>
 const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 const fmt = (t) => { t = Math.max(0, t || 0); return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`; };
 
-const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'connect'];
-const TITLES = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', connect: 'Connect' };
+const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'scout', 'connect'];
+const TITLES = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', scout: 'Scout', connect: 'Connect' };
 const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing', event: 'Event' };
 const PLATFORM_LABEL = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', x: 'X Post' };
 const PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook', 'x'];
@@ -58,6 +58,7 @@ function showScreen(name, fromClick) {
   revealCards(name);
   if (name === 'connect') { refreshSocial(); renderQueue(); loadLearning(); }
   if (name === 'studio') loadRecent();
+  if (name === 'scout') loadScout();
 }
 
 document.querySelectorAll('.snavbtn').forEach((b) =>
@@ -146,6 +147,7 @@ fetch('/api/health').then(r => r.json()).then(h => {
   renderRightsOptions();
   initSafety();
   initGate();
+  initScout();
   renderRightsGate(fullJobCache);   /* the Content ID line arrives with health, not with the job */
   renderSafety(fullJobCache);
   renderGateCard(fullJobCache);
@@ -1360,6 +1362,210 @@ $('srt').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   toast(`exported ${segs.length} subtitle lines`);
 });
+
+/* ============================ scout ============================
+   Metadata-only discovery plus the judgment queue. Nothing is downloaded until Make,
+   judgments are the owner's alone, and both kinds of call (proposal makes/passes and
+   clip head-to-heads) are real training evidence: the proposals train the scout's own
+   local ranker, the clip pair trains the taste model every choice uses. */
+let SCOUT = null;
+const SCOUT_FEATURE = { velocity: 'velocity', reach: 'reach', freshness: 'fresh',
+  duration_fit: 'length fit', title_signal: 'title pull', channel_fit: 'channel fit' };
+
+function scoutDuration(sec) {
+  if (!sec) return '—';
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return `${m}m${String(s).padStart(2, '0')}s`;
+}
+
+function scoutAge(p) {
+  if (!p || !p.published) return 'age not reported';
+  const d = Math.max(0, Math.round((Date.now() / 1000 - p.published) / 86400));
+  return `${d}d ago`;
+}
+
+async function loadScout() {
+  try {
+    const data = await (await fetch('/api/scout')).json();
+    SCOUT = data;
+    renderScout(data);
+  } catch (e) { toast('scout unavailable — retrying…', true); }
+}
+
+function renderScout(d) {
+  if (!d) return;
+  const chip = $('scoutstate');
+  if (!d.enabled) {
+    chip.textContent = 'off'; chip.className = 'chip err';
+    $('scoutstatus').textContent = 'the scout is off (CB_SCOUT=off or CB_LAB=0)';
+    $('scoutlist').innerHTML = '';
+    $('pairlist').innerHTML = '';
+    $('scouttrend').textContent = 'off';
+    $('scoutcount').textContent = '—';
+    $('paircount').textContent = '—';
+    $('scoutmodel').textContent = 'off';
+    $('scoutmodel').className = 'chip err';
+    $('scoutmodelnote').textContent = '';
+    return;
+  }
+  chip.textContent = d.query ? `last search: ${d.query}` : 'ready';
+  chip.className = 'chip';
+  renderScoutTrend(d.trend);
+  renderScoutModel(d.model || {});
+  const rows = d.proposals || [];
+  $('scoutcount').textContent = `${rows.length} proposal${rows.length === 1 ? '' : 's'}`;
+  $('scoutlist').innerHTML = rows.map(proposalRow).join('') ||
+    '<div class="note">No proposals yet — search a niche above. Nothing is downloaded until you press Make.</div>';
+  $('scoutlist').querySelectorAll('[data-make],[data-pass]').forEach(b =>
+    b.addEventListener('click', () => b.dataset.make
+      ? makeProposal(b.dataset.make) : judgeProposal(b.dataset.pass, 'pass')));
+  const pairs = d.pairs || [];
+  const judged = (d.judged && d.judged.total) || 0;
+  $('paircount').textContent = `${pairs.length} pair${pairs.length === 1 ? '' : 's'} · ${judged} proposal call(s)`;
+  $('pairlist').innerHTML = pairs.map(pairCard).join('') ||
+    '<div class="note">No clip pairs waiting. Run a Both-engines job and its two cuts of the same moment land here for a head-to-head call.</div>';
+  $('pairlist').querySelectorAll('[data-judge]').forEach(b =>
+    b.addEventListener('click', () => {
+      const [job, mine, other] = b.dataset.judge.split('|');
+      judgePair(job, Number(mine), Number(other));
+    }));
+}
+
+function proposalRow(p) {
+  const feat = p.features || {};
+  const chips = Object.keys(SCOUT_FEATURE).map(k =>
+    (feat[k] === null || feat[k] === undefined)
+      ? `<span class="fchip off" title="the source did not report this">${esc(SCOUT_FEATURE[k])} —</span>`
+      : `<span class="fchip">${esc(SCOUT_FEATURE[k])} ${Math.round(feat[k])}</span>`).join('');
+  const verdict = p.verdict
+    ? `<span class="chip ${p.verdict === 'make' ? 'ok' : ''}">${esc(p.verdict)}</span>` : '';
+  const adjust = p.model_adjust
+    ? `<span class="chip">your model ${p.model_adjust > 0 ? '+' : ''}${p.model_adjust}</span>` : '';
+  const views = (p.views === null || p.views === undefined)
+    ? 'views not reported' : `${Number(p.views).toLocaleString()} views`;
+  return `<div class="scoutrow">
+    <div class="scouttop">
+      <div class="scouttitle">${esc(p.title || p.id)}</div>
+      <span class="chip gold">${p.score === null || p.score === undefined ? 'unscored' : p.score}</span>${adjust}${verdict}
+    </div>
+    <div class="scoutmeta">${esc(p.channel || 'channel not reported')} · ${scoutDuration(p.duration)} · ${views} · ${scoutAge(p)}</div>
+    <div class="fchips">${chips}</div>
+    <ul class="scoutwhy">${(p.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+    <div class="scoutbtns">
+      <button class="btn small" data-make="${esc(p.id)}" type="button">Make this</button>
+      <button class="btn ghost small" data-pass="${esc(p.id)}" type="button">Pass</button>
+    </div>
+  </div>`;
+}
+
+function renderScoutTrend(t) {
+  const box = $('scouttrend');
+  if (!t) { box.className = 'scouttrend dim'; box.textContent = 'no search yet'; return; }
+  box.className = 'scouttrend';
+  const row = (k, v) => `<div class="trendrow"><span>${esc(k)}</span><b>${v}</b></div>`;
+  box.innerHTML = [
+    row('results seen', t.results),
+    row('median views', (t.median_views === null || t.median_views === undefined)
+      ? '—' : Number(t.median_views).toLocaleString()),
+    row('median length', scoutDuration(t.median_duration)),
+    row('published in 30d', `${Math.round((t.fresh_share || 0) * 100)}%`),
+    row('repeating channels', t.repeat_channels && t.repeat_channels.length
+      ? t.repeat_channels.map(esc).join(', ') : '—'),
+    row('words in titles', t.top_words && t.top_words.length
+      ? t.top_words.map(esc).join(', ') : '—'),
+    `<div class="safetynote">${esc(t.note || '')}</div>`,
+  ].join('');
+}
+
+function renderScoutModel(m) {
+  const chip = $('scoutmodel');
+  if (!m.enabled) {
+    chip.textContent = 'off'; chip.className = 'chip err';
+    $('scoutmodelnote').textContent = '';
+    return;
+  }
+  chip.textContent = m.active ? `active v${m.version}` : 'warming';
+  chip.className = 'chip' + (m.active ? ' ok' : '');
+  const last = (m.fits || [])[(m.fits || []).length - 1];
+  $('scoutmodelnote').innerHTML = [
+    `${m.judgments} call(s) judged · ` + (m.active
+      ? `make-beats-pass ${m.holdout} on ${m.holdout_n} held-out pair(s)`
+      : `${m.remaining} more ${esc(String(m.waiting_for))} before its first fit`),
+    last ? `last attempt: ${esc(last.day)} — ${esc(last.reason || '')}` : '',
+    esc(m.note || ''),
+  ].filter(Boolean).map(t => `<div class="dim">${t}</div>`).join('');
+}
+
+function pairCard(pp) {
+  const side = (s) => `<div class="pairvideo">
+    <video controls preload="metadata" src="${esc(s.file || '')}" playsinline></video>
+    <div class="dim">${esc(s.engine_name || s.engine || 'cut')} · score ${s.score === null || s.score === undefined ? '—' : s.score} · ${scoutDuration(s.duration)}</div>
+  </div>`;
+  const a = esc(pp.a.engine_name || 'A'), b = esc(pp.b.engine_name || 'B');
+  return `<div class="paircard">
+    <div class="pairtop"><b>${esc(pp.job_name || pp.job)}</b><span class="dim">moment ${esc(String(pp.moment))}</span></div>
+    <div class="pairvideos">${side(pp.a)}${side(pp.b)}</div>
+    <div class="scoutbtns">
+      <button class="btn small" data-judge="${esc(pp.job)}|${pp.a.index}|${pp.b.index}" type="button">Keep ${a}, dismiss ${b}</button>
+      <button class="btn ghost small" data-judge="${esc(pp.job)}|${pp.b.index}|${pp.a.index}" type="button">Keep ${b}, dismiss ${a}</button>
+    </div>
+    <div class="dim">${esc(pp.why || '')}</div>
+  </div>`;
+}
+
+async function judgePair(jobId, mine, other) {
+  try {
+    const res = await post('/api/judge', JSON.stringify({ job_id: jobId, mine, other }));
+    const events = (res.model && res.model.events) || 0;
+    toast(`call logged — the taste model now has ${events} real choice(s)`);
+    loadScout();
+  } catch (e) { toast(String(e.message || e), true); }
+}
+
+async function judgeProposal(id, verdict) {
+  try {
+    const res = await post('/api/scout/judge', JSON.stringify({ proposal: id, verdict }));
+    toast(res.fit && res.fit.activated
+      ? 'judgment logged — the scout model just activated'
+      : 'judgment logged for the scout');
+    loadScout();
+  } catch (e) { toast(String(e.message || e), true); }
+}
+
+async function makeProposal(id) {
+  const p = ((SCOUT && SCOUT.proposals) || []).find(r => r.id === id) || {};
+  try {
+    const res = await post('/api/scout/make', JSON.stringify({ proposal: id }));
+    toast(res.gate_mode === 'strict'
+      ? 'importing — strict gate: it is held until you answer the rights question'
+      : 'importing it now — watch the Studio screen', false);
+    jobFullFetched = false;
+    watch(res.job_id, p.title || id);
+    loadScout();
+  } catch (e) { toast(String(e.message || e), true); }
+}
+
+function initScout() {
+  const form = $('scoutform');
+  if (!form || form.dataset.built) return;
+  form.dataset.built = '1';
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = $('scoutq').value.trim();
+    if (!q) return toast('type a niche first', true);
+    $('scoutstatus').textContent = 'searching — metadata only, nothing downloads…';
+    try {
+      const res = await post('/api/scout/search', JSON.stringify({
+        query: q, limit: Number($('scoutlimit').value) || 10,
+      }));
+      $('scoutstatus').textContent = `${res.found} result(s) via ${res.method} · ${res.added} new`;
+      loadScout();
+    } catch (err) {
+      $('scoutstatus').textContent = String(err.message || err);
+      toast('the search failed — the note above says why', true);
+    }
+  });
+}
 
 /* ============================ connect ============================ */
 async function refreshSocial() {

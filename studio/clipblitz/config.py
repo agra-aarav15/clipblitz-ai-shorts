@@ -58,6 +58,9 @@ CONFIG = {
     # imported media before it renders until the rights question is answered or an
     # override with a written reason is recorded; CB_LAB=0 forces advisory.
     "rights_mode": os.environ.get("CB_RIGHTS", "advisory").strip().lower(),
+    # the scout: metadata-only discovery (no media download) plus the judgment queue.
+    # CB_SCOUT=off removes it on its own, CB_LAB=0 removes the whole lab layer.
+    "scout_mode": os.environ.get("CB_SCOUT", "on").strip().lower(),
 }
 
 # The whisper model name depends on the provider: OpenAI = whisper-1,

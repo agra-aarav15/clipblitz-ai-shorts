@@ -37,7 +37,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import learning, pipeline, rights, trainer
+from . import learning, pipeline, rights, scout, trainer
 from .config import CONFIG
 
 VERSION = "4.1.0"
@@ -178,6 +178,28 @@ class Studio:
         try:
             return self._call("/api/train", data=b"{}", method="POST",
                               headers={"Content-Type": "application/json"})
+        except Exception:
+            return None
+
+    def scout_search(self, query, limit=10):
+        """Metadata-only discovery through the studio. A refused search (502 carries
+        the real reason) comes back as its payload rather than a second attempt."""
+        body = json.dumps({"query": query, "limit": limit}).encode("utf-8")
+        try:
+            return self._call("/api/scout/search", data=body, method="POST",
+                              headers={"Content-Type": "application/json"},
+                              timeout=240)
+        except urllib.error.HTTPError as e:
+            try:
+                return json.loads(e.read().decode("utf-8", "replace"))
+            except (ValueError, OSError):
+                return None
+        except Exception:
+            return None
+
+    def scout_queue(self):
+        try:
+            return self._call("/api/scout")
         except Exception:
             return None
 
@@ -388,6 +410,24 @@ TOOLS = [
                      "third party can re-check it against the files themselves. It is "
                      "not a licence and it cannot make a use safe or claim-proof."),
      "inputSchema": JOB_SCHEMA},
+    {"name": "scout_search",
+     "description": ("Metadata-only discovery for a niche: titles, channels, view "
+                     "counts and durations (nothing is downloaded). The scout ranks "
+                     "what it finds with measured features and the owner's own judged "
+                     "history. Making a proposal stays the owner's decision, in the "
+                     "studio."),
+     "inputSchema": {"type": "object",
+                     "properties": {
+                         "query": {"type": "string",
+                                   "description": "the niche to search for"},
+                         "limit": {"type": "integer", "minimum": 1, "maximum": 20,
+                                   "default": 10}},
+                     "required": ["query"]}},
+    {"name": "scout_queue",
+     "description": ("The scout queue as the owner sees it: ranked proposals with their "
+                     "measured features, the trend read from the metadata, and the clip "
+                     "head-to-heads waiting for a human call. An agent never judges."),
+     "inputSchema": {"type": "object", "properties": {}}},
 ]
 
 
@@ -446,6 +486,21 @@ def call_tool(name, args):
         data = rights.certificate(job)
         return {"written_to": rights.write_certificate(job, data=data),
                 "certificate": data}, False
+    if name == "scout_search":
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return {"error": "query is required (the niche to search for)"}, True
+        st = Studio()
+        res = st.scout_search(query, args.get("limit") or 10) if port_open(st.port) else None
+        if res is None:
+            res = scout.search(query, args.get("limit") or 10)
+        return res, bool(res.get("error"))
+    if name == "scout_queue":
+        st = Studio()
+        res = st.scout_queue() if port_open(st.port) else None
+        if res is None:
+            res = scout.queue()
+        return res, False
     if name == "learning_state":
         return learning.profile(), False
     if name == "train_model":
@@ -594,6 +649,11 @@ def main(argv=None):
     lp = sub.add_parser("learned", help="what the engines have learned so far")
     lp.add_argument("--json", action="store_true")
 
+    sc = sub.add_parser("scout", help="metadata-only discovery for a niche (nothing downloads)")
+    sc.add_argument("query")
+    sc.add_argument("--limit", type=int, default=10)
+    sc.add_argument("--json", action="store_true")
+
     sub.add_parser("mcp", help="run the MCP server on stdio")
     sub.add_parser("tools", help="print the MCP tool definitions as JSON")
 
@@ -607,6 +667,10 @@ def main(argv=None):
     if cmd == "learned":
         _print(learning.profile(), args.json)
         return 0
+    if cmd == "scout":
+        res = scout.search(args.query, args.limit)
+        _print(res, args.json)
+        return 0 if not res.get("error") else 1
     if cmd in ("status", "clips"):
         job = _job_or_error(args.job)
         if not job:

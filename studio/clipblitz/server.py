@@ -14,6 +14,11 @@
   PATCH /api/job/<id>/meta/<i> {title, description, hashtags}   edit before posting
   POST /api/post               {job_id, index, platforms:[...]}  queue a post
   POST /api/train              one fit of the local taste model (the day-by-day loop)
+  GET  /api/scout              scout queue + measured trend + proposal model + clip pairs
+  POST /api/scout/search       {query, limit?}  metadata-only discovery (no download)
+  POST /api/scout/judge        {proposal, verdict: make|pass}  the owner's call
+  POST /api/scout/make         {proposal, engine?, top_n?}  judge make + import it
+  POST /api/judge              {job_id, mine, other}  clip head-to-head → the taste model
   GET  /api/social/status      YouTube connection state
   GET  /api/social/youtube/start        -> {url} to open Google consent
   GET  /oauth/youtube/callback?code=    -> stores token, shows success page
@@ -31,8 +36,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (captions, ffmpeg_tools, hardware, learning, pipeline, rights, social,
-               virality)
+from . import (captions, ffmpeg_tools, hardware, learning, pipeline, rights, scout,
+               social, virality)
 from .config import CONFIG, ffmpeg_available, stt_mode, ytdlp_available
 
 from .config import app_root
@@ -143,6 +148,9 @@ class Handler(BaseHTTPRequestHandler):
                 # the health payload has no gate key at all, exactly as v4.1.0 shipped it
                 **({"gate": {"enabled": True, "mode": rights.gate_mode()}}
                    if rights.enabled() else {}),
+                # same for the scout: the surface simply is not there when it is off
+                **({"scout": {"enabled": True}}
+                   if scout.enabled() else {}),
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
@@ -162,6 +170,13 @@ class Handler(BaseHTTPRequestHandler):
             # the whole clearance layer in one read: mode, the options it stores, and
             # how much provenance the source registry has recorded
             return self._json(200, rights.gate_overview())
+        if path == "/api/scout":
+            from . import trainer
+            data = scout.queue()
+            if data.get("enabled"):
+                data["pairs"] = scout.judgment_queue(list(pipeline.JOBS.values()))
+                data["clip_model"] = trainer.state()
+            return self._json(200, data)
         if path == "/api/keys":
             from . import keys
             return self._json(200, keys.status())
@@ -343,6 +358,30 @@ class Handler(BaseHTTPRequestHandler):
         override_m = re.fullmatch(r"/api/job/(\w+)/override", path)
         if override_m:
             return self._override(override_m.group(1))
+        if path == "/api/scout/search":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            res = scout.search(body.get("query"), body.get("limit") or 10)
+            return self._json(502 if res.get("error") else 200, res)
+        if path == "/api/scout/judge":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            res = scout.judge(body.get("proposal"), body.get("verdict"))
+            if res.get("error"):
+                return self._json(400, res)
+            return self._json(200, res)
+        if path == "/api/scout/make":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            return self._scout_make(body)
+        if path == "/api/judge":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            return self._judge(body)
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -538,6 +577,62 @@ class Handler(BaseHTTPRequestHandler):
         pipeline.save()
         return self._json(200, {"licence": job_["licence"],
                                 "risk": rights.risk_report(job_)})
+
+    def _scout_make(self, body):
+        """Judge a proposal 'make' and import it through the normal path. This is the
+        only place the scout causes a download, and it happens because the owner
+        pressed the button - the rights layer then applies exactly as it always does
+        (under strict, the import is held until the rights question is answered)."""
+        if not scout.enabled():
+            return self._json(409, {"error": "the scout is off (CB_SCOUT=off or CB_LAB=0)"})
+        prop = scout.proposal(str(body.get("proposal") or ""))
+        if not prop:
+            return self._json(404, {"error": "unknown proposal"})
+        url = str(prop.get("url") or "")
+        if not url.lower().startswith(("http://", "https://")):
+            return self._json(400, {"error": "this proposal carries no URL to import"})
+        refused = self._render_refused()
+        if refused:
+            return refused
+        eng = body.get("engine") if body.get("engine") in ("prox", "b2", "both") \
+            else CONFIG.get("engine_default", "b2")
+        try:
+            top_n = min(6, max(1, int(body.get("top_n") or CONFIG["top_n"])))
+        except (TypeError, ValueError):
+            top_n = CONFIG["top_n"]
+        scout.judge(prop["id"], "make")          # the click IS the judgment
+        jid = pipeline.new_job(prop.get("title") or url[:60], top_n=top_n, engine=eng,
+                               source={"kind": "youtube" if "youtube." in url else "url",
+                                       "url": url,
+                                       "uploader": prop.get("channel") or "",
+                                       "title": prop.get("title") or ""})
+        pipeline.start_from_url(jid, url)
+        return self._json(200, {"job_id": jid, "proposal": prop["id"],
+                                "verdict": "make", "gate_mode": rights.gate_mode(),
+                                "note": ("importing - the rights layer applies; nothing "
+                                         "was downloaded before this click")})
+
+    def _judge(self, body):
+        """A clip head-to-head: which of these two would you post? The kept cut is
+        logged exactly like every other real choice, so the taste model gets a genuine
+        kept-versus-rejected pair, with the loser riding along as its sibling."""
+        job_ = pipeline.JOBS.get(body.get("job_id", ""))
+        if not job_:
+            return self._json(404, {"error": "unknown job"})
+        try:
+            mine, other = int(body.get("mine")), int(body.get("other"))
+        except (TypeError, ValueError):
+            return self._json(400, {"error": "mine and other must be clip indices"})
+        clips = job_.get("clips") or []
+        if mine == other or not (0 <= mine < len(clips)) or not (0 <= other < len(clips)):
+            return self._json(400, {"error": "need two different, existing clip indices"})
+        event = learning.log("judge", clips[mine], job_, other=clips[other])
+        scout.record_call(job_.get("id"), clips[mine].get("moment"), mine, other)
+        from . import trainer
+        return self._json(200, {
+            "logged": True, "kept": mine, "rejected": other,
+            "event": {k: event.get(k) for k in ("kind", "engine", "score", "sib")},
+            "model": trainer.state(), "scout": scout.state()})
 
     def _override(self, job_id):
         """Record the owner's written reason for proceeding without clearing. The only

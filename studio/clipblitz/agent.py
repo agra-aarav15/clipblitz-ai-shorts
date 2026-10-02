@@ -254,6 +254,9 @@ def wait(job_id, seconds=1800, port=None, poll=2.0):
         info = st.job(job_id) or pipeline.JOBS.get(job_id)
         if not info:
             return {"id": job_id, "status": "error", "error": "unknown job"}
+        if info.get("rights_hold"):
+            break          # the strict clearance gate is holding this render by design:
+                           # waiting would sit here for the whole timeout with no progress
         if info.get("status") in TERMINAL:
             # one full read at the end: the terminal report (and the risk report built
             # from it) needs the transcript, which the polling copy does not carry
@@ -299,7 +302,15 @@ def cut(video, clips=DEFAULT_CLIPS, engine="b2", style=None, answer=None, second
     out["ok"] = job.get("status") == "done" and bool(out["clips"])
     out["ran"] = where
     out["risk"] = rights.risk_report(job)
-    if not out["ok"] and not out.get("error"):
+    if job.get("rights_hold"):
+        # the strict clearance gate refused to render. An agent must never answer the
+        # rights question for the owner, so this is a clean stop with the way forward.
+        out["ok"] = False
+        out["held"] = True
+        out["error"] = ("the strict clearance gate is holding this source before it "
+                        "renders - answer the rights question (or record an override) "
+                        "in the studio's Clips screen, then re-run")
+    elif not out["ok"] and not out.get("error"):
         out["error"] = ("timed out before the clips were ready" if job.get("status")
                         not in TERMINAL else job.get("error"))
     return out
@@ -370,6 +381,13 @@ TOOLS = [
                      "says it ranks kept cuts above the candidates they beat. Local, "
                      "deterministic, stdlib only; it never touches the render engines."),
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "clearance_certificate",
+     "description": ("Write and return the clearance certificate for a job: the risk "
+                     "report, the licence record, the edit receipt and the sha256 of the "
+                     "source and every render, bundled with a digest of itself so a "
+                     "third party can re-check it against the files themselves. It is "
+                     "not a licence and it cannot make a use safe or claim-proof."),
+     "inputSchema": JOB_SCHEMA},
 ]
 
 
@@ -418,6 +436,16 @@ def call_tool(name, args):
         path = rights.write_receipt(job)
         data = rights.receipt(job)
         return {"written_to": path, "receipt": data}, False
+    if name == "clearance_certificate":
+        job = _job_or_error(args.get("job", ""))
+        if not job:
+            return {"error": "unknown job"}, True
+        if not rights.enabled():
+            return {"enabled": False,
+                    "reason": "the clearance layer is off (CB_LAB=0)"}, False
+        data = rights.certificate(job)
+        return {"written_to": rights.write_certificate(job, data=data),
+                "certificate": data}, False
     if name == "learning_state":
         return learning.profile(), False
     if name == "train_model":
@@ -559,6 +587,10 @@ def main(argv=None):
     rc.add_argument("job")
     rc.add_argument("--json", action="store_true")
 
+    cc = sub.add_parser("certificate", help="write and show the clearance certificate")
+    cc.add_argument("job")
+    cc.add_argument("--json", action="store_true")
+
     lp = sub.add_parser("learned", help="what the engines have learned so far")
     lp.add_argument("--json", action="store_true")
 
@@ -599,6 +631,19 @@ def main(argv=None):
             return 1
         path = rights.write_receipt(job)
         _print({"written_to": path, "receipt": rights.receipt(job)}, args.json)
+        return 0
+    if cmd == "certificate":
+        job = _job_or_error(args.job)
+        if not job:
+            print(json.dumps({"error": "unknown job"}))
+            return 1
+        data = rights.certificate(job)
+        if not data:
+            print(json.dumps({"enabled": False,
+                              "reason": "the clearance layer is off (CB_LAB=0)"}))
+            return 1
+        _print({"written_to": rights.write_certificate(job, data=data),
+                "certificate": data}, args.json)
         return 0
     # cut
     video = args.video

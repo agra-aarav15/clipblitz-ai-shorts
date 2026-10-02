@@ -710,6 +710,16 @@ textarea { resize: vertical; }
    a hurdle. */
 .safetybar { border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
   border-color: var(--line); }
+
+/* ============================ clearance gate ============================
+   The strict/advisory switch, its current state, the hand-recorded override and the
+   certificate export. Same panel language as the safety bar below it. */
+.gatebar { border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
+  border-color: var(--line); }
+.gatebar .chip { margin-left: 8px; }
+.certout { margin-top: 12px; font-family: var(--font-mono); font-size: 11.5px;
+  line-height: 1.7; color: var(--text-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm); padding: 10px 12px; overflow-wrap: anywhere; }
 .safetyhead { display: flex; gap: 12px; align-items: flex-start; }
 .safetyhead .ic { width: 20px; height: 20px; color: var(--text-2); margin-top: 2px; flex: none; }
 .safetytext { flex: 1 1 auto; min-width: 0; }

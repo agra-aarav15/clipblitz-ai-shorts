@@ -55,6 +55,7 @@ routing to a running studio, the learning store next to the app - behaves identi
 | `edit_receipt` | Writes the edit manifest (windows, engine, transformative work, sha256). |
 | `learning_state` | What each engine has learned from this owner's kept cuts. |
 | `train_model` | Fits the local taste model from the owner's real choices and reports the gate decision. |
+| `clearance_certificate` | Writes the clearance certificate: risk report, licence, receipt and sha256 of every file, with a digest a third party can re-check. |
 
 Where the work runs: if a Studio server is listening on `127.0.0.1:4300`, the job
 goes through its API (one writer for `data/jobs.json`). Otherwise the identical
@@ -68,5 +69,14 @@ the same file the app uses, so an agent's use trains the same two engines.
 2. **It does not make anything uncopyrighted.** `risk_report` measures real things —
    third-party-looking music spans, where the source came from, a missing or expired
    licence, clips that carry fewer transformative layers — and stores the owner's
-   rights answer next to the edit receipt. A content-matching system matches the work
-   itself, so no tool here can promise immunity from a claim, and none will claim to.
+   rights answer next to the edit receipt. `clearance_certificate` bundles those
+   measurements and the sha256 of every file into one artifact a third party can
+   re-check with `scripts/verify_certificate.py`, with no trust in the studio required.
+   A content-matching system matches the work itself, so no tool here can promise
+   immunity from a claim, and none will claim to.
+
+   If the studio runs with `CB_RIGHTS=strict`, an import is held before it renders
+   until the owner answers the rights question or records an override with a written
+   reason — so a `cut_clips` call that arrives without one comes back as a clean
+   `held` result telling the agent to send the owner to the studio. An agent can never
+   answer for them.

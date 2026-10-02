@@ -53,6 +53,11 @@ CONFIG = {
     # like v4.1.0. CB_LEARNING=off removes only the trainer, not the store schema.
     "lab": os.environ.get("CB_LAB", "1").strip().lower() not in ("0", "off", "false", "no"),
     "learning_mode": os.environ.get("CB_LEARNING", "full").strip().lower(),
+    # the clearance gate: advisory is the shipped default (v4.1.0 behavior - the report
+    # measures, publishing asks first, renders are never held). Exactly "strict" holds
+    # imported media before it renders until the rights question is answered or an
+    # override with a written reason is recorded; CB_LAB=0 forces advisory.
+    "rights_mode": os.environ.get("CB_RIGHTS", "advisory").strip().lower(),
 }
 
 # The whisper model name depends on the provider: OpenAI = whisper-1,

@@ -14,7 +14,7 @@ the measured reason it was picked.
 **Claude Code.** The plugin folder is meant to be loaded as a local plugin:
 
     claude plugin marketplace add <path-to-this-repo>      # if you publish a marketplace entry
-    claude --plugin-dir E:\clipstudio\plugin
+    claude --plugin-dir <studio>\plugin
 
 Once loaded you get:
 

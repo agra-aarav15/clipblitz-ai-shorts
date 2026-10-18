@@ -1390,7 +1390,74 @@ async function loadScout() {
     SCOUT = data;
     renderScout(data);
     loadBench();
+    loadToday();
   } catch (e) { toast('scout unavailable — retrying…', true); }
+}
+
+/* --------- the daily cycle ---------
+   The one part of the studio that works on a timer. It searches its own niches, cuts
+   at most CB_DAILY_CUTS of its own top picks and then ASKS - it never records a
+   judgment and it never publishes. This card is the ask: today's best cut, the pairs
+   still waiting, and the one button that runs the cycle early. */
+let TODAY = null;
+
+async function loadToday() {
+  try {
+    const data = await (await fetch('/api/daily')).json();
+    TODAY = data;
+    renderToday(data);
+  } catch (e) { /* the scout panel already reports the layer being down */ }
+}
+
+function renderToday(d) {
+  const chip = $('todaychip'), ask = $('todayask');
+  if (!chip || !d) return;
+  if (!d.enabled) {
+    chip.textContent = 'off'; chip.className = 'chip err';
+    ask.textContent = 'The daily cycle is off (CB_DAILY=off or CB_LAB=0). Nothing runs on a timer.';
+    $('todaybest').innerHTML = '';
+    $('todayplan').textContent = '';
+    $('todaynote').textContent = '';
+    return;
+  }
+  chip.textContent = d.ran_today ? `ran today · ${d.runs} run(s)` : (d.due ? 'due now' : 'waiting');
+  chip.className = 'chip' + (d.ran_today ? ' ok' : '');
+  ask.textContent = d.ask || '';
+  const best = d.best;
+  $('todaybest').innerHTML = best ? `<div class="todayclip">
+      <video controls preload="metadata" src="${esc(best.file || '')}" playsinline></video>
+      <div class="todaymeta">
+        <b>${esc(best.title || best.job)}</b>
+        <div class="dim">${esc(best.engine || '')} · score ${best.score === null || best.score === undefined ? '—' : best.score} · clip ${(best.clip_index || 0) + 1} of ${best.clips || 1} · ${scoutDuration(best.duration)}${best.qc ? ` · QC ${esc(best.qc)}` : ''}</div>
+        ${best.reason ? `<div class="dim">${esc(best.reason)}</div>` : ''}
+      </div>
+    </div>` : '<div class="dim">Nothing to show yet.</div>';
+  const t = d.today || {};
+  $('todayplan').innerHTML = [
+    t.niches && t.niches.length ? `watching: ${t.niches.map(esc).join(' · ')}` : '',
+    (t.searches || []).map(s => s.error
+      ? `${esc(s.q)} — ${esc(s.error)}`
+      : `${esc(s.q)}: ${s.found || 0} found, ${s.added || 0} new`).join(' · '),
+    (t.plan || []).slice(0, 3).map(p => `${esc(p.title || p.id)} (${p.rank_score === null || p.rank_score === undefined ? 'unscored' : p.rank_score})`).join(' · '),
+    (t.started || []).filter(s => s.job).map(s => `cutting: ${esc(s.title || s.job)}`).join(' · '),
+    (t.started || []).filter(s => s.skipped).map(s => `skipped: ${esc(s.skipped)}${s.reason ? ' — ' + esc(s.reason) : ''}`).join(' · '),
+    t.held && t.held.length ? `held by the clearance gate: ${t.held.map(h => esc(h.name)).join(', ')}` : '',
+    `${d.pairs_waiting || 0} pair(s) waiting for your call`,
+  ].filter(Boolean).join('<br>');
+  $('todaynote').textContent = d.note || '';
+}
+
+async function runToday() {
+  const btn = $('todayrun');
+  if (btn) { btn.disabled = true; btn.textContent = 'Working…'; }
+  try {
+    const res = await post('/api/daily', JSON.stringify({}));
+    const started = (res.started || []).filter(s => s.job).length;
+    toast(started ? `cycle ran — ${started} cut(s) started, they land in the judge queue`
+                  : 'cycle ran — see the card for what it found');
+    loadToday(); loadScout();
+  } catch (e) { toast(String(e.message || e), true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = "Run today's cycle now"; } }
 }
 
 function renderScout(d) {
@@ -1428,7 +1495,9 @@ function renderScout(d) {
   $('pairlist').querySelectorAll('[data-judge]').forEach(b =>
     b.addEventListener('click', () => {
       const [job, mine, other] = b.dataset.judge.split('|');
-      judgePair(job, Number(mine), Number(other));
+      const card = b.closest('.paircard');
+      const box = card ? card.querySelector('.pairnote') : null;
+      judgePair(job, Number(mine), Number(other), box ? box.value : '');
     }));
 }
 
@@ -1567,6 +1636,7 @@ function pairCard(pp) {
   return `<div class="paircard">
     <div class="pairtop"><b>${esc(pp.job_name || pp.job)}</b><span class="dim">moment ${esc(String(pp.moment))}</span></div>
     <div class="pairvideos">${side(pp.a)}${side(pp.b)}</div>
+    <textarea class="pairnote" rows="1" maxlength="280" placeholder="optional — what's wrong with the one you're dismissing? it gets quoted back to the QC judge"></textarea>
     <div class="scoutbtns">
       <button class="btn small" data-judge="${esc(pp.job)}|${pp.a.index}|${pp.b.index}" type="button">Keep ${a}, dismiss ${b}</button>
       <button class="btn ghost small" data-judge="${esc(pp.job)}|${pp.b.index}|${pp.a.index}" type="button">Keep ${b}, dismiss ${a}</button>
@@ -1575,12 +1645,16 @@ function pairCard(pp) {
   </div>`;
 }
 
-async function judgePair(jobId, mine, other) {
+async function judgePair(jobId, mine, other, problem) {
   try {
-    const res = await post('/api/judge', JSON.stringify({ job_id: jobId, mine, other }));
+    const res = await post('/api/judge', JSON.stringify({
+      job_id: jobId, mine, other, problem: problem || '' }));
     const events = (res.model && res.model.events) || 0;
-    toast(`call logged — the taste model now has ${events} real choice(s)`);
-    loadScout();
+    const said = (res.note || '').trim();
+    toast(said
+      ? `call logged (${events} real choice(s)) — the judge will be told “${said.slice(0, 60)}” from now on`
+      : `call logged — the taste model now has ${events} real choice(s)`);
+    loadScout(); loadToday();
   } catch (e) { toast(String(e.message || e), true); }
 }
 
@@ -1608,6 +1682,11 @@ async function makeProposal(id) {
 }
 
 function initScout() {
+  const todayBtn = $('todayrun');
+  if (todayBtn && !todayBtn.dataset.built) {
+    todayBtn.dataset.built = '1';
+    todayBtn.addEventListener('click', runToday);
+  }
   const benchBtn = $('benchrun');
   if (benchBtn && !benchBtn.dataset.built) {
     benchBtn.dataset.built = '1';
@@ -1662,6 +1741,11 @@ async function refreshSocial() {
       status.textContent = yt.channel ? `connected · ${yt.channel}` : 'connected';
       status.className = 'chip ok';
       $('yt-detail').innerHTML = `<span class="chip ok">${IC('check')} OAuth token verified — auto-upload active</span>`;
+    } else if (yt.reauth_required) {
+      status.textContent = 'token expired — reconnect';
+      status.className = 'chip err';
+      $('yt-detail').innerHTML = `<span class="chip err">${IC('warn')} ${esc(yt.last_error || 'Google stopped accepting the saved token')}</span>` +
+        `<div class="dim" style="margin-top:6px">${esc(yt.reauth_reason || '')} Press <b>Connect YouTube</b> and finish the Google window — uploads resume immediately.</div>`;
     } else if (configured) {
       status.textContent = 'not connected';
       status.className = 'chip';
@@ -1757,6 +1841,8 @@ function renderLearning(L) {
     `<span class="chip">${IC('clock')} median ${L.median_length}s</span>`,
     kept ? `<span class="chip">${IC('film')} kept: ${esc(kept)}</span>` : '',
     model ? `<span class="chip">${IC('bolt')} model ${model.active ? 'v' + model.version : 'warming'}</span>` : '',
+    (L.notes && L.notes.count)
+      ? `<span class="chip">${IC('bulb')} ${L.notes.count} note${L.notes.count === 1 ? '' : 's'} to the judge</span>` : '',
   ].join('');
   const bar = $('learn-bar');
   bar.hidden = !n;
@@ -1773,7 +1859,10 @@ function renderLearning(L) {
     ? 'No choices logged yet — post, re-render or hand-cut a clip and this fills in from the real decisions.'
     : (L.active
       ? `Active: ranking nudged toward ${moves.length ? moves.join(', ') : 'no single feature yet'} — capped at 10% per factor.`
-      : `${L.remaining} more logged choice${L.remaining === 1 ? '' : 's'} before the weights start moving. The ranking is untouched until then.`)) + modelLine;
+      : `${L.remaining} more logged choice${L.remaining === 1 ? '' : 's'} before the weights start moving. The ranking is untouched until then.`)) + modelLine
+    + ((L.notes && L.notes.count)
+      ? ` ${L.notes.count} note${L.notes.count === 1 ? '' : 's'} in your own words ride along with every judge call.`
+      : '');
 }
 
 function renderQueue() {

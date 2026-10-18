@@ -405,6 +405,20 @@ def stories_offline(segments, duration, energy, laughs, moments=None, want=14):
 FILLER_STARTS = {"um", "uh", "so", "and", "but", "like", "yeah", "okay", "ok", "well",
                  "basically", "anyway", "actually", "right", "exactly", "true"}
 
+# Words too common to say anything about what a clip is about. Used only by the
+# duplicate check, so an over-long list is harmless and an under-long one isn't.
+STOP_WORDS = {
+    "the", "and", "you", "that", "this", "for", "but", "not", "are", "was", "with",
+    "his", "her", "she", "him", "they", "them", "their", "there", "here", "what",
+    "when", "where", "which", "who", "how", "why", "all", "any", "can", "could",
+    "would", "should", "will", "just", "like", "get", "got", "going", "gonna", "one",
+    "two", "know", "think", "want", "see", "look", "make", "made", "say", "said",
+    "have", "has", "had", "been", "being", "from", "into", "out", "about", "because",
+    "then", "than", "them", "these", "those", "very", "really", "much", "more",
+    "some", "thing", "things", "people", "yeah", "okay", "right", "well", "now",
+    "your", "yours", "our", "ours", "its", "it's", "i'm", "you're", "that's",
+}
+
 
 def _starts_on_filler(segments, a):
     words = [w["word"].strip(".,!?…").lower() for w in _words_in(segments, a, a + 3.5)][:3]
@@ -446,6 +460,20 @@ def snap(candidate, segments, duration, pad=3.0):
         end = max(ok) if ok else start + 90
     candidate["start"], candidate["end"] = round(max(0.0, start), 2), round(end, 2)
     return candidate
+
+
+def content_words(text):
+    """The words that say what a piece of speech is about: no stopwords, nothing
+    shorter than three letters. Used by the duplicate check only."""
+    return {w for w in re.findall(r"[a-z']+", (text or "").lower())
+            if len(w) > 2 and w not in STOP_WORDS}
+
+
+def near_duplicate(words_a, words_b, threshold=0.6):
+    """True when two word sets overlap so much they are the same beat."""
+    if not words_a or not words_b:
+        return False
+    return len(words_a & words_b) / max(len(words_a | words_b), 1) > threshold
 
 
 def _is_hype(text):
@@ -639,6 +667,24 @@ def _clip_verbatim(segments, a, b, cap=900):
     return _text_in(segments, a, b, cap)
 
 
+def _owner_guidance():
+    """The owner's own complaints, written on cuts they rejected, quoted back to the
+    judge as a standing instruction. Empty string when there are none, so the very
+    first run on a fresh install sends the shipped prompt byte for byte."""
+    try:
+        from .learning import owner_notes
+        notes = owner_notes(6)
+    except Exception:
+        return ""
+    if not notes:
+        return ""
+    return ("\n\nSTANDING COMPLAINTS FROM THE OWNER — these come from cuts the owner "
+            "actually rejected, and they outrank your own preferences:\n"
+            + "\n".join(f"- {n}" for n in notes)
+            + "\nFlag a clip that repeats any of them, say so in its verdict, and never "
+              "call such a clip a success.")
+
+
 def judge_cuts(cands, segments):
     """The QC gate: judges the EXACT verbatim text of each final cut.
     Returns {index: judgement}. Raises on total failure (caller falls back honestly)."""
@@ -647,8 +693,8 @@ def judge_cuts(cands, segments):
                for i, c in enumerate(cands)]
     data = _parse_json(ai_chat({
         "model": CONFIG["ai_model"],
-        "messages": [{"role": "user", "content": JUDGE_PROMPT.format(
-            clips=json.dumps(payload, ensure_ascii=False))}],
+        "messages": [{"role": "user", "content": (JUDGE_PROMPT.format(
+            clips=json.dumps(payload, ensure_ascii=False)) + _owner_guidance())}],
         "temperature": 0.2,
     }))
     out = {}
@@ -682,9 +728,10 @@ def repair_cut(cand, complaint, segments, duration):
     try:
         data = _parse_json(ai_chat({
             "model": CONFIG["ai_model"],
-            "messages": [{"role": "user", "content": REPAIR_PROMPT.format(
+            "messages": [{"role": "user", "content": (REPAIR_PROMPT.format(
                 start=cand["start"], end=cand["end"], complaint=complaint[:220],
-                context="\n".join(f"[{s['start']:.1f}] {s['text']}" for s in sents)[:2400])}],
+                context="\n".join(f"[{s['start']:.1f}] {s['text']}" for s in sents)[:2400])
+                + _owner_guidance())}],
             "temperature": 0.3,
         }))
         a, b = float(data["start"]), float(data["end"])
@@ -974,6 +1021,17 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     def _words(c):
         return set(re.findall(r"[a-z]+", (c.get("title") or "").lower()))
 
+    # What a cut actually SAYS, not what an auto-title called it. Two cuts of the same
+    # beat can carry completely different titles, so the duplicate test reads the
+    # transcript as well — otherwise the podium can repeat the same joke three times.
+    _said_cache = {}
+
+    def _said(c):
+        key = (c.get("start"), c.get("end"))
+        if key not in _said_cache:
+            _said_cache[key] = content_words(_text_in(segments, c["start"], c["end"], 2000))
+        return _said_cache[key]
+
     def _order_key(c):
         ev = c["measured"].get("event", 0)
         return -(c["score"] + 8 * ev + 2 * _hook_open(c))
@@ -990,12 +1048,12 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     spread = max(60.0, 0.12 * duration)
 
     def _near_dup(c):
-        w = _words(c)
+        w = _words(c) | _said(c)
         if not w:
             return False
         for p in picked:
-            pw = _words(p)
-            if pw and len(w & pw) / max(len(w | pw), 1) > 0.6:
+            pw = _words(p) | _said(p)
+            if near_duplicate(w, pw):
                 return True
         return False
 

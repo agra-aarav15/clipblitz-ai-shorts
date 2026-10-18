@@ -17,7 +17,7 @@ cuts, film grade, J-cut audio), or **Both at once** — one analysis pass, both 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v4.2.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v4.3.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -70,6 +70,17 @@ screen, and add this redirect URI in Google Cloud **for this app's port**:
 ```
 http://localhost:4300/oauth/youtube/callback
 ```
+
+The Connect screen always shows the exact URI for the window you are in — copy it from there
+rather than typing it. If you also run the classic apps, add their URIs too
+(`http://localhost:4301/oauth/youtube/callback`, `http://localhost:4302/oauth/youtube/callback`);
+behind a tunnel or a domain, set `CB_YT_REDIRECT` to whatever you registered.
+
+**Uploads stopped working after about a week?** That is Google's rule for an OAuth app still in
+**Testing**: the refresh token expires roughly seven days after consent. The Connect screen now
+says so directly — the chip reads *token expired — reconnect*, with Google's own message under it.
+Press **Connect YouTube**, finish the consent window, and uploads resume; no restart. Publishing
+the app in Google Cloud removes the weekly expiry.
 
 Keys live only in this machine's `.env`. They are never printed, never committed, and never
 leave the machine except to their own provider during a test call.

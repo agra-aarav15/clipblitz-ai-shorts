@@ -26,7 +26,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v4.2.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v4.3.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -119,6 +119,13 @@ counts, shares, medians and the plain-language *why* behind every multiplier in 
 Reset button. The store is a local `data/learning.json`; nothing is uploaded and there is no
 cloud training.
 
+Say **what** was wrong, not just which one you preferred. Every head-to-head call takes an
+optional note in your own words — "ends mid-sentence", "the laugh is cut off" — stored with
+that choice and quoted back to the QC judge on the next run as a standing complaint it must
+flag. A note is capped at 280 characters, deduplicated newest-first, and never invented: with
+no notes written the judge prompt is byte-for-byte the one that shipped. `GET /api/learning`
+carries them under `notes`.
+
 A fourth layer sits on top of those three: the trained model (`clipblitz/trainer.py`). It is a
 local pairwise ranker over the same measured factors, pre-trained on this install's own judge
 verdicts and post-trained on your real choices. It only activates when the newest fifth of your
@@ -158,6 +165,39 @@ From a terminal or an agent: `python -m clipblitz.agent scout "podcast clips"`, 
 `scout_search` and `scout_queue` MCP tools — an agent can search and read the queue, but it
 never judges for you. `CB_SCOUT=off` turns the scout off, `CB_LAB=0` removes all of it, and
 `GET /api/scout` plus `POST /api/scout/search|judge|make` are the API underneath.
+
+## The daily cycle (while you are away)
+
+The **Today** card on the Scout screen is the one part of the studio that acts on a timer.
+Once a day — from `CB_DAILY_HOUR` (default 09:00 local), up to `CB_DAILY_CUTS` times (default
+1) — the server's own heartbeat searches your niches through the scout, cuts its own top-ranked
+pick through the normal pipeline, harvests what finished, runs the ClipBench board and asks the
+refit cadence. A machine that was switched off for a week does not skip the days it missed; it
+simply works the next time it is on.
+
+Its contract is narrow, and the test suite holds it to every clause:
+
+- **It never judges.** No scout verdict is written and no choice is logged by the clock. The
+  proposal it cuts keeps `verdict: null`, so the taste model never trains on its own opinion.
+- **It never publishes.** `auto_post` is untouched; every post still needs you.
+- **It cuts nothing on a machine that cannot render**, and nothing while the previous cut is
+  still running — with the reason written down instead of a silent skip.
+- **It rereads, it does not invent.** Today's pick is harvested out of the pipeline job that
+  actually finished, and a cut that finished yesterday is never shown as today's.
+
+```
+CB_DAILY=on                  # off | on            (CB_LAB=0 removes it entirely)
+CB_DAILY_HOUR=9              # local hour the day's cycle becomes due
+CB_DAILY_CUTS=1              # 0-3 picks it may cut per day on its own
+CB_DAILY_RESULTS=8           # results per niche search
+CB_DAILY_TICK=600            # seconds between heartbeats
+CB_DAILY_NICHES=podcast clips, gaming fails, cooking shorts, fitness motivation
+```
+
+`GET /api/daily` is the card's read, `POST /api/daily` runs a cycle now, `POST /api/daily/reset`
+forgets the schedule (never your choices), and the server prints one line when a cycle runs. To
+start it with the machine, run `scripts/install_autostart.bat` once — it drops a launcher in
+your Startup folder (no admin, no service) and `scripts/uninstall_autostart.bat` removes it.
 
 ## ClipBench — the scoreboard
 
@@ -242,6 +282,7 @@ python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit
 python scripts/test_rights.py     # gate modes, source registry, override record, hold/resume, certificate + verifier
 python scripts/test_scout.py      # metadata-only fetch, measured features, judgment pairs, holdout gate, MCP + CLI
 python scripts/test_clipbench.py  # same split as the gate, ties are not wins, a losing model is reported as losing
+python scripts/test_daily.py      # the timer never judges and never publishes; one cycle per day; notes reach the judge
 python scripts/test_marketplace.py # one-command install, plugin manifest, tool table == code, bundle hygiene
 ```
 

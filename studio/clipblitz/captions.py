@@ -65,17 +65,33 @@ def _fmt(t):
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def chunk_words(words, max_len):
-    """Group words into caption chunks: break on punctuation, length, or pauses >0.6s."""
-    chunks, cur = [], []
+def chunk_words(words, max_len, max_chars=None, pause=0.6):
+    """Group words into caption chunks: break on punctuation, word count, a line that
+    has grown too wide to read, or a pause in speech.
+
+    A chunk nobody can read in the time it is on screen is a defect, not a style: the
+    width cap keeps three long words ("CONGRATULATIONS TRANSFORMATION EVERYBODY") off a
+    1080-wide frame, and the pause split stops a caption hanging on through silence.
+    Both are deterministic, so one transcript always cuts the same way.
+    """
+    if max_chars is None:
+        max_chars = max(18, int(max_len) * 13)
+    chunks, cur, chars = [], [], 0
     for w in words:
-        cur.append(w)
-        text = w["word"]
-        gap_end = w["end"]
-        if (len(cur) >= max_len or text[-1:] in ".!?…,;:") \
-           or (w["end"] - w["start"] > 0 and text[-1:] in ".!?…"):
+        word = w.get("word") or ""
+        if cur and (w.get("start", 0) - cur[-1].get("end", 0)) > pause:
             chunks.append(cur)
-            cur = []
+            cur, chars = [], 0
+        add = len(word) + (1 if cur else 0)
+        if cur and (len(cur) >= max_len or chars + add > max_chars):
+            chunks.append(cur)
+            cur, chars = [], 0
+            add = len(word)
+        cur.append(w)
+        chars += add
+        if word[-1:] in ".!?…,;:":
+            chunks.append(cur)
+            cur, chars = [], 0
     if cur:
         chunks.append(cur)
     return chunks

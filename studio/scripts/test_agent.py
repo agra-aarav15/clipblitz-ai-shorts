@@ -367,7 +367,7 @@ def test_recency_and_caps():
           adj and all(1 - learning.MAX_DELTA <= v <= 1 + learning.MAX_DELTA
                       for v in adj.values()), str(adj))
     check("learning: the store is versioned now",
-          learning.profile()["version"] == learning.STORE_VERSION == 3)
+          learning.profile()["version"] == learning.STORE_VERSION == 4)
 
 
 def test_factor_over_index():

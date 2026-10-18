@@ -34,12 +34,13 @@ import os
 import re
 import socket
 import sys
+import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (captions, clipbench, ffmpeg_tools, hardware, learning, pipeline, rights,
-               scout, social, virality)
+from . import (captions, clipbench, daily, ffmpeg_tools, hardware, learning, pipeline,
+               rights, scout, social, virality)
 from .config import (APP_VERSION, CONFIG, ffmpeg_available, stt_mode,
                      ytdlp_available)
 
@@ -157,6 +158,11 @@ class Handler(BaseHTTPRequestHandler):
                 # and the scoreboard, which is off with the same two switches
                 **({"clipbench": {"enabled": True}}
                    if clipbench.enabled() else {}),
+                # the daily cycle: the only part that acts on a timer. It rides only when
+                # it is actually on, so a health read still tells the truth about it.
+                **({"daily": {"enabled": True, "hour": CONFIG.get("daily_hour"),
+                               "cuts": CONFIG.get("daily_cuts")}}
+                   if daily.enabled() else {}),
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
@@ -188,11 +194,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, keys.status())
         if path == "/api/clipbench":
             return self._json(200, clipbench.state())
+        if path == "/api/daily":
+            return self._json(200, daily.state())
         if path == "/api/social/status":
+            st = social.youtube_state()
             return self._json(200, {
-                "youtube": {"connected": social.youtube_connected(),
-                            "configured": social.youtube_configured(),
-                            "channel": social.youtube_channel() if social.youtube_connected() else None},
+                "youtube": {"connected": st["connected"],
+                            "configured": st["configured"],
+                            "channel": social.youtube_channel() if st["connected"] else None,
+                            "reauth_required": st["reauth_required"],
+                            "reauth_reason": st["reauth_reason"],
+                            "last_error": st["last_error"],
+                            "redirect_uri": st["redirect_uri"]},
                 "assisted": list(social.ASSISTED.keys()),
             })
         if path == "/api/social/youtube/diagnose":
@@ -203,16 +216,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"url": social.youtube_auth_url()})
         if path == "/oauth/youtube/callback":
             code = qs.get("code", [""])[0]
+            state = qs.get("state", [""])[0]
             if not code:
                 return self._file(self._success_page("Google did not return a code.", False),
                                   "text/html; charset=utf-8")
             try:
-                social.youtube_exchange(code)
+                social.youtube_exchange(code, state)
                 return self._file(self._success_page(
-                    "YouTube connected. Close this tab and go back to B2 Pro X.", True),
+                    "YouTube connected. Close this tab and go back to ClipBlitz Studio.", True),
                     "text/html; charset=utf-8")
             except Exception as e:
-                return self._file(self._success_page(f"Token exchange failed: {e}", False),
+                return self._file(self._success_page(str(e), False),
                                   "text/html; charset=utf-8")
 
         if path == "/" or path == "/index.html":
@@ -396,6 +410,16 @@ class Handler(BaseHTTPRequestHandler):
             if not clipbench.enabled():
                 return self._json(409, {"error": "the scoreboard is off (CB_CLIPBENCH=off or CB_LAB=0)"})
             return self._json(200, clipbench.run(reason="api"))
+        if path == "/api/daily":
+            json_body()   # same keep-alive rule as the scoreboard above
+            if not daily.enabled():
+                return self._json(409, {"error": "the daily cycle is off (CB_DAILY=off or CB_LAB=0)"})
+            return self._json(200, daily.run(reason="api"))
+        if path == "/api/daily/reset":
+            json_body()
+            before = daily.state()
+            daily.reset()
+            return self._json(200, {"reset": True, "runs_before": before.get("runs")})
         if path == "/api/social/youtube/disconnect":
             return self._json(200, {"disconnected": social.youtube_disconnect()})
         if path == "/api/social/youtube/start":
@@ -629,7 +653,11 @@ class Handler(BaseHTTPRequestHandler):
     def _judge(self, body):
         """A clip head-to-head: which of these two would you post? The kept cut is
         logged exactly like every other real choice, so the taste model gets a genuine
-        kept-versus-rejected pair, with the loser riding along as its sibling."""
+        kept-versus-rejected pair, with the loser riding along as its sibling.
+
+        `problem` is optional and is the owner's own words about what was wrong with the
+        cut they passed on. It is stored with the choice and quoted back to the QC judge
+        on the next run, so saying it once is enough."""
         job_ = pipeline.JOBS.get(body.get("job_id", ""))
         if not job_:
             return self._json(404, {"error": "unknown job"})
@@ -640,12 +668,15 @@ class Handler(BaseHTTPRequestHandler):
         clips = job_.get("clips") or []
         if mine == other or not (0 <= mine < len(clips)) or not (0 <= other < len(clips)):
             return self._json(400, {"error": "need two different, existing clip indices"})
-        event = learning.log("judge", clips[mine], job_, other=clips[other])
+        event = learning.log("judge", clips[mine], job_, other=clips[other],
+                             note=body.get("problem"))
         scout.record_call(job_.get("id"), clips[mine].get("moment"), mine, other)
         from . import trainer
         return self._json(200, {
             "logged": True, "kept": mine, "rejected": other,
-            "event": {k: event.get(k) for k in ("kind", "engine", "score", "sib")},
+            "event": {k: event.get(k) for k in ("kind", "engine", "score", "sib", "note")},
+            "note": event.get("note") or "",
+            "notes": learning.notes_state(),
             "model": trainer.state(), "scout": scout.state()})
 
     def _override(self, job_id):
@@ -774,6 +805,32 @@ def _lan_urls(port):
     return out
 
 
+def _daily_heartbeat():
+    """The scheduler. One thread, one wake-up every CB_DAILY_TICK seconds, and it only
+    ever calls daily.tick(): the day's rule lives in one place, not in the thread.
+
+    It fires once shortly after boot too, so a machine that was off for a week simply
+    works the next time it is switched on instead of skipping the days it missed."""
+    if not daily.enabled():
+        return
+
+    def loop():
+        time.sleep(20)          # let the server finish binding and print first
+        while True:
+            try:
+                out = daily.tick(reason="cadence")
+                if out.get("ran"):
+                    started = [s.get("job") for s in (out.get("started") or [])
+                               if s.get("job")]
+                    print(f"[clipblitz] daily cycle ran: {len(out.get('plan') or [])} "
+                          f"proposal(s), job(s) {started or 'none'}", flush=True)
+            except Exception as e:            # a timer must never take the studio down
+                print(f"[clipblitz] daily tick failed: {e}", flush=True)
+            time.sleep(max(60, int(CONFIG.get("daily_tick") or 600)))
+
+    threading.Thread(target=loop, daemon=True, name="daily-heartbeat").start()
+
+
 def serve(port=None):
     port = port or CONFIG["port"]
     try:
@@ -793,4 +850,10 @@ def serve(port=None):
           f"render_capable={hw.get('render_capable')}", flush=True)
     if not hw.get("render_capable"):
         print(f"  {hw.get('reason')}", flush=True)
+    if daily.enabled():
+        owed, why = daily.due()
+        print(f"  daily cycle on: every day from {int(CONFIG.get('daily_hour') or 0):02d}:00 "
+              f"local, up to {int(CONFIG.get('daily_cuts') or 0)} cut(s), now: {why}",
+              flush=True)
+    _daily_heartbeat()
     srv.serve_forever()

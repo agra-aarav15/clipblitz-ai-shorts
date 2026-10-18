@@ -131,7 +131,7 @@ def test_store_stores_siblings():
         {"score": 95, "start": 10.0, "end": 40.0, "factors": factors(hook=95)},
     ]}
     e = learning.log("post", clip(start=10.0, end=40.0, factors=factors(hook=97)), job)
-    check("store: v3 stamps the store version", learning.STORE_VERSION == 3)
+    check("store: v4 stamps the store version", learning.STORE_VERSION == 4)
     sib = e.get("sib") or []
     check("store: the choice carries its offered alternatives", len(sib) == 3,
           str(len(sib)))

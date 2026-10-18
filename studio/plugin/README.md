@@ -46,7 +46,7 @@ If you copied this folder out of the checkout, set `CB_ROOT` to the studio folde
 
 Point a generic MCP client at `python <studio>\plugin\clipblitz-mcp.py`.
 
-**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-4.2.0-windows.zip`
+**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-4.3.0-windows.zip`
 ships this folder next to `ClipBlitzStudio.exe`, and the EXE answers the same MCP server
 itself, because the EXE is the same entry point:
 

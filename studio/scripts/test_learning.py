@@ -2,7 +2,7 @@
 
 Run from the studio root:   python scripts/test_learning.py
 
-Proves the two new safety properties the feature promises:
+Proves the safety properties the feature promises:
 
   1. LEARNING IS INERT UNTIL IT IS EARNED. With fewer than 10 logged choices the
      ranking weights are exactly the base profile, so a fresh install behaves
@@ -10,10 +10,14 @@ Proves the two new safety properties the feature promises:
      factor moves by at most +/-10%, deterministically, and Reset puts it back.
   2. THE RIGHTS GATE HOLDS THE POST. An unanswered job cannot post, an unknown
      answer is rejected, and nothing is posted until the owner answers.
+  3. THE STORE ONLY EVER GAINS FIELDS. A v3 store (before the owner's note existed)
+     still loads, its events keep working, and the next write is stamped as the
+     current version - an upgrade never loses a single logged choice.
 
 The store lives in a throwaway temp data dir, so this never touches real data.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -144,6 +148,32 @@ def test_post_gate_is_learned():
           p["events"] == 1 and p["kinds"].get("post") == 1, str(p["kinds"]))
 
 
+def test_old_store_still_loads():
+    """The version only ever goes up: a store written before the note existed is read
+    as it was, its events stay usable, and nothing is silently dropped."""
+    learning.reset()
+    old = {"version": 3, "events": [
+        {"t": 1.0, "kind": "post", "engine": "b2", "score": 80, "duration": 30.0,
+         "laugh_ending": True, "question_hook": False, "source": "", "rights": ""}]}
+    with open(learning._file(), "w", encoding="utf-8") as f:
+        json.dump(old, f)
+    check("store: a v3 store still loads", len(learning.events()) == 1,
+          str(len(learning.events())))
+    check("store: its old event still counts as a choice",
+          learning.profile()["events"] == 1)
+    check("store: it had no notes, so nothing is invented",
+          learning.owner_notes() == [] and learning.notes_state()["count"] == 0)
+    learning.log("judge", {"score": 50, "duration": 20}, {}, note="starts on filler")
+    check("store: the next write is stamped with the current version",
+          learning._load().get("version") == learning.STORE_VERSION == 4,
+          str(learning._load().get("version")))
+    check("store: the upgraded store keeps both choices",
+          len(learning.events()) == 2, str(len(learning.events())))
+    check("store: and the new note is readable",
+          learning.owner_notes() == ["starts on filler"], str(learning.owner_notes()))
+    learning.reset()
+
+
 def main():
     calls = []
     social.post_clip = lambda job, i, targets, on_update=None, wait=False: calls.append((i, targets))
@@ -153,6 +183,7 @@ def main():
     test_learning_question_hooks_and_reset()
     test_rights_gate(calls)
     test_post_gate_is_learned()
+    test_old_store_still_loads()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")
     for name, _, detail in fails:

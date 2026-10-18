@@ -36,13 +36,17 @@ this page.)*
 1. **APIs & Services → Credentials → + Create credentials → OAuth client ID**.
 2. Application type: **Desktop app** *(recommended — the ClipBlitz wizard assumes this)*.
    **Web application** also works if you prefer it — see the note below.
-3. **Authorized redirect URIs → add exactly:**
+3. **Authorized redirect URIs → add exactly (one line per app you run):**
 
    ```
    http://localhost:4301/oauth/youtube/callback
+   http://localhost:4300/oauth/youtube/callback
+   http://localhost:4302/oauth/youtube/callback
    ```
 
-   Copy it from the Connect screen's **copy** button so it cannot drift.
+   4301 is the classic app at the repository root, 4300 is ClipBlitz Studio (both engines in
+   one window) and 4302 is B2 Pro X. Add them all once and no port can surprise you later —
+   the Connect screen's **copy** button always shows the exact URI for the window you are in.
 
 4. **Create** → copy the **Client ID** (`...apps.googleusercontent.com`) and **Client secret**
    (`GOCSPX-...`).
@@ -55,7 +59,8 @@ this page.)*
 > Either is accepted. Do not pick *TV* or *Restricted* — uploads will fail with
 > `youtubeSignupRequired`.
 >
-> Note: if you use a port other than 4301 (via `CB_PORT`), the redirect URI must match it exactly.
+> Note: if you use a port other than the three above (via `CB_PORT`), the redirect URI must match
+> it exactly, or `CB_YT_REDIRECT` must be set to the URI you registered.
 
 ## 5. Paste them into ClipBlitz (inside the app)
 
@@ -107,6 +112,18 @@ do so — if view or retention feedback is ever wanted, that is a new scope and 
 
 ## Troubleshooting — the errors you can actually hit
 
+**Uploads stopped working after about a week: "token expired — reconnect"**
+The single most common failure, and it is Google's rule, not a bug. While your OAuth app is
+still in **Testing**, Google expires the refresh token roughly **seven days** after you
+consented. ClipBlitz now says so plainly on the Connect screen instead of showing a bare
+"not connected": the chip reads *token expired — reconnect* and the detail line carries
+Google's own message.
+
+Fix: press **Connect YouTube**, finish the consent window — uploads work again immediately,
+no restart. To stop the weekly churn, publish the app
+(**OAuth consent screen → Publish app**, verification is only required for sensitive scopes)
+or accept re-consenting once a week.
+
 **Error 403: `org_internal`** (on Google's consent page)
 Your OAuth consent screen audience is **Internal** (organisation-only).
 1. Google Cloud → **APIs & Services → OAuth consent screen** (a.k.a.**Google Auth Platform**).
@@ -116,8 +133,10 @@ Your OAuth consent screen audience is **Internal** (organisation-only).
 
 **Error 400: `redirect_uri_mismatch`**
 The registered redirect URI does not match.
-Fix: **Credentials** → your OAuth client → **Authorized redirect URIs** → add exactly
-`http://localhost:4301/oauth/youtube/callback` (use the Connect screen's **copy** button).
+Fix: **Credentials** → your OAuth client → **Authorized redirect URIs** → add exactly the URI
+your window shows (use the Connect screen's **copy** button — for the classic app that is
+`http://localhost:4301/oauth/youtube/callback`, for ClipBlitz Studio it is the same path on
+port 4300).
 If you changed the port, register the matching URI instead.
 
 **`access_denied` / “This app isn't verified”**

@@ -32,6 +32,12 @@ Three layers, each with its own evidence threshold:
              measured factor beat its own pool average, capped at
              +/-MAX_FACTOR_DELTA
 
+Since v4 a choice can also carry a NOTE: the owner's own words about what was wrong
+with the cut they rejected ("ends mid-sentence", "the laugh is cut off"). A note is kept
+exactly as written and quoted back to the QC judge on the next run as a standing
+complaint, so the judge itself is held to what the owner said out loud. A choice with
+no note changes nothing, and an empty store still produces a byte-identical prompt.
+
 Older choices count for less (HALF_LIFE_DAYS), so the engine keeps up with taste
 instead of being haunted by the first week of use. Nothing is nudged below the
 thresholds: a fresh install behaves exactly as it did before the first event.
@@ -61,10 +67,11 @@ MAX_ENGINE_DELTA = 0.05  # the engine refinement's own slice of that budget
 MAX_FACTOR_DELTA = 0.06  # the factor-over-index layer's own slice
 MAX_EVENTS = 500         # the store keeps the owner's most recent choices
 MAX_SIBLINGS = 8         # offered alternatives stored per choice (the trainer's evidence)
+NOTE_MAX = 280           # the owner's own words, kept whole but never unbounded
 HALF_LIFE_DAYS = 45.0    # a choice this old counts half as much as today's
 MIN_POOL_GAP = 1.0       # keep a candidate pool only if it had alternatives to beat
 MIN_FACTOR_DELTA = 5.0   # a factor must beat its pool by this much (0-100 scale)
-STORE_VERSION = 3        # v3 adds the `sib` sibling vectors; v2 events still load
+STORE_VERSION = 4        # v4 adds the owner's optional `note`; v2/v3 events still load
 
 QUESTION_OPENERS = ("how ", "why ", "what ", "when ", "who ", "which ", "did ",
                     "can ", "will ", "is ", "are ")
@@ -212,14 +219,27 @@ def _siblings(clip, job, other):
     return out[:MAX_SIBLINGS]
 
 
-def log(kind, clip=None, job=None, other=None):
+def _clean_note(text, cap=NOTE_MAX):
+    """The owner's complaint in their own words: whitespace collapsed, capped, and
+    otherwise untouched. Empty means no note was written - which is not an error."""
+    try:
+        s = " ".join(str(text or "").split())
+    except Exception:
+        return ""
+    return s[:cap]
+
+
+def log(kind, clip=None, job=None, other=None, note=None):
     """Record one real choice. Called from the posting, rendering and judging paths.
 
     kind: post | render | custom | judge. A judge event is a head-to-head call, so the
     rejected cut rides in as `other` and is stored as a sibling against the winner.
+    `note` is the owner's optional plain-language complaint about the cut they passed
+    on; it is stored verbatim (apart from whitespace) and read back by owner_notes().
     """
     clip = clip or {}
     job = job or {}
+    note = _clean_note(note)
     try:
         duration = float(clip.get("duration") or 0.0)
     except (TypeError, ValueError):
@@ -236,6 +256,8 @@ def log(kind, clip=None, job=None, other=None):
         "source": (job.get("source") or {}).get("kind", ""),
         "rights": job.get("rights_ok") or "",
     }
+    if note:
+        event["note"] = note
     factors = _clean_factors(clip.get("factors"))
     if factors:
         event["factors"] = factors
@@ -258,6 +280,44 @@ def log(kind, clip=None, job=None, other=None):
         except Exception:
             pass                    # a fit is an optimisation - it must never break a post
     return event
+
+
+def owner_notes(limit=6):
+    """The most recent complaints the owner actually wrote on a real choice, newest
+    first and deduplicated. Strings only: this is exactly what the QC judge is allowed
+    to see. A fresh install returns [] - which is what keeps the judge prompt identical
+    to the one that shipped."""
+    try:
+        limit = max(0, min(10, int(limit)))
+    except (TypeError, ValueError):
+        limit = 6
+    seen, out = set(), []
+    for e in reversed(_load().get("events") or []):
+        note = _clean_note(e.get("note"))
+        if not note:
+            continue
+        key = note.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(note)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def notes_state():
+    """The note block for the UI and any agent: how many were written, the latest few
+    with the choice they belong to, and what they are actually used for."""
+    rows = [e for e in (_load().get("events") or []) if _clean_note(e.get("note"))]
+    return {
+        "count": len(rows),
+        "recent": [{"t": e.get("t"), "kind": e.get("kind"), "engine": e.get("engine"),
+                    "score": e.get("score"), "note": _clean_note(e.get("note"))}
+                   for e in rows[-4:]][::-1],
+        "feeds": ("Every note is quoted back to the QC judge as a standing complaint, so "
+                  "the next cut is judged against what you said you disliked."),
+    }
 
 
 def reset():
@@ -526,6 +586,7 @@ def profile():
         "factor_choices": sum(1 for e in events if e.get("factors") and e.get("pool")),
         "override_share": round(_io_share(events), 3),
         "why": _why(events, adj, evidence, now),
+        "notes": notes_state(),
         "last": events[-1]["t"] if events else None,
     }
     lab = _lab()

@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "4.2.0"
+APP_VERSION = "4.3.0"
 
 
 def _load_env(path):
@@ -32,6 +32,15 @@ def _load_env(path):
 
 
 _load_env(os.path.join(ROOT, ".env"))
+
+def _int_env(name, default, lo, hi):
+    """An integer knob that can never crash the studio: a bad value falls back to the
+    documented default and is clamped to the range the feature is honest about."""
+    try:
+        return max(lo, min(hi, int(os.environ.get(name, "").strip() or default)))
+    except (TypeError, ValueError):
+        return default
+
 
 CONFIG = {
     "port": int(os.environ.get("CB_PORT", "4300")),
@@ -69,6 +78,19 @@ CONFIG = {
     # the scoreboard: one board that scores every ranking claim on the same held-out
     # pairs. CB_CLIPBENCH=off removes it on its own, CB_LAB=0 removes the whole layer.
     "bench_mode": os.environ.get("CB_CLIPBENCH", "on").strip().lower(),
+    # the daily cycle: while the owner is away the studio searches its own niches, cuts
+    # at most `daily_cuts` of its own top picks, runs the board and refits. It never
+    # records a judgment (that stays the owner's) and it never publishes. CB_DAILY=off
+    # removes the whole thing and the studio behaves exactly as it did before it.
+    "daily_mode": os.environ.get("CB_DAILY", "on").strip().lower(),
+    "daily_hour": _int_env("CB_DAILY_HOUR", 9, 0, 23),
+    "daily_cuts": _int_env("CB_DAILY_CUTS", 1, 0, 3),
+    "daily_results": _int_env("CB_DAILY_RESULTS", 8, 1, 20),
+    "daily_tick": _int_env("CB_DAILY_TICK", 600, 60, 86400),
+    "daily_niches": [n.strip() for n in os.environ.get(
+        "CB_DAILY_NICHES",
+        "podcast clips, gaming fails, cooking shorts, fitness motivation"
+    ).split(",") if n.strip()][:6],
 }
 
 # The whisper model name depends on the provider: OpenAI = whisper-1,

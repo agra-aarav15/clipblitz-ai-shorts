@@ -387,6 +387,20 @@
           <button class="btn small" type="submit">Search</button>
           <span class="dim" id="scoutstatus"></span>
         </form>
+
+        <!-- the daily cycle: the only part of the studio that acts on a timer -->
+        <div class="todaycard" id="todaycard">
+          <div class="todayhead">
+            <div>
+              <div class="label-caps">Today <span class="chip" id="todaychip">checking…</span></div>
+              <div class="todayask" id="todayask">Reading today's record…</div>
+            </div>
+            <button class="btn small" id="todayrun" type="button">Run today's cycle now</button>
+          </div>
+          <div id="todaybest" class="todaybest"></div>
+          <div id="todayplan" class="todayplan dim"></div>
+          <div class="dim" id="todaynote"></div>
+        </div>
         <div class="scoutgrid">
           <div class="scoutcol">
             <div class="label-caps">Proposals <span class="chip" id="scoutcount">-</span></div>

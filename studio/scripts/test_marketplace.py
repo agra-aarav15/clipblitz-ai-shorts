@@ -277,8 +277,11 @@ def test_marketplace_manifest():
 
 
 def test_release_workflow_matches_version():
-    """The release workflow names one version in ten places. This is the check that a
-    future bump cannot land half-done (it caught this one's own leftovers)."""
+    """The release workflow used to name the product version in ten places, and this check
+    existed to catch a half-finished bump. The workflow now reads APP_VERSION out of
+    studio/clipblitz/config.py and uses it everywhere, so the invariant is stronger and can
+    be tested directly: no product version is written down in the workflow at all, and the
+    tag, the zip name and the release title all come from that one read."""
     roots = [os.path.join(STUDIO, "..")]
     manifest = find_marketplace()
     if manifest:
@@ -291,18 +294,25 @@ def test_release_workflow_matches_version():
         check("release workflow: SKIP (not next to this checkout)", True, "skipped")
         return
     text = read(path)
-    check("release workflow uploads the current asset name",
-          f"ClipBlitzStudio-{agent.VERSION}-windows.zip" in text)
-    check("release workflow publishes into the current tag",
-          f"gh release upload v{agent.VERSION}" in text
-          and f"gh release download v{agent.VERSION}" in text)
+    check("release workflow reads the version from the app itself",
+          "APP_VERSION" in text and "studio/clipblitz/config.py" in text)
+    check("release workflow uploads the asset under the resolved version",
+          "ClipBlitzStudio-$env:VERSION-windows.zip" in text
+          and "ClipBlitzStudio-${{ env.VERSION }}-windows.zip" in text)
+    check("release workflow publishes into the resolved tag",
+          'gh release upload "v$env:VERSION"' in text
+          and 'gh release download "v$env:VERSION"' in text
+          and 'gh release upload "v$VERSION"' in text)
+    # The invariant the old check was protecting, now enforced as a rule rather than as a
+    # repeated literal: a product version must not appear in the workflow at all.
     # Only the product's own major (4.x) is scanned: the workflow legitimately names SDK
-    # and toolchain versions like build-tools 35.0.0, and those are not this number.
-    stale = sorted(set(re.findall(r"(?<![\d.])v?4\.\d+\.\d+(?![\d.])", text))
-                   - {agent.VERSION, f"v{agent.VERSION}"})
-    check("release workflow carries no other product version", not stale, str(stale))
+    # and toolchain versions like build-tools 34.0.0, and those are not this number.
+    stale = sorted(set(re.findall(r"(?<![\d.])v?4\.\d+\.\d+(?![\d.])", text)))
+    check("release workflow carries no hardcoded product version", not stale, str(stale))
     check("release workflow runs the new suites",
-          "scripts/test_clipbench.py" in text and "scripts/test_marketplace.py" in text)
+          "scripts/test_clipbench.py" in text and "scripts/test_marketplace.py" in text
+          and "scripts/test_social.py" in text and "scripts/test_quality.py" in text)
+    check("release workflow gates the podium board", "--synthetic --gate" in text)
     check("release workflow counts the shipped plugin files", "-ne 9" in text)
     check("release workflow asserts the tool count", "-ne 11" in text)
 

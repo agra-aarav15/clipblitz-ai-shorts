@@ -16,6 +16,18 @@ import urllib.request
 from .config import ffmpeg, ytdlp
 
 MEDIA_RE = re.compile(r"\.(mp4|mov|mkv|webm|m4v|avi)(\?|#|$)", re.I)
+MEDIA_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi")
+
+
+def _pick_downloaded(hits):
+    """The video among yt-dlp's outputs — chosen by extension, never by name order.
+
+    yt-dlp writes a `.info.json` metadata sidecar (and, mid-download, `.part` /
+    `.ytdl` files) next to the media, and alphabetically `.info.json` sorts BEFORE
+    `.mp4`. Picking `sorted(hits)[0]` therefore handed ffmpeg the metadata file and
+    every such job died at the probe with "Invalid data found when processing input".
+    """
+    return next((h for h in hits if h.lower().endswith(MEDIA_EXTS)), None)
 
 
 def _cache_key(url):
@@ -69,8 +81,8 @@ def info_for(video_path):
 
 def _existing_cached(dest_dir, tag):
     """A finished, readable download for this video from an earlier attempt?"""
-    for hit in glob.glob(os.path.join(dest_dir, f"{tag}_*.*")):
-        if hit.endswith((".part", ".ytdl")):
+    for hit in sorted(glob.glob(os.path.join(dest_dir, f"{tag}_*.*"))):
+        if not hit.lower().endswith(MEDIA_EXTS):      # never the .info.json sidecar
             continue
         from . import ffmpeg_tools
         if ffmpeg_tools.is_readable(hit):
@@ -108,9 +120,9 @@ def _ytdlp(url, dest_dir):
             raise RuntimeError("Download timed out — try a shorter video")
         if proc.returncode == 0:
             hits = sorted(glob.glob(os.path.join(dest_dir, f"{tag}_{stamp}_*.*")))
-            video = next((h for h in hits if not h.endswith((".part", ".ytdl"))), None)
+            video = _pick_downloaded(hits)
             if not video:
-                raise RuntimeError("Download finished but no file was produced")
+                raise RuntimeError("Download finished but no video file was produced")
             return video
         last_err = (proc.stderr or "").strip().splitlines()[-3:]
 

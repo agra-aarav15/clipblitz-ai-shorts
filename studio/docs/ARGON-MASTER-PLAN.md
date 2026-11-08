@@ -66,6 +66,13 @@ Each anchor is expanded into sentence-aligned starts and ends across the length 
 This is why the old failure mode ("the clip I wanted was 12 seconds later") disappears: the
 engine evaluates the alternative windows instead of committing to one draft.
 
+### 2.3b Editor pass
+
+When a brain is configured, one editor call per transcript chunk proposes exact windows and
+story arcs with title, hook, payoff, kind and confidence. The proposal enters the candidate
+graph at higher priority than a generic multi-scale window, is snapped to sentence edges, and
+is still measured and judged like every other candidate. The LLM never gets to skip the gate.
+
 ### 2.4 Features
 
 The six learning-compatible factors stay stable: `hook`, `story`, `payoff`, `energy`, `pacing`,
@@ -149,7 +156,7 @@ A short honest podium is preferred to three cuts of the same joke.
 | `clipblitz/config.py` | `CB_ENGINE` default is `argon` |
 | `clipblitz/learning.py` | ARGON has its own learning profile name |
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
-| `scripts/test_argon.py` | 50 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
+| `scripts/test_argon.py` | 61 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
 | `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.0; ARGON is the documented default; legacy engines remain |
 
 The old ProX/B2/APEX paths are preserved for byte-fidelity tests and as fallbacks. Nothing in
@@ -190,7 +197,7 @@ Files that matter:
 - clipblitz/server.py           (engine validation, /api/health, default)
 - clipblitz/agent.py            (MCP/CLI surface; default engine)
 - clipblitz/learning.py         (six-factor learning store and per-engine profile)
-- scripts/test_argon.py         (50 offline checks)
+- scripts/test_argon.py         (61 offline checks)
 - scripts/test_engines.py       (ProX/B2 fidelity regression)
 - README.md, SETUP.md           (docs may lag the code)
 
@@ -248,7 +255,7 @@ Return: findings, evidence, patch list, and unresolved questions.
 
 | Check | Result |
 |---|---|
-| `python scripts/test_argon.py` | 50 passed, 0 failed |
+| `python scripts/test_argon.py` | 61 passed, 0 failed |
 | `python scripts/test_engines.py` | 30 passed, 0 failed |
 | `python scripts/test_agent.py` | 75 passed, 0 failed |
 | `python scripts/test_learning.py` | 28 passed, 0 failed |
@@ -267,7 +274,24 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
 
 ---
 
-## 7. Known limits (do not paper over)
+## 7. Recent hardening (after the first 5.0.0 verification)
+
+- Scene marks are normalised from floats, `(time, score)` tuples and stored dicts, so a B2
+  cinema map can no longer crash ARGON with `float(tuple)`.
+- Source-caption detection: eight low-res frames, conservative outlined-text band test; when a
+  burned-in caption band is found, the new captions move to the top instead of double-printing.
+- Caption events are clamped so two ASS events can never overlap.
+- Edge silence is trimmed for ARGON (head pre-roll protected, tail protected when laughter says
+  the reaction is the payoff).
+- Auto face crop is optional via OpenCV; without OpenCV the renderer uses a centre crop.
+- ARGON no longer pays for a second motion-map pass; it reuses the scene cuts already measured
+  for peak mining.
+- The blur-pad background is blurred at quarter resolution, and ARGON drops the expensive
+  vignette. A 10s ARGON render fell from ~30s to ~11s on this laptop; a full demo job fell from
+  538s to 174s.
+- The dark interface remains the default; the Cutting Desk light theme is a toggle.
+
+## 8. Known limits (do not paper over)
 
 - "Beat every company in everything" is not a measurable claim. ARGON is a stronger, more
   honest engine, but clip quality still depends on the source, the transcript, and the judge.

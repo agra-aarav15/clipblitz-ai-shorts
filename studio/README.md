@@ -11,10 +11,11 @@ Runs on any fresh PC and on your phone over Wi-Fi. Pure Python standard library,
 fonts, no build step, no CDN, no tracking.
 
 - **ARGON (default)** — the unified engine. It builds one candidate graph from spoken hooks,
-  story arcs, measured peaks and cinematic beats, explores multiple sentence-aligned window
-  lengths, judges the exact final transcript, rejects a great hook with a dead ending, repairs
-  named defects deterministically, and selects a diverse podium with MMR. It is the engine all
-  new jobs use unless you choose otherwise.
+  story arcs, measured peaks, cinematic beats and an LLM editor pass that proposes exact
+  windows. It explores multiple sentence-aligned lengths, judges the exact final transcript,
+  rejects a great hook with a dead ending, repairs named defects deterministically, and selects
+  a diverse podium with MMR. It also trims edge silence, detects burned-in source captions and
+  moves the new captions above them, and can follow faces with an optional auto crop.
 - **ProX v5** — the story-first engine: segments the episode into stories, drafts the tightest
   cut inside each, lands every ending on the payoff, then a strict QC judge reads the exact
   final clip and scores it. Verified cuts are badged; anything else says "unverified".
@@ -292,7 +293,7 @@ The engine split and the learning loop have their own offline test scripts (stdl
 network, no ffmpeg):
 
 ```
-python scripts/test_argon.py      # windows, gate, judge, repair, diversity, pipeline contract
+python scripts/test_argon.py      # windows, gate, judge, repair, editor pass, captions, face crop
 python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouched, both honest
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
 python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart

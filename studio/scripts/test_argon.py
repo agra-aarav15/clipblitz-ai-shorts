@@ -210,6 +210,88 @@ def test_features():
 
 # --------------------------------------------------------------------------- 6: offline rank
 
+def test_scene_shapes():
+    """cinema.scene_map returns (time, score) tuples; ffmpeg_tools.scene_cuts returns
+    floats. Both must reach ARGON without a float(tuple) crash."""
+    tuple_scenes = [(12.0, 0.9), (27.0, 0.8), {"time": 34.5}, 40.0]
+    cands, _ = argon._build_candidates(SEGS, DURATION, ENERGY, LAUGHS, [],
+                                       tuple_scenes, MOTION, [])
+    check("argon: tuple scene marks do not crash candidate build", bool(cands),
+          str(len(cands)))
+    check("argon: scene times normalise to floats",
+          argon._scene_times(tuple_scenes) == [12.0, 27.0, 34.5, 40.0],
+          str(argon._scene_times(tuple_scenes)))
+    c = dict(cands[0])
+    argon.measure_candidate(c, SEGS, ENERGY, LAUGHS, [], tuple_scenes, MOTION)
+    check("argon: a tuple scene list measures", "visual" in c["argo_features"])
+
+
+def test_editor_pass():
+    reply = json.dumps({
+        "content_type": "podcast",
+        "stories": [{"start": 8.0, "end": 34.0, "summary": "why startups fail",
+                     "hook_line": "Why do most startups fail?",
+                     "payoff": "talk to users first"}],
+        "cuts": [{"start": 8.0, "end": 30.0, "title": "Why startups fail",
+                  "hook": "Why do most startups fail?", "payoff": "talk to users",
+                  "kind": "hook", "confidence": 9,
+                  "reason": "question opens, answer lands"}],
+    })
+    def editor_chat(payload, **kw):
+        prompt = payload["messages"][-1]["content"]
+        if "short-form editor" in prompt and "PROPOSED CUT" in prompt:
+            return reply
+        raise AssertionError("unexpected prompt")
+    brains_on()
+    argon.ai_chat = editor_chat
+    stories, cuts, ctype = argon.editor_pass(SEGS, DURATION, [], max_chunks=1)
+    check("argon: editor pass returns a story", len(stories) == 1, str(stories))
+    check("argon: editor pass returns an exact cut", len(cuts) == 1, str(cuts))
+    check("argon: editor pass keeps the content type", ctype == "podcast", ctype)
+    cands, _ = argon._build_candidates(SEGS, DURATION, ENERGY, LAUGHS, [],
+                                       SCENES, MOTION, [], cuts)
+    check("argon: an editor-proposed cut survives candidate dedupe",
+          any(c.get("anchor_kind") == "editor" for c in cands),
+          str([c.get("anchor_kind") for c in cands[:8]]))
+
+
+def test_caption_overlap():
+    from clipblitz import captions
+    import tempfile
+    words = [
+        {"word": "One", "start": 0.0, "end": 1.0},
+        {"word": "two", "start": 0.9, "end": 1.9},
+        {"word": "three", "start": 1.8, "end": 2.8},
+        {"word": "four", "start": 2.7, "end": 3.7},
+    ]
+    path = os.path.join(tempfile.mkdtemp(), "a.ass")
+    captions.build_ass(words, (0.0, 4.0), "wordpop", 1.0, "bottom", path)
+    lines = [l for l in open(path, encoding="utf-8-sig") if l.startswith("Dialogue:")]
+    times = []
+    for line in lines:
+        parts = line.split(",", 3)
+        times.append((parts[1], parts[2]))
+    def sec(t):
+        h, m, rest = t.split(":")
+        s, cs = rest.split(".")
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(cs) / 100
+    spans = [(sec(a), sec(b)) for a, b in times]
+    check("captions: no two caption events overlap",
+          all(spans[i][1] <= spans[i + 1][0] + 1e-6 for i in range(len(spans) - 1)),
+          str(spans))
+
+
+def test_face_crop_filter():
+    from clipblitz import ffmpeg_tools, vision
+    _, auto = ffmpeg_tools._filtergraph("auto", None, 10.0, crop_x=620)
+    _, centre = ffmpeg_tools._filtergraph("auto", None, 10.0)
+    check("argon: auto framing uses the face offset when supplied",
+          auto and "min(620" in auto, auto)
+    check("argon: auto framing falls back to centre crop", centre and "(iw-ih*9/16)/2" in centre)
+    check("argon: vision reports its availability without throwing",
+          isinstance(vision.available(), bool))
+
+
 def test_rank_offline():
     brains_off()
     picked, lab, picker, ctype = argon.rank(SEGS, DURATION, count=3, energy=ENERGY,
@@ -360,6 +442,10 @@ def main():
     test_dedupe()
     test_gate()
     test_features()
+    test_scene_shapes()
+    test_editor_pass()
+    test_caption_overlap()
+    test_face_crop_filter()
     test_rank_offline()
     test_judge()
     test_pipeline_contract()

@@ -342,8 +342,37 @@ def _motion_stats(motion, a, b):
     return sum(vals) / len(vals), max(vals)
 
 
+def _scene_time(value):
+    """Scene marks arrive in three shapes: a float from ffmpeg_tools.scene_cuts, a
+    (time, score) tuple from cinema.scene_map, or a dict from a stored job. Normalise
+    once here; every downstream feature gets a plain float."""
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, (tuple, list)) and value:
+            return float(value[0])
+        if isinstance(value, dict):
+            for key in ("time", "t", "start", "timestamp"):
+                if value.get(key) is not None:
+                    return float(value[key])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _scene_times(scenes):
+    out = []
+    for value in scenes or []:
+        t = _scene_time(value)
+        if t is not None:
+            out.append(round(t, 3))
+    return sorted(set(out))
+
+
 def _scene_count(scenes, a, b):
-    return sum(1 for t in (scenes or []) if a < float(t) < b)
+    return sum(1 for t in _scene_times(scenes) if a < t < b)
 
 
 # ---------------------------------------------------------------- measurement
@@ -487,20 +516,28 @@ def _spark_anchors(sparks, limit=18):
 
 
 def _cinema_anchors(scenes, motion, duration, limit=8):
-    """High-motion points that also sit near a real shot boundary. These are the
-    moments that look like an edit, not just a loud sentence."""
-    if not scenes and not motion:
-        return []
+    """Shot boundaries, optionally weighted by on-screen motion. ARGON can run without
+    the expensive motion map: scene cuts alone still give it real edit points."""
+    shots = _scene_times(scenes)
     rows = []
-    for t, v in (motion or []):
-        if any(abs(float(t) - s) <= 2.0 for s in (scenes or [])):
-            rows.append((float(v), float(t)))
-    rows.sort(reverse=True)
     out = []
-    for v, t in rows[:limit]:
-        out.append({"start": t, "end": min(duration, t + 20.0),
-                    "kind": "cinema", "priority": 0.55 + 0.35 * min(1.0, v),
-                    "label": "shot + motion peak"})
+    if motion:
+        for t, v in (motion or []):
+            t = _scene_time(t)
+            if t is None:
+                continue
+            if any(abs(t - s) <= 2.0 for s in shots):
+                rows.append((float(v), t))
+        rows.sort(reverse=True)
+        for v, t in rows[:limit]:
+            out.append({"start": t, "end": min(duration, t + 20.0),
+                        "kind": "cinema", "priority": 0.55 + 0.35 * min(1.0, v),
+                        "label": "shot + motion peak"})
+    else:
+        for t in shots[:limit]:
+            out.append({"start": t, "end": min(duration, t + 20.0),
+                        "kind": "cinema", "priority": 0.45,
+                        "label": "shot boundary"})
     return out
 
 
@@ -511,7 +548,8 @@ def _nearest(items, value):
 
 
 def _snap_to_scene(t, scenes, tol=1.8):
-    best = _nearest(scenes or [], t)
+    shots = _scene_times(scenes)
+    best = _nearest(shots, t)
     if best is None or abs(float(best) - t) > tol:
         return None
     return float(best)
@@ -649,8 +687,141 @@ def _dedupe(cands, segments):
     return out
 
 
-def _build_candidates(segments, duration, energy, laughs, moments, scenes, motion, stories):
+ARGON_EDITOR_PROMPT = """You are a short-form editor watching a long video through a
+timestamped transcript. Your job is to propose the moments that should become vertical
+shorts, and to explain the exact arc of each one.
+
+You get the transcript chunk and the measured peaks inside it. Do not invent timestamps.
+
+For each PROPOSED CUT:
+- start and end are seconds from the start of the source video
+- the start must be the beginning of a spoken sentence, never filler ("um", "so", "like",
+  "yeah", "and") and never a greeting, intro, sponsor read, or shout-out
+- the end must be after the payoff completes: the answer, the punchline, the reveal, the
+  result, or the peak reaction. Never end mid-thought or just before the laugh
+- the clip must be understandable with no earlier context
+- choose a length the moment needs, between 10 and 75 seconds
+- prefer a cold open on a strong line over a slow warm-up
+- do not propose two cuts of the same beat
+
+Return 4-8 stories and 4-8 cuts for this chunk, covering different moments. A story is a
+complete arc; a cut is the exact window to publish.
+
+Transcript chunk:
+{transcript}
+
+Measured peaks in this chunk:
+{events}
+
+Return ONLY compact JSON, no markdown:
+{{"content_type": "podcast|tutorial|vlog|interview|speech|comedy|sports|other",
+"stories": [{{"start": 12.5, "end": 48.0, "summary": "what happens",
+"hook_line": "the spoken line that opens it, <= 12 words",
+"payoff": "how it lands"}}],
+"cuts": [{{"start": 18.0, "end": 51.5, "title": "6-word title",
+"hook": "the spoken opening line", "payoff": "how this cut lands",
+"kind": "hook|story|peak|cinema", "confidence": 0-10,
+"reason": "one line: why this window works"}}]}}
+"""
+
+
+def editor_pass(segments, duration, moments=None, max_chunks=6):
+    """One editorial call per transcript chunk. This is the part that uses the LLM as an
+    editor, not as a scorer: it proposes the actual windows and the arcs inside them.
+    Returns (stories, cuts, content_type). A failure returns empty lists, never a guess."""
+    if not has_brain() or not segments:
+        return [], [], "other"
+    stories, cuts, votes = [], [], {}
+    chunks = V._chunks(segments, max_chars=8500, max_chunks=max_chunks)
+    for chunk in chunks:
+        if not chunk:
+            continue
+        a, b = float(chunk[0]["start"]), float(chunk[-1]["end"])
+        events = []
+        for m in moments or []:
+            if b <= m["start"] or a >= m["end"]:
+                continue
+            events.append(f"- {m['start']:.0f}-{m['end']:.0f}s: peak "
+                          f"roar +{m.get('roar', 0):.1f}dB, "
+                          f"{m.get('cuts', 0)} camera cuts, "
+                          f"heat {m.get('heat', 0):.1f}")
+        prompt = ARGON_EDITOR_PROMPT.format(
+            transcript=V._transcript(chunk)[:9000],
+            events="\n".join(events[:6]) or "(no measured peaks in this chunk)",
+        )
+        try:
+            data = V._parse_json(ai_chat({
+                "model": CONFIG["ai_model"],
+                "messages": [{"role": "user", "content": prompt + V._owner_guidance()}],
+                "temperature": 0.3,
+            }))
+        except Exception:
+            continue
+        ct = str(data.get("content_type") or "").strip().lower()
+        if ct:
+            votes[ct] = votes.get(ct, 0) + 1
+        for st in V._as_list(data.get("stories")):
+            if not isinstance(st, dict):
+                continue
+            sa, sb = V._as_float(st.get("start")), V._as_float(st.get("end"))
+            if sa is None or sb is None:
+                continue
+            sa, sb = max(0.0, min(duration, sa)), max(0.0, min(duration, sb))
+            if not (6.0 <= sb - sa <= 130.0):
+                continue
+            summary = str(st.get("summary") or "")[:140]
+            hook = str(st.get("hook_line") or "")[:140]
+            if V._is_hype(summary + " " + hook):
+                continue
+            stories.append({"start": sa, "end": sb, "summary": summary,
+                            "hook_line": hook, "payoff": str(st.get("payoff") or "")[:140]})
+        for cut in V._as_list(data.get("cuts")):
+            if not isinstance(cut, dict):
+                continue
+            ca, cb = V._as_float(cut.get("start")), V._as_float(cut.get("end"))
+            if ca is None or cb is None:
+                continue
+            ca, cb = max(0.0, min(duration, ca)), max(0.0, min(duration, cb))
+            if not (MIN_S - 0.01 <= cb - ca <= MAX_S + 0.01):
+                continue
+            title = str(cut.get("title") or "")[:100]
+            hook = str(cut.get("hook") or "")[:140]
+            if V._is_hype(title + " " + hook):
+                continue
+            try:
+                conf = float(cut.get("confidence") or 5.0)
+            except (TypeError, ValueError):
+                conf = 5.0
+            cuts.append({"start": ca, "end": cb, "title": title or "Clip",
+                         "hook": hook, "payoff": str(cut.get("payoff") or "")[:140],
+                         "anchor_kind": str(cut.get("kind") or "editor")[:20],
+                         "reason": str(cut.get("reason") or "")[:180],
+                         "confidence": max(0.0, min(10.0, conf))})
+    # De-duplicate editor cuts by window; the LLM can repeat the same beat across chunks.
+    clean = []
+    for c in sorted(cuts, key=lambda x: -x.get("confidence", 5.0)):
+        if any(abs(c["start"] - o["start"]) < 2.0 and abs(c["end"] - o["end"]) < 2.0
+               for o in clean):
+            continue
+        clean.append(c)
+    content_type = max(votes, key=votes.get) if votes else "other"
+    return stories, clean, content_type
+
+
+def _build_candidates(segments, duration, energy, laughs, moments, scenes, motion, stories, editor_cuts=None):
+    scenes = _scene_times(scenes)
     sparks = spark_scan(segments)
+    out = []
+    for e in editor_cuts or []:
+        c = {"start": float(e.get("start", 0.0)), "end": float(e.get("end", 0.0)),
+             "title": e.get("title") or "Clip", "hook": e.get("hook") or "",
+             "payoff": e.get("payoff") or "", "reason": e.get("reason") or "",
+             "anchor_kind": "editor", "anchor_label": "editor proposal",
+             "story": None, "_priority": 2.1}
+        _enforce_window(c, segments, duration)
+        if c.get("_drop") or V._starts_on_filler(segments, c["start"]):
+            continue
+        out.append(c)
     anchors = (_spark_anchors(sparks) + _payoff_anchors(segments, laughs)
                + _story_anchors(stories) + _peak_anchors(moments)
                + _cinema_anchors(scenes, motion, duration))
@@ -661,7 +832,7 @@ def _build_candidates(segments, duration, energy, laughs, moments, scenes, motio
         if any(abs(a["start"] - m["start"]) < 5.0 for m in merged):
             continue
         merged.append(a)
-    cands = []
+    cands = list(out)
     for a in merged:
         if len(cands) >= MAX_CANDIDATES:
             break
@@ -1191,17 +1362,17 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
 
     moments = V.mine_moments(segments, duration, energy, laughs, scenes)
     content_type = "other"
-    stories = []
+    stories, editor_cuts = [], []
     if has_brain():
         try:
-            stories, content_type = V.segment_stories(segments, duration, moments)
+            stories, editor_cuts, content_type = editor_pass(segments, duration, moments)
         except Exception:
-            stories = []
+            stories, editor_cuts = [], []
     if not stories:
         stories = V.stories_offline(segments, duration, energy, laughs, moments=moments)
 
     cands, sparks = _build_candidates(segments, duration, energy, laughs, moments,
-                                      cinema_marks or scenes, motion, stories)
+                                      cinema_marks or scenes, motion, stories, editor_cuts)
     if not cands:
         return V._even_windows(duration, count), [], "argon-windows", content_type
     cands.sort(key=lambda c: -(
@@ -1235,8 +1406,8 @@ def rank_single(segments, duration, energy, start, end, scenes=None, laughs=None
     c = {"start": float(start), "end": float(end), "title": "Custom cut",
          "hook": "", "anchor_kind": "manual", "reason": "your manual selection"}
     _enforce_window(c, segments, duration)
-    moments = V.mine_moments(segments, duration, energy, laughs, scenes)
-    measure_candidate(c, segments, energy, laughs, moments, scenes, motion)
+    moments = V.mine_moments(segments, duration, energy, laughs, _scene_times(scenes))
+    measure_candidate(c, segments, energy, laughs, moments, _scene_times(scenes), motion)
     if has_brain():
         try:
             j = _judge_batch([c], segments, "other").get(0) or _offline_judgement(c)

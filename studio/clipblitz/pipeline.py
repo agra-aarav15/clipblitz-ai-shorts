@@ -13,7 +13,7 @@ import time
 import uuid
 
 from . import (apex, argon, captions, cinema, ffmpeg_tools, hardware, learning, rights,
-               social, stt, virality)
+               social, stt, virality, vision)
 from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
@@ -226,15 +226,50 @@ def _waveform(energy, duration, buckets=600):
     return [round(max(0.0, min(1.0, (v - lo) / span)), 3) for v in vals]
 
 
+def _tighten_edges(job, m):
+    """Remove only dead air at the edges of an ARGON cut. The tail is protected when
+    measured laughter says the reaction is the payoff; the head is protected by a
+    small pre-roll so the first consonant is never clipped."""
+    words = _words_for_window(job.get("segments") or [], m["start"], m["end"])
+    if not words:
+        return m
+    try:
+        first = min(float(w["start"]) for w in words)
+        last = max(float(w["end"]) for w in words)
+    except (KeyError, TypeError, ValueError):
+        return m
+    a, b = float(m["start"]), float(m["end"])
+    if first - a > 0.6:
+        a = max(0.0, first - 0.15)
+    if b - last > 1.2 and (m.get("measured") or {}).get("tail_laugh", 0.0) < 0.10:
+        b = last + 0.45
+    if b - a >= 8.0 and (abs(a - m["start"]) > 0.01 or abs(b - m["end"]) > 0.01):
+        out = dict(m)
+        out["start"], out["end"] = round(a, 2), round(b, 2)
+        out["_tightened"] = True
+        return out
+    return m
+
+
 def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     """Cut + caption one moment. Returns the clip dict (appended by caller).
 
     engine=None means the job's own engine; "prox"/"b2" render that specific variant
     (used by the both-engines job and by re-renders from the comparison view)."""
-    eng = engine or job.get("engine_id", "b2")
+    eng = engine or job.get("engine_id", "argon")
     if eng == "both":
         eng = "b2"
+    if eng == "argon":
+        m = _tighten_edges(job, m)
     fields = _engine_fields(eng)
+    position = job.get("position", "bottom")
+    band = job.get("source_caption_band")
+    moved_captions = False
+    if band and position == "bottom":
+        # The source already has burned-in captions near the bottom. Put the new
+        # captions above them instead of double-printing two different readings.
+        position = "top"
+        moved_captions = True
     words = _words_for_window(job["segments"], m["start"], m["end"])
     if not words and job.get("demo"):
         span = max(1.0, m["end"] - m["start"])
@@ -245,7 +280,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     if words:
         ass_path = os.path.join(clips_dir, base + ".ass")
         captions.build_ass(words, (m["start"], m["end"]),
-                           job["style"], job["size_scale"], job["position"], ass_path)
+                           job["style"], job["size_scale"], position, ass_path)
         ass_name = base + ".ass"  # relative → ffmpeg runs with cwd=clips_dir (path-safe)
     # The transformative-edit layers this render actually applied. Every entry is a real
     # step taken by this render - captions burned into the pixels, a vertical reframe,
@@ -257,9 +292,23 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     layers.append("vertical reframing" + (" with a blur pad" if job.get("framing", "blur") == "blur"
                                           else " to centre crop"))
     if fields["cinematic_grade"]:
-        layers.append("film grade (S-curve + vignette)")
+        layers.append("film grade (S-curve + vignette)" if eng != "argon"
+                      else "film grade (S-curve)")
     if fields["audio_lead"]:
         layers.append("J-cut (the sound leads the picture)")
+    if m.get("_tightened"):
+        layers.append("edge silence trimmed")
+    if moved_captions:
+        layers.append("captions moved above the source's burned-in text")
+
+    crop_x = None
+    if job.get("framing") == "auto":
+        try:
+            if vision.available():
+                crop_x = vision.face_crop_x(src_path, m["start"], m["end"])
+        except Exception:
+            crop_x = None
+        layers.append("face-aware crop" if crop_x is not None else "centre crop")
 
     note = ffmpeg_tools.cut_clip(src_path, m["start"], m["end"],
                                  os.path.join(clips_dir, base + ".mp4"), ass_name,
@@ -267,7 +316,8 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
                                  grade=fields["cinematic_grade"],
                                  grain=fields["cinematic_grain"],
                                  ratio="9:16" if eng == "prox" else (job.get("ratio") or "9:16"),
-                                 audio_lead=fields["audio_lead"])
+                                 audio_lead=fields["audio_lead"], crop_x=crop_x,
+                                 vignette=(eng != "argon"))
     return {
         "file": f"/clips/{base}.mp4",
         "ass": f"/clips/{base}.ass" if ass_name else None,
@@ -291,6 +341,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "start": round(m["start"], 1), "end": round(m["end"], 1),
         "duration": round(m["end"] - m["start"], 1),
         "style": job["style"],
+        "position": position,
         "rank": m.get("rank"),
         "custom": bool(m.get("custom")),
         "transformative": layers,
@@ -329,12 +380,22 @@ def process(job_id, src_path):
         scenes = ffmpeg_tools.scene_cuts(src_path)
         _set(job_, scenes=len(scenes))
 
-        # ---- B2 Pro X cinema measurement (skipped entirely for the ProX engine) ----
-        # real shot boundaries + per-second on-screen motion, so cuts can land on edits and
-        # payoffs can land on the shot that actually carries them. APEX does not retime to
-        # shot boundaries (it is a spoken-hook engine), so it skips this pass too.
+        source_caption_band = None
+        if eng == "argon" and vision.available():
+            _set(job_, stage="checking for burned-in source captions", progress=18)
+            try:
+                source_caption_band = vision.caption_band(src_path, samples=6)
+            except Exception:
+                source_caption_band = None
+            _set(job_, source_caption_band=source_caption_band)
+
+        # ---- cinema measurement ----
+        # B2 needs real shot boundaries AND per-second motion because it re-times cuts to
+        # scene grammar. ARGON uses the scene cuts that were already measured for peak
+        # mining: that is enough for its visual feature and its shot-boundary anchors, and
+        # it avoids a second, expensive ffmpeg pass. ProX and APEX skip this entirely.
         cinema_marks, motion = None, None
-        if eng in ("b2", "both", "argon"):
+        if eng in ("b2", "both"):
             _set(job_, stage="cinema map: shots + motion", progress=18)
             scene_cache = os.path.join(CONFIG["data_dir"], "cache", f"{job_id}-scenes.json")
             cinema_marks = cinema.load_scene_cache(scene_cache)
@@ -344,6 +405,9 @@ def process(job_id, src_path):
             _set(job_, shots=len(cinema_marks))
             motion = cinema.motion_map(src_path, 0.0, duration)
             _set(job_, motion_points=len(motion))
+        elif eng == "argon":
+            cinema_marks = [(round(float(t), 2), 1.0) for t in scenes]
+            _set(job_, shots=len(cinema_marks), motion_points=0)
 
         _set(job_, stage="transcribing", progress=20)
         mode = stt_mode()

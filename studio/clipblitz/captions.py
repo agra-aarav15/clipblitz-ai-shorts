@@ -121,6 +121,20 @@ def _event(t0, t1, text):
     return f"Dialogue: 0,{_fmt(t0)},{_fmt(t1)},Cap,,0,0,0,,{text}"
 
 
+def _clamp_events(events, minimum=0.06):
+    """One caption at a time. Whisper word timings can overlap by a few milliseconds;
+    two ASS events over the same frame look like double-printed subtitles. Each event
+    starts no earlier than the previous one ended, and keeps a minimum readable hold."""
+    ordered = sorted((float(a), float(b), text) for a, b, text in events)
+    out, prev_end = [], 0.0
+    for a, b, text in ordered:
+        a = max(a, prev_end)
+        b = max(b, a + minimum)
+        out.append((a, b, text))
+        prev_end = b
+    return out
+
+
 def _pop_tags():
     return r"{\fscx82\fscy82\t(0,70,\fscx110\fscy110)\t(70,130,\fscx100\fscy100)}"
 
@@ -149,7 +163,7 @@ def build_ass(words, window, style_id, size_scale, position, out_path):
             t0, t1 = chunk[0]["start"], chunk[-1]["end"]
             parts = "".join(rf"{{\k{max(1, int(round((w['end'] - w['start']) * 100)))}}}{w['word']} "
                             for w in chunk)
-            events.append(_event(t0, t1, "{\\k0}" + parts.rstrip()))
+            events.append((t0, t1, "{\\k0}" + parts.rstrip()))
     else:
         for i, chunk in enumerate(chunk_words(rel, p["chunk"])):
             t0, t1 = chunk[0]["start"], chunk[-1]["end"]
@@ -162,7 +176,7 @@ def build_ass(words, window, style_id, size_scale, position, out_path):
                 text = _shake_pos(i, base_y) + text
             if p.get("box"):
                 text = r"{\bord" + str(p["outline_w"]) + "}" + text
-            events.append(_event(t0, t1, text))
+            events.append((t0, t1, text))
 
     header = f"""[Script Info]
 Title: ClipBlitz captions
@@ -179,8 +193,9 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+    events = _clamp_events(events)
     with open(out_path, "w", encoding="utf-8-sig") as f:
-        f.write(header + "\n".join(events) + "\n")
+        f.write(header + "\n".join(_event(*event) for event in events) + "\n")
     return out_path
 
 

@@ -15,6 +15,28 @@ const IC = (n) => '<svg class="ic" aria-hidden="true"><use href="#i-' + n + '"/>
 const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 const fmt = (t) => { t = Math.max(0, t || 0); return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`; };
 
+
+/* ============================ appearance ============================
+   The previous dark interface is the default because the owner asked for it.
+   The Cutting Desk light layer is a real alternative, loaded only when chosen. */
+const DESK_LINK = document.getElementById('desk-theme');
+const THEME_BTN = document.getElementById('theme-btn');
+let THEME = new URLSearchParams(location.search).get('theme')
+  || localStorage.getItem('cb.theme') || 'dark';
+
+function setTheme(name, persist) {
+  THEME = name === 'light' ? 'light' : 'dark';
+  if (DESK_LINK) DESK_LINK.disabled = THEME !== 'light';
+  document.documentElement.dataset.theme = THEME;
+  if (THEME_BTN) THEME_BTN.textContent = THEME === 'light' ? 'Obsidian theme' : 'Desk theme';
+  if (persist) localStorage.setItem('cb.theme', THEME);
+}
+setTheme(THEME, false);
+if (THEME_BTN) THEME_BTN.addEventListener('click', () => {
+  setTheme(THEME === 'light' ? 'dark' : 'light', true);
+  toast(THEME === 'light' ? 'Cutting Desk theme' : 'Obsidian theme');
+});
+
 const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'scout', 'connect'];
 const TITLES = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', scout: 'Scout', connect: 'Connect' };
 const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing', event: 'Event' };

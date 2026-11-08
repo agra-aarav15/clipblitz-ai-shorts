@@ -239,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(os.path.join(WEB, "app.js"), "text/javascript")
         if path == "/styles.css":
             return self._file(os.path.join(WEB, "styles.css"), "text/css")
+        if path == "/cutdesk.css":
+            return self._file(os.path.join(WEB, "cutdesk.css"), "text/css")
         if path == "/manifest.webmanifest":
             return self._file(os.path.join(WEB, "manifest.webmanifest"),
                               "application/manifest+json")

@@ -19,6 +19,8 @@ Read first:
 - studio/clipblitz/agent.py
 - studio/clipblitz/learning.py
 - studio/scripts/test_argon.py
+studio/clipblitz/vision.py
+studio/web/cutdesk.css
 - studio/scripts/test_engines.py
 - VERIFICATION-v5.0.0.md
 - README.md and studio/README.md / studio/SETUP.md for version consistency

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>ClipBlitz Studio — Two Engines, One Window</title>
-<meta name="description" content="Turn one long video into vertical shorts. Story segmentation, judge-verified cuts, animated captions." />
-<meta name="color-scheme" content="dark" />
-<meta name="theme-color" content="#050505" />
+<title>ClipBlitz Studio — Cutting Desk</title>
+<meta name="description" content="Turn one long recording into vertical cuts. ARGON finds the moment, lands the payoff, and renders the short on your own machine." />
+<meta name="color-scheme" content="light" />
+<meta name="theme-color" content="#f2eee5" />
 <meta property="og:type" content="website" />
-<meta property="og:title" content="ClipBlitz Studio — Two Engines, One Window" />
-<meta property="og:description" content="One long video in. The clips that matter out. ProX v5 and B2 Pro X cut side by side, with honest scores." />
+<meta property="og:title" content="ClipBlitz Studio — Cutting Desk" />
+<meta property="og:description" content="One long recording in. The cuts that matter out. ARGON finds the moment, lands the payoff, and renders the short locally." />
 <meta property="og:image" content="/icons/icon-512.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,13 +18,14 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
+<link rel="stylesheet" href="/cutdesk.css" id="desk-theme" disabled />
 </head>
 <body>
 
 <!-- ================= icon system: monochrome inline SVG strokes, no emoji ================= -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<linearGradient id="lgMark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#8a8a92"/></linearGradient>
-<symbol id="i-mark" viewBox="0 0 48 48"><rect x="3.5" y="3.5" width="41" height="41" rx="13" fill="rgba(255,255,255,0.06)" stroke="url(#lgMark)" stroke-opacity="0.55" stroke-width="1.4"/><path d="M27.2 9.5 L14.5 27.4 h8.1 L20.2 38.5 L33.5 20.6 h-8.2 z" fill="url(#lgMark)"/></symbol>
+<linearGradient id="lgMark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d8401c"/><stop offset="1" stop-color="#d8401c"/></linearGradient>
+<symbol id="i-mark" viewBox="0 0 48 48"><rect x="3.5" y="3.5" width="41" height="41" rx="13" fill="rgba(216,64,28,0.10)" stroke="#d8401c" stroke-opacity="0.65" stroke-width="1.4"/><path d="M27.2 9.5 L14.5 27.4 h8.1 L20.2 38.5 L33.5 20.6 h-8.2 z" fill="#d8401c"/></symbol>
 <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
 <symbol id="i-strip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 5v14M12 5v14M17 5v14M3 10h4M3 14h4M10 10h4M10 14h4M17 10h4M17 14h4"/></symbol>
 <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
@@ -92,6 +93,7 @@
       <div class="topchips">
         <span class="chip" id="jobchip" hidden></span>
         <span class="chip" id="livechip">checking…</span>
+        <button class="chip" id="theme-btn" type="button" title="Switch between the previous dark interface and the Cutting Desk light interface">Desk theme</button>
       </div>
     </header>
 
@@ -100,11 +102,10 @@
     <!-- ================= STUDIO ================= -->
     <section class="screen" id="screen-studio">
       <div class="hero">
-        <div class="label-caps">ClipBlitz Studio · ARGON unified engine · hook + story + cinema</div>
+        <div class="label-caps">Local clipping studio · ARGON engine</div>
         <h1 class="display">One long video in.<br />The clips that matter out.</h1>
-        <p class="lede">The engine segments the episode into <b>stories</b>, drafts the tightest cut inside
-        each one, lands every ending on the payoff, then a strict <b>QC judge</b> reads the exact final
-        clip and scores it. Nothing is random, and nothing is invented.</p>
+        <p class="lede">Drop one long recording. <b>ARGON</b> finds the moment that stops the scroll,
+        lands the payoff, and renders a vertical cut with captions. Everything runs on this machine.</p>
       </div>
 
       <div class="glass panel hwbox" id="hwbox" hidden>
@@ -151,6 +152,7 @@
                 <label for="framing">Framing</label>
                 <select id="framing">
                   <option value="blur">Blur-pad — full frame, nothing cut</option>
+                  <option value="auto">Auto face crop — follows the face</option>
                   <option value="crop">Center crop — cuts the sides</option>
                   <option value="crop-left">Crop left speaker</option>
                   <option value="crop-right">Crop right speaker</option>
@@ -188,7 +190,7 @@
           </div>
 
           <div class="studio-col preview-col">
-            <div class="label-caps">Live caption preview</div>
+            <div class="label-caps">Preview</div>
             <div class="pv-frame" id="pv-frame">
               <canvas id="pv-canvas" width="270" height="480"></canvas>
               <div class="pv-caption" id="pv-caption"></div>
@@ -228,7 +230,7 @@
       <!-- recent jobs -->
       <div class="glass panel" id="recentwrap">
         <div class="jobhead">
-          <b><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> Recent jobs</b>
+          <b><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> Recent projects</b>
           <span class="chip" id="recent-count">—</span>
         </div>
         <div id="recent" class="recentlist"></div>

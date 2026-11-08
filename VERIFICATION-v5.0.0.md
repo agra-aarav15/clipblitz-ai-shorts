@@ -87,9 +87,9 @@ Executed through `POST /api/demo?engine=argon&top_n=2&style=wordpop` against a t
 | Retention | 9/10 -> 8/10 and 8/10 -> 8/10 |
 | Judge flags | none |
 
-A second demo run after the editor pass, cheap blur and no-vignette ARGON finish completed in
-**174 seconds** (down from 538 seconds on the same machine) with two verified clips:
-24.6s / score 82 and 18.9s / score 76.
+A final demo run after the editor pass, caption-band detection, cheap blur and no-vignette
+ARGON finish completed in **168 seconds** (down from 538 seconds on the same machine) with two
+verified clips: 24.6s / score 81 and 18.9s / score 77.
 
 The overlap/diversity rule was tightened after this run (a shared ending within 2s and a
 temporal IoU above 0.45 now count as the same beat), so a future run on a short source may
@@ -132,7 +132,7 @@ cuts of the same payoff.
 
 ## Independent verification
 
-The Gemini 4 Argon review was launched twice against commit `26fb03c`. Both calls were
+The Gemini 4 Argon review was launched twice against commit `2fb553c`. Both calls were
 refused by the provider with `403 theos_insufficient` (account quota; the response named a
 refresh time of `2026-11-09T04:29:50+00:00`). **No Gemini verdict exists yet.** The exact
 read-only review brief is in `VERIFY-WITH-GEMINI.md`; paste that file into Gemini when the

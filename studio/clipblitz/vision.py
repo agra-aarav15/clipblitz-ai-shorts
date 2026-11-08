@@ -75,6 +75,7 @@ def _frames(src, start, end, count):
     try:
         subprocess.run(cmd, capture_output=True, timeout=30)
     except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
         return []
     out = []
     for name in sorted(os.listdir(tmp)):
@@ -83,6 +84,8 @@ def _frames(src, start, end, count):
         if img is not None:
             h, w = img.shape[:2]
             out.append((path, w, h))
+    if not out:
+        shutil.rmtree(tmp, ignore_errors=True)
     return out
 
 

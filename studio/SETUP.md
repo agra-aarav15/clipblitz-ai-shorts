@@ -1,7 +1,7 @@
 # SETUP — ClipBlitz Studio
 
-One app, two engines: **ProX v5** (story-first, judged cuts) and **B2 Pro X** (shot-boundary
-cuts, film grade, J-cut audio), or **Both at once** — one analysis pass, both cuts side by side.
+One app, one default editor: **ARGON** (hook + story + cinema in one pass). The legacy
+**ProX v5** and **B2 Pro X** engines, **APEX**, and a side-by-side **Both** mode remain available.
 
 ---
 
@@ -17,12 +17,12 @@ cuts, film grade, J-cut audio), or **Both at once** — one analysis pass, both 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v4.3.0 (engines: ProX v5 / B2 Pro X / Both) → http://localhost:4300
+ClipBlitz Studio v5.0.0 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
 Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_ENGINE`
-(default `b2`), `CB_DATA` (data directory), `CB_FFMPEG_DIR`, `CB_TOP_N`.
+(default `argon`), `CB_DATA` (data directory), `CB_FFMPEG_DIR`, `CB_TOP_N`.
 
 ---
 

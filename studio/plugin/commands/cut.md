@@ -12,9 +12,9 @@ Cut clips out of that video with the `cut_clips` tool.
 
 - If the user did not say how many, use 3.
 - Pass `clips` as the number the user asked for (1-8).
-- Pass `engine` only if the user named one: `b2` (film grade, cuts on shot boundaries),
-  `prox` (the same edit without the cinema layer), or `both` (one analysis pass, two
-  renders of every cut). Default `b2`.
+- Pass `engine` only if the user named one: `argon` (the unified default), `b2` (film grade,
+  cuts on shot boundaries), `prox` (the same edit without the cinema layer), `apex` (tight
+  hook-first), or `both` (one analysis pass, two renders of every cut). Default `argon`.
 - Pass `rights` only when the user has already stated their rights in this
   conversation. Never infer it from the fact that they own the file, and never pick
   an answer to make the call succeed.

@@ -51,6 +51,7 @@ jobs:
       - name: Run the offline test suites
         working-directory: studio
         run: |
+          python scripts/test_argon.py
           python scripts/test_engines.py
           python scripts/test_learning.py
           python scripts/test_agent.py

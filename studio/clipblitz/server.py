@@ -131,12 +131,16 @@ class Handler(BaseHTTPRequestHandler):
             from . import hardware
             return self._json(200, {
                 "ok": True, "name": "ClipBlitz Studio", "version": APP_VERSION,
-                "engine": "B2 Pro X", "default_engine": CONFIG.get("engine_default", "b2"),
+                "engine": "ARGON unified", "default_engine": CONFIG.get("engine_default", "argon"),
                 "engines": [
+                    {"id": "argon", "name": "ARGON unified",
+                     "note": "hook + story + cinema in one engine: multi-scale windows, judge, adversarial gate"},
                     {"id": "prox", "name": "ProX v5",
                      "note": "story-first cuts, judged and quality-gated"},
                     {"id": "b2", "name": "B2 Pro X",
                      "note": "cuts on shot boundaries, film grade, sound leads the cut"},
+                    {"id": "apex", "name": "APEX hook-first",
+                     "note": "retention-first hook cuts: cold-open on the strongest line, tight 8-30s"},
                     {"id": "both", "name": "Both engines",
                      "note": "one analysis pass, both cuts side by side"},
                 ],
@@ -172,7 +176,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": j["id"], "name": j.get("name"), "status": j.get("status"),
                 "stage": j.get("stage"), "progress": j.get("progress"),
                 "clips": len(j.get("clips", [])), "created": j.get("created"),
-                "engine": j.get("engine_id", "b2"),
+                "engine": j.get("engine_id", "argon"),
                 "rights_ok": j.get("rights_ok"),
                 "top_score": max([c.get("score", 0) for c in j.get("clips", [])], default=0),
             } for j in jobs[:20]])
@@ -451,10 +455,10 @@ class Handler(BaseHTTPRequestHandler):
             return 0
 
     def _engine(self, qs):
-        eng = (qs.get("engine") or [CONFIG.get("engine_default", "b2")])[0]
-        if eng not in ("prox", "b2", "both"):
-            eng = CONFIG.get("engine_default", "b2")
-        return eng if eng in ("prox", "b2", "both") else "b2"
+        eng = (qs.get("engine") or [CONFIG.get("engine_default", "argon")])[0]
+        if eng not in ("prox", "b2", "apex", "argon", "both"):
+            eng = CONFIG.get("engine_default", "argon")
+        return eng if eng in ("prox", "b2", "apex", "argon", "both") else "argon"
 
     def _render_refused(self):
         hw = hardware.profile()
@@ -632,8 +636,8 @@ class Handler(BaseHTTPRequestHandler):
         refused = self._render_refused()
         if refused:
             return refused
-        eng = body.get("engine") if body.get("engine") in ("prox", "b2", "both") \
-            else CONFIG.get("engine_default", "b2")
+        eng = body.get("engine") if body.get("engine") in ("prox", "b2", "apex", "argon", "both") \
+            else CONFIG.get("engine_default", "argon")
         try:
             top_n = min(6, max(1, int(body.get("top_n") or CONFIG["top_n"])))
         except (TypeError, ValueError):
@@ -839,7 +843,7 @@ def serve(port=None):
         print(f"ClipBlitz Studio is already running -> http://localhost:{port}  "
               f"(open that tab; or kill the old instance first)")
         sys.exit(0)
-    print(f"ClipBlitz Studio v{APP_VERSION} (engines: ProX v5 / B2 Pro X / Both)  ->  "
+    print(f"ClipBlitz Studio v{APP_VERSION} (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both)  ->  "
           f"http://localhost:{port}", flush=True)
     from . import hardware
     hw = hardware.profile()

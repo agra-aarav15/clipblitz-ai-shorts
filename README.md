@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v4.1.0"><b>Download v4.1.0 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.0"><b>Download v5.0.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -36,32 +36,34 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## What's new in v4.1.0
+## What's new in v5.0.0
 
-- **Use it from an AI agent.** `studio/plugin/` is a plugin for a coding agent — Claude Code and
-  any other MCP client. Hand it a video and say *"cut me four clips"* and it runs the real engine
-  and returns the rendered vertical files with titles, hooks, scores and the reason each was
-  picked. It only edits: there is no publish tool, on purpose.
-- **Copyright safety, measured.** A claim-risk report per job (third-party-looking audio spans
-  with timestamps, where the source came from, a missing or expired licence, clips carrying the
-  fewest transformative layers), a licence record next to your rights answer, and a written edit
-  receipt with hashes. It tells you the truth; it does not promise claim immunity, because
-  nothing can.
-- **Both engines now learn separately.** Past its own evidence bar, each engine's kept cuts pull
-  that engine's weights away from the shared profile, on top of the global taste model — see
-  [A learning loop that stays on your machine](#a-learning-loop-that-stays-on-your-machine).
+- **ARGON, one unified engine.** A four-channel anchor graph (spoken hooks, story arcs,
+  measured peaks, cinematic beats), multi-scale sentence-aligned windows, 16 measured
+  features, an exact-transcript retention judge, a non-compensatory ending/context gate, a
+  deterministic repair loop, and MMR diversity. It is the default engine; ProX v5, B2 Pro X,
+  APEX and Both remain available as fallbacks and for comparison.
+- **A judge that names the defect.** The LLM returns hook, payoff, emotion, shareability,
+  rewatch, clarity, retention-at-3s, retention-to-end and concrete flags. It never invents a
+  timestamp; it rates the exact final window.
+- **The same honest box.** Rights gate, measured claim-risk report, licence record, edit
+  receipt, clearance certificate, local learning loop, metadata-only Scout, ClipBench and the
+  agent/MCP surface are unchanged. Nothing publishes without a human.
 
 ---
 
-## Two engines in one window (ClipBlitz Studio v4.1.0)
+## ARGON, the unified engine (ClipBlitz Studio v5.0.0)
 
-Both flagship engines live in a single interface with side-by-side comparison:
+One engine chooses the cut from spoken hooks, story arcs, measured peaks and cinematic beats.
+The older engines stay for comparison and fallback:
 
 | Engine | How it cuts | Look & Feel | Audio |
 |---|---|---|---|
+| **ARGON** | Hook + story + cinema anchors, multi-scale windows, retention judge, gate, repair | Cinematic grade + vignette | J-cut: audio leads picture by 0.35s |
 | **ProX v5** | Story-first + sentence snap + QC judge | Clean 1080x1920 vertical blur-pad | 0.18s fade in/out |
-| **B2 Pro X** | Shot-boundary snap + scene grammar | Cinematic film grade (S-curve + vignette) | J-cut: audio leads picture by 0.35s |
-| **Both** | **One analysis pass, two cuts side by side** | Compare both grades and timings | Pick your favorite cut |
+| **B2 Pro X** | Shot-boundary snap + scene grammar | Cinematic film grade | J-cut: audio leads picture by 0.35s |
+| **APEX** | Hook-first, tight 8-30s | Cinematic grade | J-cut |
+| **Both** | One analysis pass, two story-engine cuts side by side | Compare both grades and timings | Pick your favorite cut |
 
 <p align="center">
   <img src="docs/shots/03-compare.png" width="850" alt="Both engines side by side in the comparison view" />
@@ -170,7 +172,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-4.1.0.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v4.1.0).
+1. Download **`ClipBlitzStudio-5.0.0.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.0).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

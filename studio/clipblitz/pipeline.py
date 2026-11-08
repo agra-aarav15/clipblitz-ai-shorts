@@ -12,8 +12,8 @@ import threading
 import time
 import uuid
 
-from . import (captions, cinema, ffmpeg_tools, hardware, learning, rights, social, stt,
-               virality)
+from . import (apex, argon, captions, cinema, ffmpeg_tools, hardware, learning, rights,
+               social, stt, virality)
 from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
@@ -27,6 +27,10 @@ ENGINES = {
              "note": "story-first cuts, judged and quality-gated"},
     "b2":   {"id": "b2", "name": "B2 Pro X",
              "note": "cuts on shot boundaries, film grade, sound leads the cut"},
+    "apex": {"id": "apex", "name": "APEX hook-first",
+             "note": "retention-first hook cuts: cold-open on the strongest line, tight 8-30s"},
+    "argon": {"id": "argon", "name": "ARGON unified",
+              "note": "hook + story + cinema in one engine: multi-scale windows, judge, adversarial gate"},
     "both": {"id": "both", "name": "Both engines",
              "note": "one analysis pass, both cuts side by side"},
 }
@@ -54,7 +58,8 @@ RIGHTS_NOTE = ("YouTube's Content ID finds unlicensed re-uploads no matter how t
 
 def _engine_fields(engine):
     """Render fields implied by an engine choice. ProX v5 is this codebase with the
-    cinema layer off: no grade, fixed 9:16, no audio lead - the legacy engine exactly."""
+    cinema layer off: no grade, fixed 9:16, no audio lead - the legacy engine exactly.
+    B2 and APEX share the cinema finish; they differ in how the moment is chosen."""
     if engine == "prox":
         return {"cinematic_grade": False, "cinematic_grain": False,
                 "ratio": "9:16", "audio_lead": 0.0}
@@ -163,9 +168,9 @@ def resume_autopost(job_id):
 
 def _variant(job, engine):
     """Resolve an engine override for single re-renders; 'both' jobs default to b2."""
-    if engine in ("prox", "b2"):
+    if engine in ("prox", "b2", "apex", "argon"):
         return engine
-    eng = job.get("engine_id", "b2")
+    eng = job.get("engine_id", "argon")
     return "b2" if eng == "both" else eng
 
 
@@ -279,6 +284,10 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "topic": m.get("topic", ""),
         "score": m.get("score", 50),
         "factors": m.get("factors", {}),
+        "tier": m.get("tier"),
+        "gate": m.get("gate"),
+        "flags": m.get("flags") or [],
+        "argon": m.get("argon"),
         "start": round(m["start"], 1), "end": round(m["end"], 1),
         "duration": round(m["end"] - m["start"], 1),
         "style": job["style"],
@@ -322,10 +331,11 @@ def process(job_id, src_path):
 
         # ---- B2 Pro X cinema measurement (skipped entirely for the ProX engine) ----
         # real shot boundaries + per-second on-screen motion, so cuts can land on edits and
-        # payoffs can land on the shot that actually carries them
+        # payoffs can land on the shot that actually carries them. APEX does not retime to
+        # shot boundaries (it is a spoken-hook engine), so it skips this pass too.
         cinema_marks, motion = None, None
-        if eng in ("b2", "both"):
-            _set(job_, stage="B2 cinema map: shots + motion", progress=18)
+        if eng in ("b2", "both", "argon"):
+            _set(job_, stage="cinema map: shots + motion", progress=18)
             scene_cache = os.path.join(CONFIG["data_dir"], "cache", f"{job_id}-scenes.json")
             cinema_marks = cinema.load_scene_cache(scene_cache)
             if not cinema_marks:
@@ -342,14 +352,25 @@ def process(job_id, src_path):
              stage=f"transcribed via {mode} ({len(segments)} blocks)", progress=40)
 
         _set(job_, stage=f"{ENGINES[eng]['name']}: mining + measuring candidates", progress=52)
-        # engine selects which learned weight profile scores this run. "both" passes
-        # None on purpose: one analysis pass has exactly one ranking, and the two cuts
-        # are two renders of it.
-        moments, candidates, picker, content_type = virality.rank(
-            segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
-            energy=energy, laughs=laughs, scenes=scenes,
-            cinema_marks=cinema_marks, motion=motion,
-            engine=eng if eng in ("prox", "b2") else None)
+        # engine selects which selection pass runs. "both" passes None to the story engine
+        # on purpose: one analysis pass has exactly one ranking, and the two cuts are two
+        # renders of it. APEX is its own selection pass (hook-first, not story-first).
+        if eng == "argon":
+            moments, candidates, picker, content_type = argon.rank(
+                segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
+                energy=energy, laughs=laughs, scenes=scenes,
+                cinema_marks=cinema_marks, motion=motion)
+        elif eng == "apex":
+            moments, candidates, picker, content_type = apex.rank(
+                segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
+                energy=energy, laughs=laughs, scenes=scenes,
+                cinema_marks=cinema_marks, motion=motion)
+        else:
+            moments, candidates, picker, content_type = virality.rank(
+                segments, duration, count=job_.get("top_n") or CONFIG["top_n"],
+                energy=energy, laughs=laughs, scenes=scenes,
+                cinema_marks=cinema_marks, motion=motion,
+                engine=eng if eng in ("prox", "b2") else None)
         _set(job_, mode=f"{mode}+{picker}", content_type=content_type, picker=picker,
              engine=ENGINES[eng]["name"], engine_id=eng,
              shots=len(cinema_marks) if cinema_marks else 0,
@@ -370,6 +391,7 @@ def process(job_id, src_path):
         # edit without the cinema layer (raw_start/raw_end = the pre-cinema window carrying
         # the full non-cinema polish), the B2 cut uses the cinema-snapped bounds; titles,
         # judge verdicts and scores are shared (the judge ran once, on the shared analysis).
+        # APEX moments carry no raw_start/raw_end - the engine renders its own window.
         variants = []                      # (moment_index, moment, engine_id, start, end)
         for mi, m in enumerate(moments, start=1):
             if eng in ("prox", "both"):
@@ -377,6 +399,10 @@ def process(job_id, src_path):
                                  m.get("raw_start", m["start"]), m.get("raw_end", m["end"])))
             if eng in ("b2", "both"):
                 variants.append((mi, m, "b2", m["start"], m["end"]))
+            if eng == "apex":
+                variants.append((mi, m, "apex", m["start"], m["end"]))
+            if eng == "argon":
+                variants.append((mi, m, "argon", m["start"], m["end"]))
 
         total = max(len(variants), 1)
         for i, (mi, m, veng, v0, v1) in enumerate(variants):
@@ -495,12 +521,21 @@ def render_custom(job_id, start, end, style=None, engine=None):
         end = duration
     if not (0 <= start < end) or end - start < 3:
         return None, "window must be at least 3 seconds"
-    if end - start > 120:
-        end = start + 120
+    cap = (argon.MAX_S if job_.get("engine_id") == "argon"
+           else apex.MAX_S if job_.get("engine_id") == "apex" else 120)
+    if end - start > cap:
+        end = start + cap
     if style:
         job_["style"] = style
-    m = virality.rank_single(job_.get("segments") or [], duration or end + 1,
-                             None, start, end)
+    if job_.get("engine_id") == "argon":
+        m = argon.rank_single(job_.get("segments") or [], duration or end + 1, None,
+                              start, end)
+    elif job_.get("engine_id") == "apex":
+        m = apex.rank_single(job_.get("segments") or [], duration or end + 1, None,
+                             start, end)
+    else:
+        m = virality.rank_single(job_.get("segments") or [], duration or end + 1,
+                                 None, start, end)
     m["custom"] = True
     m["title"] = f"Custom cut {m['start']:.0f}-{m['end']:.0f}s"
     m["meta"] = virality.fallback_metadata([m])[0]

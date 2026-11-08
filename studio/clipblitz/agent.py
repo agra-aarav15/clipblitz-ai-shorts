@@ -43,8 +43,9 @@ from .config import CONFIG, APP_VERSION
 VERSION = APP_VERSION
 DEFAULT_CLIPS = 3
 MAX_CLIPS = 8
+DEFAULT_ENGINE = "argon"
 MCP_PROTOCOL = "2024-11-05"
-ENGINES = ("prox", "b2", "both")
+ENGINES = ("prox", "b2", "apex", "argon", "both")
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi")
 
 TERMINAL = ("done", "error")
@@ -226,7 +227,7 @@ class Studio:
 
 # ------------------------------------------------------------------- start + wait
 
-def start(video, clips=DEFAULT_CLIPS, engine="b2", style=None, answer=None, port=None,
+def start(video, clips=DEFAULT_CLIPS, engine=DEFAULT_ENGINE, style=None, answer=None, port=None,
           local=False):
     """Create the job. Returns (job_id, where_it_runs: "studio"|"local").
 
@@ -238,7 +239,7 @@ def start(video, clips=DEFAULT_CLIPS, engine="b2", style=None, answer=None, port
     an error the caller can see (with local=True as the deliberate override).
     """
     clips = max(1, min(int(clips or DEFAULT_CLIPS), MAX_CLIPS))
-    engine = engine if engine in ENGINES else "b2"
+    engine = engine if engine in ENGINES else DEFAULT_ENGINE
     st = Studio(port)
     if not local and port_open(st.port):
         health = st.health()
@@ -328,7 +329,7 @@ def job_summary(job, base_url=None):
     }
 
 
-def cut(video, clips=DEFAULT_CLIPS, engine="b2", style=None, answer=None, seconds=1800,
+def cut(video, clips=DEFAULT_CLIPS, engine=DEFAULT_ENGINE, style=None, answer=None, seconds=1800,
         port=None, base_url=None, local=False):
     """The whole job an agent actually wants: start it, wait, report the files."""
     if not (is_url(video) or os.path.isfile(os.path.abspath(str(video)))):
@@ -369,7 +370,9 @@ CUT_SCHEMA = {
         "clips": {"type": "integer", "minimum": 1, "maximum": MAX_CLIPS,
                   "description": f"How many clips to cut (default {DEFAULT_CLIPS})."},
         "engine": {"type": "string", "enum": list(ENGINES),
-                   "description": "prox, b2, or both. Default b2."},
+                   "description": "argon, prox, b2, apex, or both. Default argon: the "
+                                  "unified engine that combines spoken hooks, story arcs and "
+                                  "cinematic boundaries."},
         "style": {"type": "string", "description": "Caption style id (optional)."},
         "rights": {"type": "string", "enum": sorted(pipeline.RIGHTS_IDS),
                    "description": "Record the rights answer for this source, when the "
@@ -412,7 +415,7 @@ TOOLS = [
                      "each render."),
      "inputSchema": JOB_SCHEMA},
     {"name": "learning_state",
-     "description": ("What the two engines have learned from this owner's kept cuts so "
+     "description": ("What the engines have learned from this owner's kept cuts so "
                      "far, per engine, including how many more choices each engine needs "
                      "before it starts adapting."),
      "inputSchema": {"type": "object", "properties": {}}},
@@ -658,7 +661,7 @@ def main(argv=None):
     c = sub.add_parser("cut", help="cut N clips out of a video")
     c.add_argument("video", help="video file path or http(s) URL")
     c.add_argument("--clips", type=int, default=DEFAULT_CLIPS)
-    c.add_argument("--engine", default="b2", choices=list(ENGINES))
+    c.add_argument("--engine", default=DEFAULT_ENGINE, choices=list(ENGINES))
     c.add_argument("--style", default=None)
     c.add_argument("--rights", default=None, choices=sorted(pipeline.RIGHTS_IDS))
     c.add_argument("--wait", type=int, default=1800, help="seconds to wait for the render")

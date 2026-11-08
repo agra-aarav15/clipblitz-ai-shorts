@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "4.3.0"
+APP_VERSION = "5.0.0"
 
 
 def _load_env(path):
@@ -59,7 +59,7 @@ CONFIG = {
     "top_n": int(os.environ.get("CB_TOP_N", "3")),
     "privacy": os.environ.get("CB_PRIVACY", "public"),
     # per-job engine choice: prox | b2 | both (validated in server/pipeline)
-    "engine_default": os.environ.get("CB_ENGINE", "b2"),
+    "engine_default": os.environ.get("CB_ENGINE", "argon"),
     "yt_client_id": os.environ.get("CB_YT_CLIENT_ID", ""),
     "yt_client_secret": os.environ.get("CB_YT_CLIENT_SECRET", ""),
     # v4.2 lab layer - additive, gated and removable. CB_LAB=0 removes it entirely:

@@ -247,15 +247,15 @@ function runPreview() {
 function opts() {
   return `style=${encodeURIComponent(chosenStyle)}&position=${$('position').value}` +
          `&scale=${$('scale').value}&auto_post=${$('autopost').value}&privacy=${$('privacy').value}` +
-         `&framing=${$('framing').value}&engine=${encodeURIComponent(ENGINE || 'b2')}`;
+         `&framing=${$('framing').value}&engine=${encodeURIComponent(ENGINE || 'argon')}`;
 }
 $('scale').addEventListener('input', () => $('scaleval').textContent = Number($('scale').value).toFixed(2) + '×');
 $('position').addEventListener('change', runPreview);
 
 /* ============================ engine choice ============================
-   One job, one engine choice: ProX v5, B2 Pro X, or Both (one analysis pass,
-   both cuts side by side). Persisted; the notes come from the server's own
-   engine list so the copy can never drift from the code. */
+   One job, one engine choice: ARGON (the unified default), or the legacy
+   ProX v5 / B2 Pro X / APEX engines, or Both for a side-by-side comparison. Persisted; the notes come
+   from the server's own engine list so the copy can never drift from the code. */
 function engineById(id) {
   return ((HEALTH && HEALTH.engines) || []).find(e => e.id === id);
 }
@@ -273,7 +273,7 @@ function setEngine(id, persist) {
 }
 
 function initEngine(h) {
-  if (!h.engines.some(e => e.id === ENGINE)) ENGINE = h.default_engine || 'b2';
+  if (!h.engines.some(e => e.id === ENGINE)) ENGINE = h.default_engine || 'argon';
   setEngine(ENGINE, false);
 }
 
@@ -910,7 +910,10 @@ function clipCardHTML(job, c, i) {
     ${c.reason ? `<div class="reason">${IC('bulb')} ${esc(c.reason)}</div>` : ''}
     <div class="clipmeta">
       ${c.engine ? `<span class="engbadge">${esc(c.engine)}</span>` : ''}
+      ${c.tier ? `<span class="engbadge">${esc(c.tier)}</span>` : ''}
       <span>${c.duration}s · from ${fmt(c.start)}${c.custom ? ' · custom cut' : ''}</span>
+      ${c.argon && Number.isFinite(c.argon.retention_3s) ? `<span class="dim mono">retention ${c.argon.retention_3s}/10 → ${c.argon.retention_end}/10</span>` : ''}
+      ${(c.flags || []).length ? `<span class="dim">flags: ${esc(c.flags.join(', '))}</span>` : ''}
       ${c.note ? `<span class="dim">${esc(c.note)}</span>` : ''}
     </div>
     ${sourceLine(job)}
@@ -1968,7 +1971,7 @@ async function loadRecent() {
     box.innerHTML = jobs.map(j => `
       <button class="recentrow" data-job="${esc(j.id)}" type="button">
         <span class="rname">${esc(j.name || j.id)}</span>
-        <span class="rmeta">${esc(j.status)} · ${j.clips} clip${j.clips === 1 ? '' : 's'}${j.engine ? ' · ' + esc(j.engine === 'both' ? 'both engines' : j.engine === 'prox' ? 'ProX v5' : 'B2 Pro X') : ''}${j.top_score ? ' · best ' + j.top_score : ''}</span>
+        <span class="rmeta">${esc(j.status)} · ${j.clips} clip${j.clips === 1 ? '' : 's'}${j.engine ? ' · ' + esc((engineById(j.engine) || {}).name || (j.engine === 'both' ? 'both engines' : j.engine)) : ''}${j.top_score ? ' · best ' + j.top_score : ''}</span>
       </button>`).join('');
     box.querySelectorAll('[data-job]').forEach(b => b.addEventListener('click', () => {
       fetch(`/api/job/${b.dataset.job}?light=1`).then(r => r.json()).then(job => {

@@ -15,7 +15,10 @@ description: Cut vertical shorts out of a long video (a local file, a YouTube UR
 - `video` — a path or an `http(s)` URL. A URL is fetched with the bundled yt-dlp.
 - `clips` — how many to cut, 1-8. The default is 3; ask the user if it matters and
   they did not say.
-- `engine` — `b2` (default), `prox`, or `both`.
+- `engine` — `argon` (default, unified), `b2`, `prox`, `apex`, or `both`. `argon`
+  combines spoken hooks, story arcs and cinematic boundaries; `apex` is the hook-first engine:
+  tight 8-30s cuts that open cold on the strongest spoken line. Pick it when the user wants
+  shorts built to stop a scroll; pick `b2`/`prox` when they want a story to play out.
 - `rights` — only when the user has stated their rights out loud.
 
 A job takes about as long as the video is long, and longer on a slow machine. The

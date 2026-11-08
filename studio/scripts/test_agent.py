@@ -182,7 +182,8 @@ def test_cli():
     finally:
         agent._local_start = real
     check("cli: the clip count is clamped and the engine falls back to a real one",
-          captured.get("clips") == agent.MAX_CLIPS and captured.get("engine") == "b2",
+          captured.get("clips") == agent.MAX_CLIPS
+          and captured.get("engine") == agent.DEFAULT_ENGINE,
           str(captured))
 
 
@@ -428,6 +429,25 @@ def test_per_engine_refinement():
           set(prof["per_engine"]) == {"prox", "b2"}
           and prof["per_engine"]["b2"]["active"] is True
           and prof["per_engine"]["prox"]["remaining"] == 0, str(prof["engine_min_events"]))
+
+    # APEX is a third engine for learning, not a rename of b2: its kept cuts pull its own
+    # weights and do not move the story engines'. Same code path, generic on the engine id.
+    # The laugh-heavy pool sits in b2 so the GLOBAL rule fires while apex's own (laugh-free)
+    # profile does not — that gap is exactly what an engine refinement measures.
+    learning.reset()
+    seed(20, engine="b2", laugh=True)
+    seed(learning.MIN_ENGINE_EVENTS, engine="apex", laugh=False)
+    events = learning._load()["events"]
+    ref = learning.engine_refinement(events, "apex", time.time())
+    check("learning: apex past its own threshold gets its own refinement", bool(ref), str(ref))
+    check("learning: the apex refinement respects the 5% engine cap",
+          all(abs(v - 1) <= learning.MAX_ENGINE_DELTA + 1e-9 for v in ref.values()), str(ref))
+    prof = learning.profile()
+    check("learning: the profile now reports apex as its own engine",
+          "apex" in prof["per_engine"], str(sorted(prof["per_engine"])))
+    check("learning: apex choices do not silently change the story engines' weights",
+          learning.adjustment("apex") != learning.adjustment("b2"),
+          f"apex {learning.adjustment('apex')} vs b2 {learning.adjustment('b2')}")
 
 
 def test_routing_never_races_the_studio():

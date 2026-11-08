@@ -28,7 +28,7 @@ the incumbent stays, and the attempt is one line in data/model_log.json:
      "holdout_n": 32, "activated": true, "reason": "..."}
 
 The active model only ever touches the ranking through learning.adjustment(), as a
-+/-6% layer inside the existing +/-10% cap; the two engines' render paths are not
++/-6% layer inside the existing +/-10% cap; the engines' render paths are not
 involved at all. CB_LAB=0 removes the whole layer: no siblings are stored, nothing
 refits, learning.profile() carries no model block, and the studio is v4.1.0 again.
 

@@ -46,7 +46,7 @@ If you copied this folder out of the checkout, set `CB_ROOT` to the studio folde
 
 Point a generic MCP client at `python <studio>\plugin\clipblitz-mcp.py`.
 
-**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-4.3.0-windows.zip`
+**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-5.0.0-windows.zip`
 ships this folder next to `ClipBlitzStudio.exe`, and the EXE answers the same MCP server
 itself, because the EXE is the same entry point:
 
@@ -75,7 +75,7 @@ routing to a running studio, the learning store next to the app - behaves identi
 Where the work runs: if a Studio server is listening on `127.0.0.1:4300`, the job
 goes through its API (one writer for `data/jobs.json`). Otherwise the identical
 pipeline runs in the agent's own process. Either way the local learning store is
-the same file the app uses, so an agent's use trains the same two engines.
+the same file the app uses, so an agent's use trains the same engines.
 
 ## Two rules the plugin does not bend
 

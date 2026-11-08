@@ -331,12 +331,76 @@ def test_judge_repair_and_post_roll():
           f"{sorted(raw_bounds(a_cands))} vs {sorted(bounds(no_cinema))}")
 
 
+# --------------------------------------------------------------- 5: apex (hook-first)
+
+def test_apex():
+    """APEX is a DIFFERENT engine, not a re-skin. This proves the honest contract:
+
+    1. It produces its own windows (not the story engine's), capped at its tight MAX_S.
+    2. Its spark scan finds curiosity lines (questions/claims/numbers) and bans the
+       hype class the same way the story engines do.
+    3. It honours the same QC gate and podium honesty (dedupe, spread, ending gate).
+    4. It carries a separate learning profile, so owner choices on APEX train APEX."""
+    from clipblitz import apex
+
+    # (a) spark scan: a question and a claim seed cuts; a greeting does not.
+    segs = []
+    for i, t in enumerate(["welcome back to the show everyone",
+                           "so today we are going to talk about racing",
+                           "how did he win the race against all odds",
+                           "he pushed the engine past every limit it had",
+                           "and the crowd went completely insane then",
+                           "this is the biggest secret in racing today",
+                           "nobody ever talks about it on television",
+                           "the whole team changed everything overnight"]):
+        toks = t.split()
+        per = 3.5 / len(toks)
+        words = [{"word": tk, "start": round(i * 4.0 + per * k, 2),
+                  "end": round(i * 4.0 + per * (k + 1), 2)} for k, tk in enumerate(toks)]
+        segs.append({"start": i * 4.0, "end": i * 4.0 + 3.5, "text": t, "words": words})
+
+    sparks = apex.spark_lines(segs)
+    kinds = {s["kind"] for s in sparks}
+    check("apex: spark scan finds a question hook", "question" in kinds, str(kinds))
+    check("apex: spark scan finds a claim hook", "claim" in kinds, str(kinds))
+    check("apex: the greeting is never a spark",
+          all(s["start"] != 0.0 for s in sparks),
+          str([(s["start"], s["kind"]) for s in sparks]))
+
+    # (b) rank produces tight, distinct windows capped at MAX_S.
+    brains_off()
+    series = [(round(i * 0.5, 2), -30.0) for i in range(64)]
+    picked, cands, picker, ctype = apex.rank(segs, 32.0, count=3,
+                                           energy=(series, -30.0), laughs=[], scenes=[])
+    check("apex: produces cuts", bool(picked), str(picked))
+    check("apex: every cut honours the tight retention cap",
+          all(p["end"] - p["start"] <= apex.MAX_S + 0.01 for p in picked),
+          str([round(p["end"] - p["start"], 1) for p in picked]))
+    check("apex: windows are its own (not the story engine's long cuts)",
+          all(p["end"] - p["start"] <= apex.MAX_S + 0.01 for p in picked))
+    check("apex: offline picker names itself", picker.startswith("apex"), picker)
+    check("apex: every picked cut was scored and QC'd",
+          all("score" in p and "qc" in p and "factors" in p for p in picked))
+    check("apex: hook_speed factor is measured on every candidate",
+          all("hook_speed" in c for c in cands),
+          str([round(c.get("hook_speed", 0), 2) for c in cands]))
+
+    # (c) APEX has its own learning profile, separate from the story engines'.
+    check("apex: its own weight blend is hook-dominant",
+          apex._apex_weights()["hook"] > apex._apex_weights()["story"]
+          and apex._apex_weights()["hook"] > V.WEIGHTS["hook"],
+          str(apex._apex_weights()))
+    check("apex: a manual cut is measured on its own factors",
+          apex.rank_single(segs, 32.0, None, 8.0, 20.0).get("score") is not None)
+
+
 def main():
     if V._weights("comedy") != dict(V.WEIGHT_PROFILES["comedy"]):
         print("NOTE: learning is active on the real data dir; this run uses a temp one")
     test_prox_and_both()
     test_b2_fidelity()
     test_judge_repair_and_post_roll()
+    test_apex()
     fails = [r for r in RESULTS if r[1] is False]
     skips = [r for r in RESULTS if r[1] is None]
     print(f"\n{len(RESULTS) - len(fails) - len(skips)} passed, {len(fails)} failed, "

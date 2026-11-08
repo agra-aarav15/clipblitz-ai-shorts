@@ -1,4 +1,4 @@
-"""The learning loop: both engines get better from what the owner actually keeps.
+"""The learning loop: every engine gets better from what the owner actually keeps.
 
 Honest, local, deterministic and reversible. No cloud, no training service, no pip.
 
@@ -78,7 +78,8 @@ QUESTION_OPENERS = ("how ", "why ", "what ", "when ", "who ", "which ", "did ",
 
 FACTORS = ("hook", "story", "payoff", "energy", "pacing", "event")
 
-ENGINE_NAMES = {"prox": "ProX v5", "b2": "B2 Pro X"}
+ENGINE_NAMES = {"prox": "ProX v5", "b2": "B2 Pro X", "apex": "APEX hook-first",
+                "argon": "ARGON unified"}
 
 
 def _file():

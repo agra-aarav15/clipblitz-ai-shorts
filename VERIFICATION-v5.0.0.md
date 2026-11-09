@@ -147,8 +147,9 @@ cuts of the same payoff.
 - No proprietary code was copied or decompiled. The supplied screenshot was unreadable and
   contained no usable algorithm or reference. ARGON is a clean-room design built from public
   research, first-principles editorial rules, and this repository's measured pipeline.
-- The release is **not published** by this report. The repository working tree is ready for
-  review; tagging and uploading are separate, reviewed steps.
+- The release **is published** as `v5.0.0`. The published Windows zip, APK and checksums were
+  downloaded again and `sha256sum -c checksums.txt` returned OK for both assets. The extracted
+  EXE answered `--tools` and an MCP `initialize` as `clipblitz-studio` 5.0.0.
 
 ---
 
@@ -163,5 +164,18 @@ version/default engine and the old prox/b2 paths. Its P0 list was **empty**.
 
 The earlier quota block is resolved. The exact brief remains in `VERIFY-WITH-GEMINI.md` for a
 future re-run.
+
+## Published artifacts
+
+Release: <https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.0>
+
+| Asset | Check |
+|---|---|
+| `ClipBlitzStudio-5.0.0-windows.zip` | published; contains the EXE, bundled ffmpeg/yt-dlp, 9 plugin files, `web/cutdesk.css`; no `.env`, no `data/` |
+| `ClipBlitzStudio.apk` | published; companion WebView app |
+| `checksums.txt` | downloaded; `sha256sum -c` OK for both assets |
+
+The published EXE was unpacked here and run: `--tools` lists `cut_clips`, and `--mcp` answers
+`initialize` as `clipblitz-studio 5.0.0`.
 
 ## What to run to re-check

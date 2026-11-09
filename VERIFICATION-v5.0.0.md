@@ -91,6 +91,16 @@ A final demo run after the editor pass, caption-band detection, cheap blur and n
 ARGON finish completed in **168 seconds** (down from 538 seconds on the same machine) with two
 verified clips: 24.6s / score 81 and 18.9s / score 77.
 
+A previously failing 73.6s clip at 50 fps was re-rendered through the custom-cut path after
+capping output to 30 fps; it completed in roughly four minutes and produced a valid 73.6s file.
+The old failure was a render timeout, not a missing file or a bad filter.
+
+The job card had a class collision: the top-bar `.jobbox` flex rule was also applied to the
+progress panel, so the job title and the raw ffmpeg command were squeezed into two columns and
+wrapped into a wall of text. The top bar now uses `.topjob`; the progress panel is a normal
+block. Errors show a one-line reason and a **Show details** button, never a raw command by
+default.
+
 The overlap/diversity rule was tightened after this run (a shared ending within 2s and a
 temporal IoU above 0.45 now count as the same beat), so a future run on a short source may
 return fewer, more distinct clips. That is intentional: a shorter honest podium beats three

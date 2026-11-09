@@ -263,8 +263,8 @@ textarea { resize: vertical; }
 
 .main { flex: 1; min-width: 0; padding: 18px 30px 80px; max-width: 1280px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 8px 2px 20px; }
-.jobbox { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.jobbox .jobtitle { min-width: 0; }
+.topjob { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topjob .jobtitle { min-width: 0; }
 /* Below 900px the sidebar becomes the bottom tab bar and its logo goes with it, so the
    mark rides in the topbar instead — the app keeps a face on a phone. */
 .appmark { display: none; width: 26px; height: 26px; flex: none;
@@ -903,3 +903,22 @@ textarea { resize: vertical; }
   .btn, .clipcard, .labcards, .stylecard, .fbar i, .dial-fg, .mini-fg { transition: none !important; }
   .snavbtn:hover, .stylecard:hover, .clipcard:hover, .labcards:hover, .recentrow:hover { transform: none !important; }
 }
+
+/* ---------- job error: a short reason, full log behind Details ---------- */
+.jobhead .stage { display: block; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.joberror {
+  margin-top: 12px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid rgba(255, 180, 171, 0.35);
+  background: rgba(255, 90, 80, 0.06); color: var(--err);
+  font-size: 12px; line-height: 1.5;
+}
+.joberror summary { cursor: pointer; font-weight: 600; }
+.joberror pre {
+  margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap;
+  word-break: break-word; font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-2);
+}
+
+.joberror .joberr-sum { margin-bottom: 6px; }
+.joberror pre { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 10px; }
+.joberror pre[hidden] { display: none !important; }

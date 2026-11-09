@@ -1,4 +1,4 @@
-/* ClipBlitz v3.5 front-end — Studio · Clips · Candidates · Transcript · Connect.
+/* ClipBlitz v3.5 front-end — Studio / Clips / Candidates / Transcript / Connect.
 
    Rendering is SURGICAL: a clip card is built once and afterwards only its post
    chips are patched, so video playback, typed metadata and the score animation all
@@ -152,14 +152,14 @@ fetch('/api/health').then(r => r.json()).then(h => {
      ("yt-" / "dlp"). Every value here is real; nothing is invented. */
   caps.className = 'chip eng' + (h.ffmpeg && h.ytdlp ? ' gold' : ' err');
   caps.innerHTML = [
-    `<span class="erow">${esc(h.engine || 'ProX v5')}<span class="sep">·</span>top ${esc(String(h.top_n))}</span>`,
+    `<span class="erow">${esc(h.engine || 'ProX v5')}<span class="sep">/</span>top ${esc(String(h.top_n))}</span>`,
     `<span class="erow">brain ${esc((h.brains || ['none']).join(' + '))}</span>`,
     `<span class="erow">ffmpeg ${h.ffmpeg ? IC('check') : IC('x')}` +
-      `<span class="sep">·</span>yt-dlp ${h.ytdlp ? IC('check') : IC('x')}</span>`
+      `<span class="sep">/</span>yt-dlp ${h.ytdlp ? IC('check') : IC('x')}</span>`
   ].join('');
   const live = $('livechip');
   live.innerHTML = h.ai_picker
-    ? IC('signal') + ' AI ready · v' + esc(h.version || '')
+    ? IC('signal') + ' AI ready / v' + esc(h.version || '')
     : IC('warn') + ' offline mode';
   live.className = 'chip' + (h.ai_picker ? ' ok' : ' err');
   HEALTH = h;
@@ -221,7 +221,7 @@ $('file').addEventListener('change', fileChosen);
 function fileChosen() {
   const f = $('file').files[0];
   if (!f) return;
-  dz.querySelector('.big').textContent = `${f.name} · ${(f.size / 1048576).toFixed(0)} MB`;
+  dz.querySelector('.big').textContent = `${f.name} / ${(f.size / 1048576).toFixed(0)} MB`;
   dz.querySelector('.sub').textContent = 'ready — press Edit my video';
   if (f.size > 300 * 1048576) toast('Big video — the engine will chew through it, longer waits though.');
   captureFrame(f);
@@ -263,7 +263,7 @@ function runPreview() {
   const words = PV_WORDS.join(' ').split(' ');
   cap.innerHTML = `<div class="pv-screen">${words.map(span).join(' ')}</div>`;
   if (chosenStyle === 'karaoke') cap.style.setProperty('--kfill', (words.length * 0.32 + 1.6) + 's');
-  $('pv-hint').textContent = `Live preview · ${(STYLES.find(s => s.id === chosenStyle) || {}).name || chosenStyle} captions, ${pos} placement.`;
+  $('pv-hint').textContent = `Live preview / ${(STYLES.find(s => s.id === chosenStyle) || {}).name || chosenStyle} captions, ${pos} placement.`;
 }
 
 function opts() {
@@ -333,7 +333,7 @@ async function loadLan() {
     const lan = await (await fetch('/api/lan')).json();
     const urls = lan.urls || [];
     $('lan-urls').textContent = urls.length
-      ? urls.join('   ·   ')
+      ? urls.join('   /   ')
       : 'no LAN address found — this machine may be offline';
     const chip = $('lan-chip');
     chip.textContent = urls.length ? `reachable on ${urls.length} address${urls.length === 1 ? '' : 'es'}` : 'offline';
@@ -450,6 +450,33 @@ function setStage(text, cls) {
   $('jobstage').className = 'stage' + (cls ? ' ' + cls : '');
 }
 
+function errorSummary(msg) {
+  const m = String(msg || '');
+  if (/timed out/i.test(m)) return 'Render timed out — the source is long or runs at a high frame rate. Try a shorter clip.';
+  if (/float\(\) argument/i.test(m)) return 'Engine measurement error — fixed in the current build. Re-run the job.';
+  if (/^Command\s*['"]/.test(m) || /ffmpeg\.exe/i.test(m)) return 'Video render failed — open details for the ffmpeg log.';
+  if (/ffmpeg failed/i.test(m)) return 'Video render failed — open details for the ffmpeg log.';
+  if (/HTTP Error 413/i.test(m)) return 'Upload too large for the server endpoint.';
+  if (/Interrupted by a server restart/i.test(m)) return 'Job interrupted by a server restart.';
+  return m.split(/\|\|/)[0].slice(0, 180);
+}
+
+function renderJobError(msg) {
+  const box = $('joberror');
+  if (!box) return;
+  if (!msg) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="joberr-sum">${esc(errorSummary(msg))}</div>
+    <button class="btn ghost small" type="button" data-err-toggle>Show details</button>
+    <pre hidden>${esc(msg)}</pre>`;
+  const btn = box.querySelector('[data-err-toggle]');
+  const pre = box.querySelector('pre');
+  if (btn && pre) btn.addEventListener('click', () => {
+    pre.hidden = !pre.hidden;
+    btn.textContent = pre.hidden ? 'Show details' : 'Hide details';
+  });
+}
+
 function resetRunUI() {
   $('clips').innerHTML = '';
   $('clips-empty').hidden = false;
@@ -463,6 +490,7 @@ function resetRunUI() {
   $('jobdone').hidden = true;
   jobFullFetched = false;
   fullJobCache = null;
+  renderJobError(null);
   autoJumped = false;
   userPicked = false;
   WF = []; MOMENTS = []; wfDur = 0;
@@ -501,7 +529,8 @@ async function poll() {
     return;                                   /* transient outage: keep polling */
   }
 
-  setStage(job.error ? `failed: ${job.error}` : job.stage,
+  renderJobError(job.error);
+  setStage(job.error ? errorSummary(job.error) : job.stage,
            job.status === 'done' ? 'done' : job.status === 'error' ? 'err' : null);
   setTimeline(job.stage, job.status);
   $('jobbar').style.width = (job.progress || 0) + '%';
@@ -509,7 +538,7 @@ async function poll() {
   const chip = $('jobchip');
   chip.hidden = false;
   chip.innerHTML = (job.status === 'done' ? IC('check') : IC('repeat')) +
-                   ` ${esc(job.status)} · ${job.progress || 0}%`;
+                   ` ${esc(job.status)} / ${job.progress || 0}%`;
   chip.className = 'chip' + (job.status === 'done' ? ' ok' : job.status === 'error' ? ' err' : '');
 
   $('skeletons').hidden = !(job.status !== 'done' && !(job.clips || []).length);
@@ -768,8 +797,8 @@ async function makeCertificate() {
     const c = res.certificate;
     const out = $('certout');
     out.hidden = false;
-    out.textContent = `certificate written to ${res.written_to || '(not saved)'} · digest ` +
-      `${String((c.digest || {}).value || '').slice(0, 16)}… · re-check with ` +
+    out.textContent = `certificate written to ${res.written_to || '(not saved)'} / digest ` +
+      `${String((c.digest || {}).value || '').slice(0, 16)}… / re-check with ` +
       `scripts/verify_certificate.py against the files`;
     toast('clearance certificate written');
   } catch (e) { toast(String(e.message || e), true); }
@@ -894,7 +923,7 @@ function sourceLine(job) {
   const flag = !mine;
   return `<div class="srcline${flag ? ' warn' : ''}">
     ${IC(flag ? 'warn' : 'check')}
-    <span>source: <b>${esc(who)}</b>${s.video_id ? ` · video ${esc(s.video_id)}` : ''}</span>
+    <span>source: <b>${esc(who)}</b>${s.video_id ? ` / video ${esc(s.video_id)}` : ''}</span>
     ${flag ? `<span class="srcflag">${connected
         ? `not your connected channel (${esc(connected)}) — make sure you have the rights`
         : 'no channel connected to compare against — make sure you have the rights'}</span>` : ''}
@@ -906,7 +935,7 @@ function xLine(c) {
   if (!layers.length) return '';
   return `<div class="xline">
     <span class="xbadge">transformative edit</span>
-    <span class="xnote">what this render changed: ${esc(layers.join(' · '))}</span>
+    <span class="xnote">what this render changed: ${esc(layers.join(' / '))}</span>
   </div>`;
 }
 
@@ -933,7 +962,7 @@ function clipCardHTML(job, c, i) {
     <div class="clipmeta">
       ${c.engine ? `<span class="engbadge">${esc(c.engine)}</span>` : ''}
       ${c.tier ? `<span class="engbadge">${esc(c.tier)}</span>` : ''}
-      <span>${c.duration}s · from ${fmt(c.start)}${c.custom ? ' · custom cut' : ''}</span>
+      <span>${c.duration}s / from ${fmt(c.start)}${c.custom ? ' / custom cut' : ''}</span>
       ${c.argon && Number.isFinite(c.argon.retention_3s) ? `<span class="dim mono">retention ${c.argon.retention_3s}/10 → ${c.argon.retention_end}/10</span>` : ''}
       ${(c.flags || []).length ? `<span class="dim">flags: ${esc(c.flags.join(', '))}</span>` : ''}
       ${c.note ? `<span class="dim">${esc(c.note)}</span>` : ''}
@@ -1125,7 +1154,7 @@ function buildLab(job) {
           ${miniSVG(c.score)}
           <div>
             <div class="labtitle">${esc(c.title || 'Candidate')}</div>
-            <div class="labsub">${fmt(c.start)} → ${fmt(c.end)} · ${Math.round((c.end || 0) - (c.start || 0))}s${c.qc === 'verified' ? ' · verified' : ''}</div>
+            <div class="labsub">${fmt(c.start)} → ${fmt(c.end)} / ${Math.round((c.end || 0) - (c.start || 0))}s${c.qc === 'verified' ? ' / verified' : ''}</div>
           </div>
         </div>
         <div class="labmini">${mini}${peak}</div>
@@ -1227,7 +1256,7 @@ function buildMarks(job) {
     parts.push(`<span class="mark cand" style="left:${(c.start / dur * 100).toFixed(3)}%;width:${Math.max(0.5, (c.end - c.start) / dur * 100).toFixed(3)}%"></span>`);
   });
   MOMENTS.forEach(m => {
-    parts.push(`<span class="mark peak" title="peak event · roar ${m.roar ?? '—'} · ${m.cuts ?? 0} camera cuts" style="left:${(m.start / dur * 100).toFixed(3)}%;width:${Math.max(0.4, (m.end - m.start) / dur * 100).toFixed(3)}%"></span>`);
+    parts.push(`<span class="mark peak" title="peak event / roar ${m.roar ?? '—'} / ${m.cuts ?? 0} camera cuts" style="left:${(m.start / dur * 100).toFixed(3)}%;width:${Math.max(0.4, (m.end - m.start) / dur * 100).toFixed(3)}%"></span>`);
   });
   (job.clips || []).forEach(c => {
     parts.push(`<span class="mark sel" style="left:${(c.start / dur * 100).toFixed(3)}%;width:${Math.max(0.6, (c.end - c.start) / dur * 100).toFixed(3)}%"></span>`);
@@ -1242,7 +1271,7 @@ function setCut(a, b) {
   cut.end = Math.min(dur, Math.max(b, cut.start + 3));
   $('cutwin').style.left = (cut.start / dur * 100) + '%';
   $('cutwin').style.width = ((cut.end - cut.start) / dur * 100) + '%';
-  $('cutrange').textContent = `${fmt(cut.start)} → ${fmt(cut.end)} · ${(cut.end - cut.start).toFixed(1)}s`;
+  $('cutrange').textContent = `${fmt(cut.start)} → ${fmt(cut.end)} / ${(cut.end - cut.start).toFixed(1)}s`;
 }
 
 function buildCutbox(job) {
@@ -1258,7 +1287,7 @@ function buildCutbox(job) {
   const src = `/media/${job.src_name}`;
   if ($('srcvid').getAttribute('src') !== src) $('srcvid').src = src;
 
-  $('seg-count').textContent = `${segs.length} blocks · ${MOMENTS.length} peak events`;
+  $('seg-count').textContent = `${segs.length} blocks / ${MOMENTS.length} peak events`;
   $('wf-dur').textContent = wfDur ? fmt(wfDur) : '';
 
   const tr = $('transcript');
@@ -1309,7 +1338,7 @@ function bindTimeline() {
   dragHandle($('hl'), 'l');
   dragHandle($('hr'), 'r');
 
-  /* click the ruler = seek · drag the body = move the window · click the body = place it */
+  /* click the ruler = seek / drag the body = move the window / click the body = place it */
   $('wf-ruler').addEventListener('pointerdown', (e) => {
     if (!wfDur) return;
     const t = at(e.clientX);
@@ -1445,7 +1474,7 @@ function renderToday(d) {
     $('todaynote').textContent = '';
     return;
   }
-  chip.textContent = d.ran_today ? `ran today · ${d.runs} run(s)` : (d.due ? 'due now' : 'waiting');
+  chip.textContent = d.ran_today ? `ran today / ${d.runs} run(s)` : (d.due ? 'due now' : 'waiting');
   chip.className = 'chip' + (d.ran_today ? ' ok' : '');
   ask.textContent = d.ask || '';
   const best = d.best;
@@ -1453,19 +1482,19 @@ function renderToday(d) {
       <video controls preload="metadata" src="${esc(best.file || '')}" playsinline></video>
       <div class="todaymeta">
         <b>${esc(best.title || best.job)}</b>
-        <div class="dim">${esc(best.engine || '')} · score ${best.score === null || best.score === undefined ? '—' : best.score} · clip ${(best.clip_index || 0) + 1} of ${best.clips || 1} · ${scoutDuration(best.duration)}${best.qc ? ` · QC ${esc(best.qc)}` : ''}</div>
+        <div class="dim">${esc(best.engine || '')} / score ${best.score === null || best.score === undefined ? '—' : best.score} / clip ${(best.clip_index || 0) + 1} of ${best.clips || 1} / ${scoutDuration(best.duration)}${best.qc ? ` / QC ${esc(best.qc)}` : ''}</div>
         ${best.reason ? `<div class="dim">${esc(best.reason)}</div>` : ''}
       </div>
     </div>` : '<div class="dim">Nothing to show yet.</div>';
   const t = d.today || {};
   $('todayplan').innerHTML = [
-    t.niches && t.niches.length ? `watching: ${t.niches.map(esc).join(' · ')}` : '',
+    t.niches && t.niches.length ? `watching: ${t.niches.map(esc).join(' / ')}` : '',
     (t.searches || []).map(s => s.error
       ? `${esc(s.q)} — ${esc(s.error)}`
-      : `${esc(s.q)}: ${s.found || 0} found, ${s.added || 0} new`).join(' · '),
-    (t.plan || []).slice(0, 3).map(p => `${esc(p.title || p.id)} (${p.rank_score === null || p.rank_score === undefined ? 'unscored' : p.rank_score})`).join(' · '),
-    (t.started || []).filter(s => s.job).map(s => `cutting: ${esc(s.title || s.job)}`).join(' · '),
-    (t.started || []).filter(s => s.skipped).map(s => `skipped: ${esc(s.skipped)}${s.reason ? ' — ' + esc(s.reason) : ''}`).join(' · '),
+      : `${esc(s.q)}: ${s.found || 0} found, ${s.added || 0} new`).join(' / '),
+    (t.plan || []).slice(0, 3).map(p => `${esc(p.title || p.id)} (${p.rank_score === null || p.rank_score === undefined ? 'unscored' : p.rank_score})`).join(' / '),
+    (t.started || []).filter(s => s.job).map(s => `cutting: ${esc(s.title || s.job)}`).join(' / '),
+    (t.started || []).filter(s => s.skipped).map(s => `skipped: ${esc(s.skipped)}${s.reason ? ' — ' + esc(s.reason) : ''}`).join(' / '),
     t.held && t.held.length ? `held by the clearance gate: ${t.held.map(h => esc(h.name)).join(', ')}` : '',
     `${d.pairs_waiting || 0} pair(s) waiting for your call`,
   ].filter(Boolean).join('<br>');
@@ -1514,7 +1543,7 @@ function renderScout(d) {
       ? makeProposal(b.dataset.make) : judgeProposal(b.dataset.pass, 'pass')));
   const pairs = d.pairs || [];
   const judged = (d.judged && d.judged.total) || 0;
-  $('paircount').textContent = `${pairs.length} pair${pairs.length === 1 ? '' : 's'} · ${judged} proposal call(s)`;
+  $('paircount').textContent = `${pairs.length} pair${pairs.length === 1 ? '' : 's'} / ${judged} proposal call(s)`;
   $('pairlist').innerHTML = pairs.map(pairCard).join('') ||
     '<div class="note">No clip pairs waiting. Run a Both-engines job and its two cuts of the same moment land here for a head-to-head call.</div>';
   $('pairlist').querySelectorAll('[data-judge]').forEach(b =>
@@ -1543,7 +1572,7 @@ function proposalRow(p) {
       <div class="scouttitle">${esc(p.title || p.id)}</div>
       <span class="chip gold">${p.score === null || p.score === undefined ? 'unscored' : p.score}</span>${adjust}${verdict}
     </div>
-    <div class="scoutmeta">${esc(p.channel || 'channel not reported')} · ${scoutDuration(p.duration)} · ${views} · ${scoutAge(p)}</div>
+    <div class="scoutmeta">${esc(p.channel || 'channel not reported')} / ${scoutDuration(p.duration)} / ${views} / ${scoutAge(p)}</div>
     <div class="fchips">${chips}</div>
     <ul class="scoutwhy">${(p.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
     <div class="scoutbtns">
@@ -1583,7 +1612,7 @@ function renderScoutModel(m) {
   chip.className = 'chip' + (m.active ? ' ok' : '');
   const last = (m.fits || [])[(m.fits || []).length - 1];
   $('scoutmodelnote').innerHTML = [
-    `${m.judgments} call(s) judged · ` + (m.active
+    `${m.judgments} call(s) judged / ` + (m.active
       ? `make-beats-pass ${m.holdout} on ${m.holdout_n} held-out pair(s)`
       : `${m.remaining} more ${esc(String(m.waiting_for))} before its first fit`),
     last ? `last attempt: ${esc(last.day)} — ${esc(last.reason || '')}` : '',
@@ -1622,7 +1651,7 @@ function benchFamily(name, fam) {
   }).join('');
   return `<div class="benchfam">
     <div class="benchtitle">${esc(name)}
-      <span class="dim">${fam.pairs} pair(s) · ${fam.holdout_pairs} held out</span></div>
+      <span class="dim">${fam.pairs} pair(s) / ${fam.holdout_pairs} held out</span></div>
     <div class="benchverdict${fam.status === 'scored' ? '' : ' dim'}">${esc(fam.verdict || '')}</div>
     <table class="benchtable"><thead><tr><th>contender</th><th>held-out</th><th>train</th></tr></thead>
       <tbody>${rows}</tbody></table>
@@ -1644,7 +1673,7 @@ function renderBench(d) {
   const b = d.board;
   chip.textContent = b ? `v${b.version}` : 'not run';
   chip.className = 'chip' + (b ? ' ok' : '');
-  if (when) when.textContent = b ? `${b.day} · run ${d.runs} time(s)` : (d.next || '');
+  if (when) when.textContent = b ? `${b.day} / run ${d.runs} time(s)` : (d.next || '');
   body.innerHTML = b
     ? ['taste', 'scout'].filter(k => b.families[k])
         .map(k => benchFamily(k, b.families[k])).join('')
@@ -1655,7 +1684,7 @@ function renderBench(d) {
 function pairCard(pp) {
   const side = (s) => `<div class="pairvideo">
     <video controls preload="metadata" src="${esc(s.file || '')}" playsinline></video>
-    <div class="dim">${esc(s.engine_name || s.engine || 'cut')} · score ${s.score === null || s.score === undefined ? '—' : s.score} · ${scoutDuration(s.duration)}</div>
+    <div class="dim">${esc(s.engine_name || s.engine || 'cut')} / score ${s.score === null || s.score === undefined ? '—' : s.score} / ${scoutDuration(s.duration)}</div>
   </div>`;
   const a = esc(pp.a.engine_name || 'A'), b = esc(pp.b.engine_name || 'B');
   return `<div class="paircard">
@@ -1738,7 +1767,7 @@ function initScout() {
       const res = await post('/api/scout/search', JSON.stringify({
         query: q, limit: Number($('scoutlimit').value) || 10,
       }));
-      $('scoutstatus').textContent = `${res.found} result(s) via ${res.method} · ${res.added} new`;
+      $('scoutstatus').textContent = `${res.found} result(s) via ${res.method} / ${res.added} new`;
       loadScout();
     } catch (err) {
       $('scoutstatus').textContent = String(err.message || err);
@@ -1763,7 +1792,7 @@ async function refreshSocial() {
     renderDiag(diag);
     const status = $('yt-status');
     if (yt.connected) {
-      status.textContent = yt.channel ? `connected · ${yt.channel}` : 'connected';
+      status.textContent = yt.channel ? `connected / ${yt.channel}` : 'connected';
       status.className = 'chip ok';
       $('yt-detail').innerHTML = `<span class="chip ok">${IC('check')} OAuth token verified — auto-upload active</span>`;
     } else if (yt.reauth_required) {
@@ -1859,7 +1888,7 @@ function renderLearning(L) {
   const min = L.min_events || 10;
   chip.textContent = L.active ? `${n} choices logged` : `${n} of ${min} choices`;
   chip.className = 'chip' + (L.active ? ' ok' : '');
-  const kept = Object.entries(L.engines || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
+  const kept = Object.entries(L.engines || {}).map(([k, v]) => `${k} ${v}`).join(' / ');
   stats.innerHTML = [
     `<span class="chip">${IC('check')} laugh endings ${L.laugh_ending.count}/${n}</span>`,
     `<span class="chip">${IC('bulb')} question hooks ${L.question_hook.count}/${n}</span>`,
@@ -1894,7 +1923,7 @@ function renderQueue() {
   const rows = [];
   (fullJobCache?.clips || []).forEach((c, i) => {
     Object.entries(c.post || {}).forEach(([p, st]) => {
-      rows.push(`<div class="qrow"><b>#${String(i + 1).padStart(2, '0')}</b> → ${esc(PLATFORM_LABEL[p] || p)} · ${esc(st.status)}${st.link ? ` · <a href="${esc(st.link)}" target="_blank" rel="noopener">open</a>` : ''}${st.note ? ` · <span class="dim">${esc(st.note)}</span>` : ''}</div>`);
+      rows.push(`<div class="qrow"><b>#${String(i + 1).padStart(2, '0')}</b> → ${esc(PLATFORM_LABEL[p] || p)} / ${esc(st.status)}${st.link ? ` / <a href="${esc(st.link)}" target="_blank" rel="noopener">open</a>` : ''}${st.note ? ` / <span class="dim">${esc(st.note)}</span>` : ''}</div>`);
     });
   });
   const total = (fullJobCache?.clips || []).length;
@@ -1968,10 +1997,10 @@ document.querySelectorAll('[data-savekey]').forEach((b) => b.addEventListener('c
     if (!resp.ok) throw new Error(r.error || resp.statusText);
     const tests = r.tests || {};
     const fails = Object.entries(tests).filter(([, t]) => !t.ok).map(([k, t]) => `${k}: ${t.detail || 'failed'}`);
-    if (fails.length) toast('Saved, but check — ' + fails.join(' · '), true);
+    if (fails.length) toast('Saved, but check — ' + fails.join(' / '), true);
     else {
       const ok = Object.values(tests).map((t) => t.detail).filter(Boolean);
-      toast('Saved and tested live' + (ok.length ? ' — ' + ok.join(' · ') : '.'));
+      toast('Saved and tested live' + (ok.length ? ' — ' + ok.join(' / ') : '.'));
     }
     loadKeyStates();
     refreshSocial();
@@ -1993,7 +2022,7 @@ async function loadRecent() {
     box.innerHTML = jobs.map(j => `
       <button class="recentrow" data-job="${esc(j.id)}" type="button">
         <span class="rname">${esc(j.name || j.id)}</span>
-        <span class="rmeta">${esc(j.status)} · ${j.clips} clip${j.clips === 1 ? '' : 's'}${j.engine ? ' · ' + esc((engineById(j.engine) || {}).name || (j.engine === 'both' ? 'both engines' : j.engine)) : ''}${j.top_score ? ' · best ' + j.top_score : ''}</span>
+        <span class="rmeta">${esc(j.status)} / ${j.clips} clip${j.clips === 1 ? '' : 's'}${j.engine ? ' / ' + esc((engineById(j.engine) || {}).name || (j.engine === 'both' ? 'both engines' : j.engine)) : ''}${j.top_score ? ' / best ' + j.top_score : ''}</span>
       </button>`).join('');
     box.querySelectorAll('[data-job]').forEach(b => b.addEventListener('click', () => {
       fetch(`/api/job/${b.dataset.job}?light=1`).then(r => r.json()).then(job => {

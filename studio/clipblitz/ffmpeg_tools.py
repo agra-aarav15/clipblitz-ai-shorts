@@ -11,9 +11,18 @@ from . import cinema
 
 
 def run(args, timeout=900, cwd=None):
-    proc = subprocess.run([str(a) for a in args], capture_output=True, text=True,
-                          errors="replace",  # tool output can carry any byte (smart quotes etc.)
-                          timeout=timeout, cwd=cwd)
+    try:
+        proc = subprocess.run([str(a) for a in args], capture_output=True, text=True,
+                              errors="replace",  # tool output can carry any byte (smart quotes etc.)
+                              timeout=timeout, cwd=cwd)
+    except subprocess.TimeoutExpired as e:
+        tail = (e.stderr or "")
+        if isinstance(tail, bytes):
+            tail = tail.decode("utf-8", "replace")
+        raise RuntimeError(
+            f"ffmpeg timed out after {timeout}s while encoding this clip. "
+            f"The source is long or runs at a high frame rate; try a shorter clip. "
+            f"{tail[-300:]}") from None
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr[-500:]}")
     return proc
@@ -142,13 +151,13 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
              if grade_film else "")
     W, H = cinema.ratio_size(ratio)
     if framing == "crop-left":
-        return None, f"crop=ih*9/16:ih:0:0,scale={W}:{H},{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:0:0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
     if framing == "crop-right":
-        return None, f"crop=ih*9/16:ih:(iw-ih*9/16):0,scale={W}:{H},{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:(iw-ih*9/16):0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
     if framing in ("crop", "auto"):
         x = ("(iw-ih*9/16)/2" if crop_x is None
              else f"min({max(0, int(crop_x))}\\,iw-ih*9/16)")
-        return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
     # blur-pad: full frame visible, background = a low-resolution blurred copy.
     # Blurring at 1/4 size and scaling back is visually identical here and several
     # times cheaper than boxblur=20:5 on the full 1080x1920 canvas.
@@ -157,7 +166,7 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
              f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,"
              f"crop={W}:{H},scale={bw}:{bh},boxblur=6:2,scale={W}:{H}[bgb];"
              "[fg]scale=%d:-2[fgs];" % W +
-             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p,{fv_in},{fv_out}{grade}{sub}[v]")
+             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p,fps=30,{fv_in},{fv_out}{grade}{sub}[v]")
     return chain, None
 
 
@@ -195,7 +204,7 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
                        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
     try:
-        run(args, cwd=cwd)
+        run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))
     except RuntimeError:
         if sub_name:  # libass missing / subtitle parse issue — retry WITHOUT captions
             complex_fg2, simple_vf2 = _filtergraph(framing, None, duration,
@@ -209,7 +218,7 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
                 args = base + ["-vf", simple_vf2, "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
-            run(args, cwd=cwd)
+            run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))
             return out + " (captions skipped: libass burn failed)"
         raise
     return out

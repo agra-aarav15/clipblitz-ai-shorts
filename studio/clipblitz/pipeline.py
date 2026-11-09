@@ -525,7 +525,14 @@ def process(job_id, src_path):
     except Exception as e:
         import traceback
         tb = traceback.format_exc().strip().splitlines()
-        _set(job_, status="error", error=f"{e} || {' <- '.join(tb[-4:-1])}"[:900], stage="failed")
+        msg = str(e or "").strip()
+        if msg.startswith("ffmpeg"):
+            detail = msg
+        else:
+            detail = f"{msg} || {' <- '.join(tb[-4:-1])}"
+        if len(detail) > 900:
+            detail = detail[:520] + " ... " + detail[-320:]
+        _set(job_, status="error", error=detail[:900], stage="failed")
     finally:
         junk = os.path.join(CONFIG["data_dir"], "tmp", f"{job_id}.wav")
         if os.path.exists(junk):
@@ -563,6 +570,7 @@ def render_candidate(job_id, cand_index, style=None, position=None, size_scale=N
         return None, str(e)[:300]
     clip["rank"] = len(job_["clips"]) + 1
     job_["clips"].append(clip)
+    _set(job_, status="done", error=None, stage="candidate rendered", progress=100)
     save()
     learning.log("render", clip, job_)
     return clip, None
@@ -615,6 +623,7 @@ def render_custom(job_id, start, end, style=None, engine=None):
         return None, str(e)[:300]
     clip["rank"] = len(job_["clips"]) + 1
     job_["clips"].append(clip)
+    _set(job_, status="done", error=None, stage="custom cut ready", progress=100)
     save()
     learning.log("custom", clip, job_)
     return clip, None

@@ -156,7 +156,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--ink); }
   border-bottom: 1px solid var(--line); background: var(--paper);
   position: sticky; top: 0; z-index: 20;
 }
-.jobbox { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.topjob { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .appmark { width: 20px; height: 20px; color: var(--signal-strong); }
 .jobtitle { font-family: var(--font-display); font-size: 14px; font-weight: 650; color: var(--ink); }
 .topchips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -503,3 +503,21 @@ textarea { resize: vertical; }
   .topbar { gap: 8px; }
   .topchips .chip:nth-child(n+3) { display: none; }
 }
+
+/* job error: summary first, raw command behind a disclosure */
+.jobhead .stage { display: block; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.joberror {
+  margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-md);
+  border: 1px solid #e3b6b2; border-left: 2px solid var(--err);
+  background: #fbeeed; color: var(--err); font-size: 12px; line-height: 1.5;
+}
+.joberror summary { cursor: pointer; font-weight: 600; }
+.joberror pre {
+  margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap;
+  word-break: break-word; font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-2);
+}
+
+.joberror .joberr-sum { margin-bottom: 6px; }
+.joberror pre { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 10px; }
+.joberror pre[hidden] { display: none !important; }

@@ -99,6 +99,10 @@ Every rendered clip now gets a poster thumbnail, and the **Slow zoom** option ap
 restrained 1.0 -> 1.05 push-in before the fades and captions. Both are covered by the render
 path and a thumbnail failure can never fail the clip.
 
+Final smoke run after those additions: `POST /api/demo?engine=argon&top_n=1&auto_zoom=1`
+completed in **152 seconds**, one verified clip (24.9s, score 81, tier strong), 1080x1920 at
+30fps, with `slow zoom` in its transformative-work list and a real `.jpg` poster.
+
 Server startup and `/api/health` were also importing `faster_whisper` (and therefore torch)
 when no API key was configured, and importing OpenCV at module load. Both are now presence
 checks / lazy imports; health answers in about two seconds on the same machine.
@@ -150,30 +154,14 @@ cuts of the same payoff.
 
 ## Independent verification
 
-The Gemini 4 Argon review was launched twice against commit `0a52ebd`. Both calls were
-refused by the provider with `403 theos_insufficient` (account quota; the response named a
-refresh time of `2026-11-09T04:29:50+00:00`). **No Gemini verdict exists yet.** The exact
-read-only review brief is in `VERIFY-WITH-GEMINI.md`; paste that file into Gemini when the
-quota is available. The local evidence above stands on its own until then.
+**Gemini 4 Argon returned PASS on commit `790425f`.** It ran read-only against the repository
+and reported **384 passed, 0 failed** across `test_argon`, `test_engines`, `test_agent`,
+`test_rights`, `test_learning`, `test_quality` and `test_marketplace`; it started the server on
+a fresh temp data dir and measured **0.704s** for boot + `/api/health`; it confirmed the tuple
+crash, offline-verify path, non-compensatory gate, caption non-overlap, compact error card,
+version/default engine and the old prox/b2 paths. Its P0 list was **empty**.
+
+The earlier quota block is resolved. The exact brief remains in `VERIFY-WITH-GEMINI.md` for a
+future re-run.
 
 ## What to run to re-check
-
-```
-cd studio
-python scripts/test_argon.py
-python scripts/test_engines.py
-python scripts/test_agent.py
-python scripts/test_learning.py
-python scripts/test_trainer.py
-python scripts/test_rights.py
-python scripts/test_scout.py
-python scripts/test_clipbench.py
-python scripts/test_daily.py
-python scripts/test_social.py
-python scripts/test_quality.py
-python scripts/test_marketplace.py
-
-python run.py 4396
-curl http://127.0.0.1:4396/api/health
-python -m clipblitz.agent tools
-```

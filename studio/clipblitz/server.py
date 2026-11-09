@@ -481,13 +481,14 @@ class Handler(BaseHTTPRequestHandler):
             top_n = CONFIG["top_n"]
         return {
             "style": style if style in {s["id"] for s in captions.styles_for_api()} else "wordpop",
-            "framing": framing if framing in ("blur", "crop", "crop-left", "crop-right") else "blur",
+            "framing": framing if framing in ("blur", "auto", "crop", "crop-left", "crop-right") else "blur",
             "position": (qs.get("position") or ["bottom"])[0],
             "scale": min(1.6, max(0.5, scale)),
             "top_n": min(6, max(1, top_n)),
             "auto_post": (qs.get("auto_post") or ["0"])[0] == "1",
             "privacy": (qs.get("privacy") or [CONFIG["privacy"]])[0],
             "engine": self._engine(qs),
+            "auto_zoom": (qs.get("auto_zoom") or ["0"])[0] == "1",
         }
 
     def _demo(self, qs):
@@ -504,6 +505,7 @@ class Handler(BaseHTTPRequestHandler):
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], demo=True, framing=o["framing"],
                                   top_n=o["top_n"], engine=o["engine"],
+                                  auto_zoom=o["auto_zoom"],
                                   source={"kind": "demo", "label": "generated demo clip"})
         pipeline.start(job_id, demo)
         self._json(200, {"job_id": job_id})
@@ -521,6 +523,7 @@ class Handler(BaseHTTPRequestHandler):
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], framing=o["framing"],
                                   top_n=o["top_n"], engine=o["engine"],
+                                  auto_zoom=o["auto_zoom"],
                                   source={"kind": "url", "url": url})
         pipeline.start_from_url(job_id, url)
         return self._json(200, {"job_id": job_id})
@@ -556,6 +559,7 @@ class Handler(BaseHTTPRequestHandler):
                                   size_scale=o["scale"], auto_post=o["auto_post"],
                                   privacy=o["privacy"], framing=o["framing"],
                                   top_n=o["top_n"], engine=o["engine"],
+                                  auto_zoom=o["auto_zoom"],
                                   source={"kind": "upload", "label": name})
         pipeline.start(job_id, dest)
         self._json(200, {"job_id": job_id, "bytes": length})
@@ -765,8 +769,17 @@ class Handler(BaseHTTPRequestHandler):
         start, end = _parse_range(self.headers.get("Range"), size)
         rng = self.headers.get("Range") and not (start == 0 and end == size - 1)
         self.send_response(206 if rng else 200)
-        self.send_header("Content-Type", "video/mp4" if path.endswith(".mp4") else
-                         ("text/plain; charset=utf-8" if path.endswith((".ass", ".post.txt", ".txt")) else "application/octet-stream"))
+        if path.endswith((".jpg", ".jpeg")):
+            ctype = "image/jpeg"
+        elif path.endswith(".png"):
+            ctype = "image/png"
+        elif path.endswith(".mp4"):
+            ctype = "video/mp4"
+        elif path.endswith((".ass", ".post.txt", ".txt")):
+            ctype = "text/plain; charset=utf-8"
+        else:
+            ctype = "application/octet-stream"
+        self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
         if rng:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")

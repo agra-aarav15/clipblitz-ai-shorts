@@ -96,6 +96,7 @@ def _public_clip(c, index, base_url=None):
         "reason": c.get("reason"),
         "transformative_work": c.get("transformative") or [],
         "file": path,
+        "thumb": c.get("thumb"),
         "exists": bool(path and os.path.isfile(path)),
         "url": (f"{base_url}/clips/{name}" if base_url and name else None),
     }

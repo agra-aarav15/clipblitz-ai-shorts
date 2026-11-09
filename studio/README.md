@@ -15,7 +15,8 @@ fonts, no build step, no CDN, no tracking.
   windows. It explores multiple sentence-aligned lengths, judges the exact final transcript,
   rejects a great hook with a dead ending, repairs named defects deterministically, and selects
   a diverse podium with MMR. It also trims edge silence, detects burned-in source captions and
-  moves the new captions above them, and can follow faces with an optional auto crop.
+  moves the new captions above them, can follow faces with an optional auto crop, adds a
+  subtle slow zoom, and gives every rendered clip a poster thumbnail.
 - **ProX v5** — the story-first engine: segments the episode into stories, drafts the tightest
   cut inside each, lands every ending on the payoff, then a strict QC judge reads the exact
   final clip and scores it. Verified cuts are badged; anything else says "unverified".

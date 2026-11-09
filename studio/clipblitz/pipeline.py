@@ -117,7 +117,7 @@ _load_jobs()
 
 
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
-            demo=False, framing="blur", top_n=None, engine=None, source=None):
+            demo=False, framing="blur", top_n=None, engine=None, source=None, auto_zoom=False):
     engine = engine if engine in ENGINES else CONFIG.get("engine_default", "b2")
     if engine not in ENGINES:
         engine = "b2"
@@ -131,6 +131,7 @@ def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False
         "position": position, "size_scale": float(size_scale or 1.0),
         "auto_post": bool(auto_post), "privacy": privacy or CONFIG["privacy"],
         "top_n": int(top_n) if top_n else CONFIG["top_n"],
+        "auto_zoom": bool(auto_zoom),
         "engine_id": engine,
         "engine": ENGINES[engine]["name"],
         # rights gate: None until the owner answers once on the Clips screen
@@ -313,6 +314,8 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         layers.append("edge silence trimmed")
     if moved_captions:
         layers.append("captions moved above the source's burned-in text")
+    if job.get("auto_zoom"):
+        layers.append("slow zoom")
 
     crop_x = None
     if job.get("framing") == "auto":
@@ -331,9 +334,19 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
                                  grain=fields["cinematic_grain"],
                                  ratio="9:16" if eng == "prox" else (job.get("ratio") or "9:16"),
                                  audio_lead=fields["audio_lead"], crop_x=crop_x,
-                                 vignette=(eng != "argon"))
+                                 vignette=(eng != "argon"), auto_zoom=job.get("auto_zoom", False))
+    thumb = None
+    try:
+        thumb_path = os.path.join(clips_dir, base + ".jpg")
+        if ffmpeg_tools.thumbnail(os.path.join(clips_dir, base + ".mp4"),
+                                  min(1.0, max(0.2, (m["end"] - m["start"]) * 0.15)),
+                                  thumb_path):
+            thumb = f"/clips/{base}.jpg"
+    except Exception:
+        thumb = None
     return {
         "file": f"/clips/{base}.mp4",
+        "thumb": thumb,
         "ass": f"/clips/{base}.ass" if ass_name else None,
         "note": note if isinstance(note, str) and "skipped" in note else None,
         "title": m.get("title", "Clip"),

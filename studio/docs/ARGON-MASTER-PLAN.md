@@ -281,6 +281,8 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
 - Source-caption detection: eight low-res frames, conservative outlined-text band test; when a
   burned-in caption band is found, the new captions move to the top instead of double-printing.
 - Caption events are clamped so two ASS events can never overlap.
+- Every render gets a poster thumbnail; the optional Slow zoom adds a restrained 1.0 -> 1.05
+  push-in before fades and captions.
 - Edge silence is trimmed for ARGON (head pre-roll protected, tail protected when laughter says
   the reaction is the payoff).
 - Auto face crop is optional via OpenCV; without OpenCV the renderer uses a centre crop.

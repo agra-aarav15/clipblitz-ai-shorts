@@ -26,8 +26,9 @@ Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_ENGINE
 
 The interface opens in the previous dark theme. The **Desk theme** button in the top bar
 switches to the light Cutting Desk theme; the choice is remembered in this browser. The
-framing menu now includes **Auto face crop** when OpenCV is available locally; otherwise it
-falls back to a centre crop.
+framing menu includes **Auto face crop** when OpenCV is available locally; otherwise it
+falls back to a centre crop. **Slow zoom** adds a restrained push-in. Every clip gets a
+poster frame so the cards do not start as black rectangles.
 
 ---
 

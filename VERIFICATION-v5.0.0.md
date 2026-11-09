@@ -95,6 +95,10 @@ A previously failing 73.6s clip at 50 fps was re-rendered through the custom-cut
 capping output to 30 fps; it completed in roughly four minutes and produced a valid 73.6s file.
 The old failure was a render timeout, not a missing file or a bad filter.
 
+Every rendered clip now gets a poster thumbnail, and the **Slow zoom** option applies a
+restrained 1.0 -> 1.05 push-in before the fades and captions. Both are covered by the render
+path and a thumbnail failure can never fail the clip.
+
 Server startup and `/api/health` were also importing `faster_whisper` (and therefore torch)
 when no API key was configured, and importing OpenCV at module load. Both are now presence
 checks / lazy imports; health answers in about two seconds on the same machine.

@@ -269,7 +269,8 @@ function runPreview() {
 function opts() {
   return `style=${encodeURIComponent(chosenStyle)}&position=${$('position').value}` +
          `&scale=${$('scale').value}&auto_post=${$('autopost').value}&privacy=${$('privacy').value}` +
-         `&framing=${$('framing').value}&engine=${encodeURIComponent(ENGINE || 'argon')}`;
+         `&framing=${$('framing').value}&engine=${encodeURIComponent(ENGINE || 'argon')}` +
+         `&auto_zoom=${$('zoom') ? $('zoom').value : '0'}`;
 }
 $('scale').addEventListener('input', () => $('scaleval').textContent = Number($('scale').value).toFixed(2) + '×');
 $('position').addEventListener('change', runPreview);
@@ -946,7 +947,7 @@ function clipCardHTML(job, c, i) {
   const rankName = RANK_NAMES[i] || `RANK ${rank}`;
   return `
     <span class="rank"><span class="rnum">#${rank}</span><span class="rname">${esc(rankName)}</span></span>
-    <video controls preload="metadata" src="${esc(c.file)}" playsinline></video>
+    <video controls preload="metadata" src="${esc(c.file)}"${c.thumb ? ` poster="${esc(c.thumb)}"` : ''} playsinline></video>
     <div class="cliphead">
       ${dialSVG(c.score)}
       <div class="cliptop">

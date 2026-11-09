@@ -139,7 +139,7 @@ STYLE = "force_style='Fontsize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=
 
 
 def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, ratio="9:16",
-                 crop_x=None, vignette=True):
+                 crop_x=None, vignette=True, auto_zoom=False):
     """Vertical reframing filter chains. 'blur' fits the WHOLE frame on a blurred
     background (nothing cut off — default); crop variants cut to 9:16 with a focus.
     'auto' is a centre crop unless vision.face_crop_x supplied a face offset.
@@ -150,14 +150,16 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     grade = (f",{cinema.cinematic_filters(grain=grain, vignette=vignette)}"
              if grade_film else "")
     W, H = cinema.ratio_size(ratio)
+    zoom = (f",zoompan=z='min(zoom+0.0004,1.05)':x='iw/2-(iw/zoom/2)':"
+            f"y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30" if auto_zoom else "")
     if framing == "crop-left":
-        return None, f"crop=ih*9/16:ih:0:0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:0:0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
     if framing == "crop-right":
-        return None, f"crop=ih*9/16:ih:(iw-ih*9/16):0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:(iw-ih*9/16):0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
     if framing in ("crop", "auto"):
         x = ("(iw-ih*9/16)/2" if crop_x is None
              else f"min({max(0, int(crop_x))}\\,iw-ih*9/16)")
-        return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},fps=30,{fv_in},{fv_out}{grade}{sub}"
+        return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
     # blur-pad: full frame visible, background = a low-resolution blurred copy.
     # Blurring at 1/4 size and scaling back is visually identical here and several
     # times cheaper than boxblur=20:5 on the full 1080x1920 canvas.
@@ -166,7 +168,7 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
              f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,"
              f"crop={W}:{H},scale={bw}:{bh},boxblur=6:2,scale={W}:{H}[bgb];"
              "[fg]scale=%d:-2[fgs];" % W +
-             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p,fps=30,{fv_in},{fv_out}{grade}{sub}[v]")
+             f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p,fps=30{zoom},{fv_in},{fv_out}{grade}{sub}[v]")
     return chain, None
 
 
@@ -177,16 +179,29 @@ def _audio_fade(dur, lead=0.0):
             f"afade=t=out:st={max(0.0, dur - 0.18):.2f}:d=0.18")
 
 
+def thumbnail(src, at, out, width=540):
+    """One frame from the rendered clip, used as the card poster. Cheap and safe:
+    a thumbnail failure never fails the clip."""
+    try:
+        run([ffmpeg(), "-y", "-v", "error", "-ss", f"{max(0.0, float(at)):.3f}",
+             "-i", src, "-frames:v", "1", "-vf", f"scale={int(width)}:-2",
+             "-q:v", "3", out], timeout=30)
+        return out
+    except Exception:
+        return None
+
+
 def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
              grade=True, grain=False, ratio="9:16", audio_lead=0.0, crop_x=None,
-             vignette=True):
+             vignette=True, auto_zoom=False):
     """Cut [start,end], reframe vertical (default: blur-pad so nobody gets cut off),
     burn subtitles (.ass) if given, polish edges with audio+video fades.
     sub_name is relative to cwd (pass the clips dir)."""
     duration = round(end - start, 2)
     complex_fg, simple_vf = _filtergraph(framing, sub_name, duration,
                                          grade_film=grade, grain=grain, ratio=ratio,
-                                         crop_x=crop_x, vignette=vignette)
+                                         crop_x=crop_x, vignette=vignette,
+                                         auto_zoom=auto_zoom)
     lead = max(0.0, float(audio_lead or 0.0))
     af = ["-af", _audio_fade(duration)]
     if lead > 0.01:
@@ -209,7 +224,8 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
         if sub_name:  # libass missing / subtitle parse issue — retry WITHOUT captions
             complex_fg2, simple_vf2 = _filtergraph(framing, None, duration,
                                                    grade_film=grade, grain=grain, ratio=ratio,
-                                                   crop_x=crop_x, vignette=vignette)
+                                                   crop_x=crop_x, vignette=vignette,
+                                         auto_zoom=auto_zoom)
             if complex_fg2 is not None:
                 args = base + ["-filter_complex", complex_fg2, "-map", "[v]", "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",

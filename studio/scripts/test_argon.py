@@ -409,14 +409,17 @@ def test_render_payload():
          "reason": "test", "engine_id": "argon"}
     real_cut = pipeline.ffmpeg_tools.cut_clip
     real_ass = pipeline.captions.build_ass
+    real_thumb = pipeline.ffmpeg_tools.thumbnail
     pipeline.ffmpeg_tools.cut_clip = lambda *a, **kw: "ok"
     pipeline.captions.build_ass = lambda *a, **kw: None
+    pipeline.ffmpeg_tools.thumbnail = lambda *a, **kw: None
     try:
         clip = pipeline._render_clip(job, "source.mp4", m, "base", tempfile.mkdtemp(),
                                      engine="argon")
     finally:
         pipeline.ffmpeg_tools.cut_clip = real_cut
         pipeline.captions.build_ass = real_ass
+        pipeline.ffmpeg_tools.thumbnail = real_thumb
     check("argon: the rendered clip keeps its tier and gate",
           clip.get("tier") == "viral" and clip.get("gate", {}).get("passed") is True,
           str({k: clip.get(k) for k in ("tier", "gate", "flags")}))

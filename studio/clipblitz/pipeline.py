@@ -13,7 +13,17 @@ import time
 import uuid
 
 from . import (apex, argon, captions, cinema, ffmpeg_tools, hardware, learning, rights,
-               social, stt, virality, vision)
+               social, stt, virality)
+
+
+def _vision():
+    """OpenCV is optional and slow to import at process start. Load it only when a
+    face-aware crop or a source-caption check is actually requested."""
+    try:
+        from . import vision
+        return vision
+    except Exception:
+        return None
 from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
@@ -154,13 +164,16 @@ def resume_autopost(job_id):
 
     def runner():
         targets = (["youtube"] if social.youtube_connected() else []) + ["tiktok"]
-        job_["rights_pending"] = False
-        for i in range(len(job_["clips"])):
-            _set(job_, stage=f"auto-posting clip {i + 1}/{len(job_['clips'])} -> {', '.join(targets)}")
-            social.post_clip(job_, i, targets, on_update=save, wait=True)
-            from . import learning
-            learning.log("post", job_["clips"][i], job_)
-        _set(job_, stage="done", progress=100)
+        try:
+            for i in range(len(job_["clips"])):
+                _set(job_, stage=f"auto-posting clip {i + 1}/{len(job_['clips'])} -> {', '.join(targets)}")
+                social.post_clip(job_, i, targets, on_update=save, wait=True)
+                from . import learning
+                learning.log("post", job_["clips"][i], job_)
+            _set(job_, rights_pending=False, stage="done", progress=100)
+        except Exception as e:
+            _set(job_, rights_pending=False, stage=f"auto-post failed: {str(e)[:180]}",
+                 status="error")
 
     threading.Thread(target=runner, daemon=True).start()
     return True
@@ -304,8 +317,9 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     crop_x = None
     if job.get("framing") == "auto":
         try:
-            if vision.available():
-                crop_x = vision.face_crop_x(src_path, m["start"], m["end"])
+            v = _vision()
+            if v and v.available():
+                crop_x = v.face_crop_x(src_path, m["start"], m["end"])
         except Exception:
             crop_x = None
         layers.append("face-aware crop" if crop_x is not None else "centre crop")
@@ -381,10 +395,11 @@ def process(job_id, src_path):
         _set(job_, scenes=len(scenes))
 
         source_caption_band = None
-        if eng == "argon" and vision.available():
+        v = _vision()
+        if eng == "argon" and v and v.available():
             _set(job_, stage="checking for burned-in source captions", progress=18)
             try:
-                source_caption_band = vision.caption_band(src_path, samples=6)
+                source_caption_band = v.caption_band(src_path, samples=6)
             except Exception:
                 source_caption_band = None
             _set(job_, source_caption_band=source_caption_band)

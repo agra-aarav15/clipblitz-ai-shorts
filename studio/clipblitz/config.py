@@ -118,13 +118,30 @@ def ffprobe():
     return "ffprobe"
 
 
+_TOOL_CACHE = {}
+
+
+def _cached_tool(key, probe, ttl=60.0):
+    import time
+    now = time.time()
+    hit = _TOOL_CACHE.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    value = probe()
+    _TOOL_CACHE[key] = (now, value)
+    return value
+
+
 def ffmpeg_available():
-    import subprocess
-    try:
-        subprocess.run([ffmpeg(), "-version"], capture_output=True, timeout=15)
-        return True
-    except Exception:
-        return False
+    """Presence check, not a process launch: health must never block on a broken
+    PATH shim. The render itself runs ffmpeg and reports a real error if it is bad."""
+    import shutil
+    def probe():
+        path = ffmpeg()
+        if os.path.isfile(path):
+            return True
+        return bool(shutil.which(path))
+    return _cached_tool("ffmpeg", probe)
 
 
 def ytdlp():
@@ -136,12 +153,13 @@ def ytdlp():
 
 
 def ytdlp_available():
-    import subprocess
-    try:
-        subprocess.run([ytdlp(), "--version"], capture_output=True, timeout=20)
-        return True
-    except Exception:
-        return False
+    import shutil
+    def probe():
+        path = ytdlp()
+        if os.path.isfile(path):
+            return True
+        return bool(shutil.which(path))
+    return _cached_tool("ytdlp", probe)
 
 
 def stt_mode():
@@ -149,9 +167,11 @@ def stt_mode():
     if mode == "auto":
         if CONFIG["ai_key"]:
             return "api"
+        # Presence check only: importing faster_whisper pulls torch and can block
+        # server startup and /api/health for tens of seconds on a cold machine.
+        import importlib.util
         try:
-            import faster_whisper  # noqa: F401
-            return "local"
-        except ImportError:
+            return "local" if importlib.util.find_spec("faster_whisper") else "heuristic"
+        except (ImportError, ValueError):
             return "heuristic"
     return mode

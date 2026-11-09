@@ -252,7 +252,7 @@ def test_autopost_gate():
         rights.set_override(job, "permission on file, proceeding deliberately")
         check("autopost: a written override resumes the held post",
               pipeline.resume_autopost(job["id"]) is True
-              and wait_for(lambda: posted, 3.0) and not job["rights_pending"])
+              and wait_for(lambda: posted and not job["rights_pending"], 3.0))
     finally:
         pipeline.social.post_clip = saved
 

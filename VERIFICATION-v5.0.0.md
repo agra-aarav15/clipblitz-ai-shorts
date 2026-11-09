@@ -95,6 +95,10 @@ A previously failing 73.6s clip at 50 fps was re-rendered through the custom-cut
 capping output to 30 fps; it completed in roughly four minutes and produced a valid 73.6s file.
 The old failure was a render timeout, not a missing file or a bad filter.
 
+Server startup and `/api/health` were also importing `faster_whisper` (and therefore torch)
+when no API key was configured, and importing OpenCV at module load. Both are now presence
+checks / lazy imports; health answers in about two seconds on the same machine.
+
 The job card had a class collision: the top-bar `.jobbox` flex rule was also applied to the
 progress panel, so the job title and the raw ffmpeg command were squeezed into two columns and
 wrapped into a wall of text. The top bar now uses `.topjob`; the progress panel is a normal

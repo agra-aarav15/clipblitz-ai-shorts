@@ -146,7 +146,7 @@ cuts of the same payoff.
 
 ## Independent verification
 
-The Gemini 4 Argon review was launched twice against commit `2fb553c`. Both calls were
+The Gemini 4 Argon review was launched twice against commit `0a52ebd`. Both calls were
 refused by the provider with `403 theos_insufficient` (account quota; the response named a
 refresh time of `2026-11-09T04:29:50+00:00`). **No Gemini verdict exists yet.** The exact
 read-only review brief is in `VERIFY-WITH-GEMINI.md`; paste that file into Gemini when the

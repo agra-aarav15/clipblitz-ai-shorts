@@ -2,7 +2,7 @@
 
 Paste the brief below into Gemini 4 Argon (or another Gemini model) with access to this
 checkout. The verifier must work read-only. Expected checkout: `f:/Clipblitz/repo-clipblitz`
-at commit `2fb553c` (or later, if the commit is superseded).
+at commit `0a52ebd` (or later, if the commit is superseded).
 
 ```text
 You are the independent verifier for ClipBlitz Studio v5.0.0, specifically the new ARGON

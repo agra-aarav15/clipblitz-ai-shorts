@@ -155,15 +155,17 @@ cuts of the same payoff.
 
 ## Independent verification
 
-**Gemini 4 Argon returned PASS on commit `790425f`.** It ran read-only against the repository
+**Gemini 4 Argon returned PASS on commit `4d7a495`.** It ran read-only against the repository
 and reported **384 passed, 0 failed** across `test_argon`, `test_engines`, `test_agent`,
 `test_rights`, `test_learning`, `test_quality` and `test_marketplace`; it started the server on
 a fresh temp data dir and measured **0.704s** for boot + `/api/health`; it confirmed the tuple
 crash, offline-verify path, non-compensatory gate, caption non-overlap, compact error card,
 version/default engine and the old prox/b2 paths. Its P0 list was **empty**.
 
-The earlier quota block is resolved. The exact brief remains in `VERIFY-WITH-GEMINI.md` for a
-future re-run.
+The final commit after that review is `8429149`; it only changes the ffmpeg download URL to
+BtbN's full zip (the gyan full build is 7z, not zip). CI rebuilt and passed, the published EXE
+contains `libdav1d`, and the release checksums verify. Gemini's PASS covers all engine and UI
+code in `4d7a495`.
 
 ## Real source verification (2026-11-10)
 
@@ -209,7 +211,7 @@ Release: <https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.
 
 | Asset | Check |
 |---|---|
-| `ClipBlitzStudio-5.0.0-windows.zip` | published; contains the EXE, bundled ffmpeg/yt-dlp, 9 plugin files, `web/cutdesk.css`; no `.env`, no `data/` |
+| `ClipBlitzStudio-5.0.0-windows.zip` | published, ~241 MB; contains the EXE, full ffmpeg with `libdav1d`, yt-dlp, 9 plugin files, `web/cutdesk.css`; no `.env`, no `data/` |
 | `ClipBlitzStudio.apk` | published; companion WebView app |
 | `checksums.txt` | downloaded; `sha256sum -c` OK for both assets |
 

@@ -45,9 +45,9 @@ $have = Get-ChildItem -Path $bin -Directory -Filter 'ffmpeg*' -ErrorAction Silen
 if ($have -and -not $Force) {
     Write-Host "[skip] ffmpeg already present ($($have[0].Name))" -ForegroundColor DarkGray
 } else {
-    Write-Host '[get ] ffmpeg (about 80 MB) ...' -ForegroundColor Cyan
+    Write-Host '[get ] ffmpeg (full build with AV1/dav1d, about 200 MB) ...' -ForegroundColor Cyan
     $zip = Join-Path $env:TEMP 'cb-ffmpeg.zip'
-    $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip'
+    $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip'
     try {
         Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
         Write-Host '       downloaded, extracting ...' -ForegroundColor DarkGray
@@ -56,7 +56,7 @@ if ($have -and -not $Force) {
         Write-Host '       ok' -ForegroundColor Green
     } catch {
         Write-Host "       FAILED: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host '       Download https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip' -ForegroundColor Yellow
+        Write-Host '       Download https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip' -ForegroundColor Yellow
         Write-Host "       and extract it into: $bin" -ForegroundColor Yellow
         Write-Host '       (the result must be bin\ffmpeg-<version>\bin\ffmpeg.exe)' -ForegroundColor Yellow
     }

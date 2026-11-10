@@ -40,6 +40,13 @@ Fresh end-to-end job `b19f4431` (top_n=2, one qualifying clip) rendered 22.9s of
 with the last caption at 21.73s and a **1.15s** tail after a measured laugh. It was
 correctly marked `unverified` because the judge call did not return a pass.
 
+## Independent verification
+
+GLM 5.3 Flash (high thinking) re-reviewed the fixed code read-only and returned **PASS**.
+It traced the 8.0 / 8.2 / 12.0 repro to `end=8.15` (no word cut), and confirmed the source
+clamp, no-words-after-cut path, pause tail, long-dead-air trim, laugh tail, crossing-word
+finish and the short-tail extension. No remaining bug was found in the reviewed paths.
+
 ## Test count
 
 ```

@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.0"><b>Download v5.0.0 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.1"><b>Download v5.0.1 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -36,7 +36,17 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## What's new in v5.0.0
+## What's new in v5.0.1
+
+- **Endings breathe.** ARGON now walks to the first real pause after the last word and keeps
+  0.8s of room (1.15s after a measured laugh) instead of trimming to 0.3s. It finishes a word
+  that crossed the old cut, never chops the next syllable, and shortens the closing fade to
+  0.12s. Measured on the F1 cuts: 0.53-0.80s tails instead of 0.29-0.36s. `CB_TAIL_PAD`
+  changes the target.
+- The Windows bundle uses the full BtbN ffmpeg with `libdav1d`, and YouTube ingest prefers
+  H.264 at 1080p, so AV1 sources no longer stall the scene pass.
+
+## What was new in v5.0.0
 
 - **ARGON, one unified engine.** A four-channel anchor graph (spoken hooks, story arcs,
   measured peaks, cinematic beats), multi-scale sentence-aligned windows, 16 measured
@@ -52,7 +62,7 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.0.0)
+## ARGON, the unified engine (ClipBlitz Studio v5.0.1)
 
 One engine chooses the cut from spoken hooks, story arcs, measured peaks and cinematic beats.
 The older engines stay for comparison and fallback:
@@ -172,7 +182,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.0.0.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.0).
+1. Download **`ClipBlitzStudio-5.0.1-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.1).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

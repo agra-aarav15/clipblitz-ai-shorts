@@ -17,12 +17,12 @@ One app, one default editor: **ARGON** (hook + story + cinema in one pass). The 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v5.0.0 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
+ClipBlitz Studio v5.0.1 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
 Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_ENGINE`
-(default `argon`), `CB_DATA` (data directory), `CB_FFMPEG_DIR`, `CB_TOP_N`.
+(default `argon`), `CB_DATA` (data directory), `CB_FFMPEG_DIR`, `CB_TOP_N`, `CB_TAIL_PAD` (default 0.8s, clamped 0.4-1.5).
 
 The interface opens in the previous dark theme. The **Desk theme** button in the top bar
 switches to the light Cutting Desk theme; the choice is remembered in this browser. The

@@ -255,11 +255,60 @@ def _tighten_edges(job, m):
     a, b = float(m["start"]), float(m["end"])
     if first - a > 0.6:
         a = max(0.0, first - 0.15)
-    if b - last > 1.2 and (m.get("measured") or {}).get("tail_laugh", 0.0) < 0.10:
-        b = last + 0.45
-    if b - a >= 8.0 and (abs(a - m["start"]) > 0.01 or abs(b - m["end"]) > 0.01):
+    # A fixed tail is the difference between "the sentence ended" and "the clip was
+    # chopped". Keep 0.8s of room tone after the last word by default; a measured
+    # laugh or crowd reaction gets a little longer. Long dead air is still trimmed.
+    tail = float(CONFIG.get("tail_pad", 0.8) or 0.8)
+    laugh = float((m.get("measured") or {}).get("tail_laugh", 0.0) or 0.0)
+    wanted = max(tail, 1.15) if laugh >= 0.10 else tail
+    # The cut point is a real pause, not a fixed offset. Start with the last word
+    # that begins before the old end (it may run past it), then walk forward until
+    # speech actually pauses. The tail is the room inside that pause. This avoids
+    # both failure modes: cutting a word in half, and claiming a tail that is
+    # actually filled with the next sentence.
+    words = []
+    for seg in (job.get("segments") or []):
+        for w in seg.get("words", []):
+            try:
+                words.append((float(w["start"]), float(w["end"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+    words.sort()
+    last = 0.0
+    for ws, we in words:
+        if ws < b:
+            last = max(last, we)
+    if last:
+        limit = b + 1.2
+        cut = None
+        hit_limit = False
+        for ws, we in words:
+            if we <= last + 0.01:
+                continue
+            if ws >= last - 0.01:
+                gap = ws - last
+                if gap >= 0.45:
+                    cand = min(last + wanted, ws - 0.05)
+                    if cand - last >= 0.45:
+                        cut = cand
+                        break
+            if we > limit and last >= b - 0.01:
+                hit_limit = True
+                break
+            last = max(last, we)
+        if cut is None:
+            # No usable pause before the next sentence starts. Keep the full tail if
+            # the transcript simply ended; otherwise finish the current word and keep
+            # the shorter tail rather than chop a syllable.
+            cut = last + (min(wanted, 0.30) if hit_limit else wanted)
+        b = cut
+    src_end = job.get("duration")
+    if src_end:
+        b = min(b, float(src_end))
+    if b - a >= 5.0 and (abs(a - m["start"]) > 0.01 or abs(b - m["end"]) > 0.01):
         out = dict(m)
         out["start"], out["end"] = round(a, 2), round(b, 2)
+        out["tail"] = round(max(0.0, b - last), 2)
         out["_tightened"] = True
         return out
     return m
@@ -367,6 +416,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "argon": m.get("argon"),
         "start": round(m["start"], 1), "end": round(m["end"], 1),
         "duration": round(m["end"] - m["start"], 1),
+        "tail": m.get("tail"),
         "style": job["style"],
         "position": position,
         "rank": m.get("rank"),

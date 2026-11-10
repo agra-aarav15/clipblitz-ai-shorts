@@ -145,7 +145,9 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     'auto' is a centre crop unless vision.face_crop_x supplied a face offset.
     Every chain ends with a short fade-in/out so cut edges never feel chopped."""
     fv_in = "fade=t=in:st=0:d=0.18"
-    fv_out = f"fade=t=out:st={max(0.0, dur - 0.22):.2f}:d=0.22"
+    # The tail pad is where the picture should breathe; a 0.12s fade is enough to
+    # avoid a hard pop without turning the last beat black.
+    fv_out = f"fade=t=out:st={max(0.0, dur - 0.12):.2f}:d=0.12"
     sub = f",subtitles={sub_name}" if sub_name else ""
     grade = (f",{cinema.cinematic_filters(grain=grain, vignette=vignette)}"
              if grade_film else "")

@@ -435,6 +435,63 @@ def test_render_payload():
           clip.get("engine_id") == "argon" and clip.get("engine") == "ARGON unified")
 
 
+def test_tail_pad():
+    """A cut must not slam shut on the last word. The render pipeline keeps a real
+    tail (0.8s by default, longer for a measured laugh) and trims genuinely dead air."""
+    from clipblitz import pipeline
+
+    text = "the ending is everything for this story today"
+    words = [{"word": w, "start": 0.0 + i, "end": 1.0 + i}
+             for i, w in enumerate(text.split())]
+    words.append({"word": "later", "start": 12.0, "end": 12.2})
+    job = {"duration": 30.0,
+           "segments": [{"start": 0.0, "end": 9.0, "text": text,
+                         "words": words}]}
+    short = pipeline._tighten_edges(job, {"start": 0.0, "end": 8.2})
+    check("argon: a short tail is extended to the breathing room",
+          abs(short["end"] - 8.8) <= 0.01 and short["tail"] >= 0.75,
+          str(short.get("end")) + " tail=" + str(short.get("tail")))
+
+    long = pipeline._tighten_edges(job, {"start": 0.0, "end": 10.0})
+    check("argon: long dead air is trimmed back to the tail",
+          abs(long["end"] - 8.8) <= 0.01, str(long.get("end")))
+
+    laugh = pipeline._tighten_edges(job, {"start": 0.0, "end": 8.2,
+                                          "measured": {"tail_laugh": 0.8}})
+    check("argon: a measured laugh keeps a longer reaction tail",
+          laugh["tail"] >= 1.1, str(laugh.get("tail")))
+
+    job_end = {"duration": 8.9, "segments": job["segments"]}
+    clamped = pipeline._tighten_edges(job_end, {"start": 0.0, "end": 8.2})
+    check("argon: the tail never runs past the source",
+          clamped["end"] <= 8.9 + 0.01, str(clamped.get("end")))
+
+    crossing_words = [{"word": "start", "start": 0.0, "end": 1.0},
+                       {"word": "payoff", "start": 6.6, "end": 9.2},
+                       {"word": "later", "start": 12.0, "end": 12.2}]
+    crossing_job = {"duration": 30.0,
+                    "segments": [{"start": 0.0, "end": 9.2, "text": "start payoff",
+                                  "words": crossing_words}]}
+    crossing = pipeline._tighten_edges(crossing_job, {"start": 0.0, "end": 7.0})
+    check("argon: a word crossing the cut is finished before the tail",
+          abs(crossing["end"] - 10.0) <= 0.01,
+          str(crossing.get("end")) + " tail=" + str(crossing.get("tail")))
+
+    pause_words = [{"word": f"w{i}", "start": float(i), "end": float(i + 1)}
+                   for i in range(8)] + [{"word": "next", "start": 8.58, "end": 8.9}]
+    pause_job = {"duration": 30.0,
+                 "segments": [{"start": 0.0, "end": 10.0, "text": "payoff next",
+                               "words": pause_words}]}
+    paused = pipeline._tighten_edges(pause_job, {"start": 0.0, "end": 8.1})
+    check("argon: the tail stops before speech resumes, keeping the pause",
+          8.45 <= paused["end"] <= 8.60 and paused["tail"] >= 0.45,
+          str(paused.get("end")) + " tail=" + str(paused.get("tail")))
+
+    fg, simple = pipeline.ffmpeg_tools._filtergraph("blur", None, 10.0)
+    check("argon: the closing fade is short, not a fade-to-black",
+          "d=0.12" in (fg or simple or ""), str(fg or simple)[-40:])
+
+
 def test_manual():
     brains_off()
     c = argon.rank_single(SEGS, DURATION, ENERGY, 8.0, 28.0, SCENES, LAUGHS, MOTION)
@@ -459,6 +516,7 @@ def main():
     test_judge()
     test_pipeline_contract()
     test_render_payload()
+    test_tail_pad()
     test_manual()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

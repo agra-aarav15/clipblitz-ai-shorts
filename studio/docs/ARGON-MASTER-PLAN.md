@@ -157,7 +157,7 @@ A short honest podium is preferred to three cuts of the same joke.
 | `clipblitz/learning.py` | ARGON has its own learning profile name |
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
 | `scripts/test_argon.py` | 63 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
-| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.0; ARGON is the documented default; legacy engines remain |
+| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.1; ARGON is the documented default; legacy engines remain |
 
 The old ProX/B2/APEX paths are preserved for byte-fidelity tests and as fallbacks. Nothing in
 `rights.py` changed: the agent still cannot publish, judge for the owner, or clear rights.
@@ -290,8 +290,11 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
 - Sports scoring weights measured event/visual coverage plus concrete action language; a calm
   interview no longer outranks an overtake. Containment rejection stops a sub-clip from being
   counted as a second highlight.
-- Edge silence is trimmed for ARGON (head pre-roll protected, tail protected when laughter says
-  the reaction is the payoff).
+- Edge silence is trimmed for ARGON (head pre-roll protected). The tail is now a real pause, not
+  a fixed trim: 0.8s by default (0.5-0.9s measured on the F1 cuts), 1.15s after a measured laugh.
+  The cut walks forward out of a word that crossed the old end, then stops inside the first real
+  pause; it never chops the next syllable. `CB_TAIL_PAD` changes the target. The closing video
+  fade is 0.12s so the tail is not swallowed by a fade-to-black.
 - Auto face crop is optional via OpenCV; without OpenCV the renderer uses a centre crop.
 - ARGON no longer pays for a second motion-map pass; it reuses the scene cuts already measured
   for peak mining.

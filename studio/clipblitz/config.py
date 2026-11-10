@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "5.0.0"
+APP_VERSION = "5.0.1"
 
 
 def _load_env(path):
@@ -32,6 +32,14 @@ def _load_env(path):
 
 
 _load_env(os.path.join(ROOT, ".env"))
+
+def _float_env(name, default, lo, hi):
+    """A float knob with the same never-crash guarantee as _int_env."""
+    try:
+        return max(lo, min(hi, float(os.environ.get(name, "").strip() or default)))
+    except (TypeError, ValueError):
+        return default
+
 
 def _int_env(name, default, lo, hi):
     """An integer knob that can never crash the studio: a bad value falls back to the
@@ -57,6 +65,9 @@ CONFIG = {
     "whisper_model": os.environ.get("CB_WHISPER_MODEL", "tiny"),
     # v2: clips + social
     "top_n": int(os.environ.get("CB_TOP_N", "3")),
+    # breathing room after the last word so a cut does not slam shut on the payoff.
+    # 0.5-1.0s is the range OpusClip-style shorts use; 0.8 is the default.
+    "tail_pad": _float_env("CB_TAIL_PAD", 0.8, 0.4, 1.5),
     "privacy": os.environ.get("CB_PRIVACY", "public"),
     # per-job engine choice: prox | b2 | both (validated in server/pipeline)
     "engine_default": os.environ.get("CB_ENGINE", "argon"),

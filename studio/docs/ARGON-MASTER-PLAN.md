@@ -156,7 +156,7 @@ A short honest podium is preferred to three cuts of the same joke.
 | `clipblitz/config.py` | `CB_ENGINE` default is `argon` |
 | `clipblitz/learning.py` | ARGON has its own learning profile name |
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
-| `scripts/test_argon.py` | 61 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
+| `scripts/test_argon.py` | 63 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
 | `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.0; ARGON is the documented default; legacy engines remain |
 
 The old ProX/B2/APEX paths are preserved for byte-fidelity tests and as fallbacks. Nothing in
@@ -197,7 +197,7 @@ Files that matter:
 - clipblitz/server.py           (engine validation, /api/health, default)
 - clipblitz/agent.py            (MCP/CLI surface; default engine)
 - clipblitz/learning.py         (six-factor learning store and per-engine profile)
-- scripts/test_argon.py         (61 offline checks)
+- scripts/test_argon.py         (63 offline checks)
 - scripts/test_engines.py       (ProX/B2 fidelity regression)
 - README.md, SETUP.md           (docs may lag the code)
 
@@ -255,7 +255,7 @@ Return: findings, evidence, patch list, and unresolved questions.
 
 | Check | Result |
 |---|---|
-| `python scripts/test_argon.py` | 61 passed, 0 failed |
+| `python scripts/test_argon.py` | 63 passed, 0 failed |
 | `python scripts/test_engines.py` | 30 passed, 0 failed |
 | `python scripts/test_agent.py` | 75 passed, 0 failed |
 | `python scripts/test_learning.py` | 28 passed, 0 failed |
@@ -283,6 +283,13 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
 - Caption events are clamped so two ASS events can never overlap.
 - Every render gets a poster thumbnail; the optional Slow zoom adds a restrained 1.0 -> 1.05
   push-in before fades and captions.
+- YouTube downloads prefer H.264 at 1080p; the bundled toolchain is a full ffmpeg build with
+  dav1d. The scene scan runs on keyframes, not every frame of a 50 fps AV1 source.
+- The judge pool is forced to include editor, context and peak proposals, not only the cheap
+  lexical shortlist. Context variants start at the previous sentence so the build-up is visible.
+- Sports scoring weights measured event/visual coverage plus concrete action language; a calm
+  interview no longer outranks an overtake. Containment rejection stops a sub-clip from being
+  counted as a second highlight.
 - Edge silence is trimmed for ARGON (head pre-roll protected, tail protected when laughter says
   the reaction is the payoff).
 - Auto face crop is optional via OpenCV; without OpenCV the renderer uses a centre crop.

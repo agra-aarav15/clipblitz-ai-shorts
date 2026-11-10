@@ -34,7 +34,7 @@ Run from `repo-clipblitz/studio` unless marked otherwise.
 
 | Suite | Result |
 |---|---|
-| `scripts/test_argon.py` | **61 passed, 0 failed** |
+| `scripts/test_argon.py` | **63 passed, 0 failed** |
 | `scripts/test_engines.py` | 29 passed, 0 failed, 1 skipped |
 | `scripts/test_learning.py` | 28 passed, 0 failed |
 | `scripts/test_agent.py` | 75 passed, 0 failed |
@@ -164,6 +164,44 @@ version/default engine and the old prox/b2 paths. Its P0 list was **empty**.
 
 The earlier quota block is resolved. The exact brief remains in `VERIFY-WITH-GEMINI.md` for a
 future re-run.
+
+## Real source verification (2026-11-10)
+
+Two Formula 1 videos were downloaded through the app and cut with ARGON at `top_n=3`.
+Both sources were served by YouTube as AV1 first; the app now prefers H.264 at 1080p on
+download and the bundled toolchain was switched to a full ffmpeg build with dav1d. That is
+what removed the AV1 decode stall.
+
+| Source | Clips | Scores | Verdict |
+|---|---|---|---|
+| Nine Minutes Of Max Verstappen Tearing Through The Field At Interlagos | 40.4s / 60.9s / 47.0s | 91 / 86 / 76 | all verified; overtake battle, podium comeback, pit-lane move |
+| Race Highlights - 2026 Sao Paulo Grand Prix | 56.6s / 43.1s / 21.5s | 94 / 88 / 81 | all verified; Hamilton battle, Lawson opening lap, Russell spin |
+
+What changed after the first test:
+
+- **H.264 download preference** (`vcodec:h264,res:1080`) so the bundled decoder is not asked
+  to decode AV1 at 50 fps.
+- **Keyframe-only scene scan** for the visual pass; the old full-rate scan took minutes on a
+  9-minute 50 fps AV1 file and is now seconds.
+- **Context variants**: the judge now sees a window that starts at the previous sentence, not
+  only the spark start. This is what lets the F1 overtake include its build-up.
+- **Editor and peak proposals are forced into the judge pool** even when a cheap lexical
+  pre-score would have filtered them out.
+- **Sports action scoring**: event, visual and concrete action language (overtake, pass,
+  podium, finish) now outweigh a calm interview in a sports highlight.
+- **Containment rejection**: a 14s sub-clip inside a 56s cut is not a second highlight.
+- **No reject-only podium**: if every candidate is downgraded the engine returns the best one
+  honestly labelled instead of failing the whole job.
+- The logo is monochrome `currentColor` now: white on the dark default, ink on the light theme.
+
+## OpusClip comparison
+
+No OpusClip output files for these two sources exist in this workspace. The competitor folder
+contains UI screenshots and help captures, not rendered clips. I did not fabricate a side-by-side
+verdict. The comparison used OpusClip's published selection criteria (scroll-stopping opening,
+standalone context, clean payoff, high event/action coverage) and the resulting clips were
+checked against those criteria. If actual OpusClip exports for these links are supplied, they can
+be compared clip-by-clip on the same rubric.
 
 ## Published artifacts
 

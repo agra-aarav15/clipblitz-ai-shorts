@@ -68,7 +68,7 @@ MAX_SPEAK_CHARS = 2600       # transcript sent per judge candidate, capped
 CORE_FACTORS = ("hook", "story", "payoff", "energy", "pacing", "event")
 EXTRA_FACTORS = ("emotion", "novelty", "visual", "self_sufficient", "loop",
                  "clarity", "shareability", "open_loop", "context_dependency",
-                 "failure_risk")
+                 "failure_risk", "action")
 FEATURES = CORE_FACTORS + EXTRA_FACTORS
 
 FILLERS = V.FILLER_STARTS
@@ -101,6 +101,12 @@ SHARE_WORDS = ("everyone", "nobody", "never", "always", "best", "worst", "first"
 RESOLUTION_WORDS = ("so that's why", "that's why", "the lesson", "turns out",
                     "which means", "and that changed", "the point is", "in the end",
                     "finally", "it worked", "it failed", "the result", "the truth is")
+
+ACTION_WORDS = ("overtake", "overtakes", "overtaken", "pass", "passes", "passed",
+                "battle", "fight", "fights", "win", "wins", "won", "podium",
+                "finish", "finished", "position", "positions", "places", "gained",
+                "charge", "charges", "charging", "attack", "defend", "crash",
+                "spin", "lockup", "fastest", "lap", "comeback", "recovery")
 
 # A dependent opening is the most common reason a clip fails on its own. These are
 # references to something outside the window, not a style judgement.
@@ -141,7 +147,8 @@ PROFILE_MULT = {
     "speech": {"hook": 1.15, "story": 1.05, "visual": 0.70},
     "tutorial": {"clarity": 1.20, "story": 1.12, "shareability": 1.10, "visual": 0.85},
     "vlog": {"visual": 1.08, "emotion": 1.08, "story": 0.95},
-    "sports": {"event": 1.35, "visual": 1.25, "story": 0.80, "hook": 0.95},
+    "sports": {"event": 2.40, "visual": 1.90, "story": 0.65, "hook": 0.90,
+               "payoff": 0.95, "emotion": 1.10},
 }
 
 
@@ -302,6 +309,14 @@ def _resolution(text):
     return min(1.0, sum(1 for p in RESOLUTION_WORDS if p in low) * 0.34)
 
 
+def _action(text):
+    """Concrete sports/highlight action language. Deterministic and deliberately
+    narrow: an interview about a penalty is not the same clip as the overtake."""
+    words = set(re.findall(r"[a-z']+", _norm(text)))
+    hits = len(words & set(ACTION_WORDS))
+    return min(1.0, hits / 3.0)
+
+
 def _context_dependency(text):
     """Openings that require something outside the window. Low is better."""
     low = _norm(text)
@@ -437,6 +452,7 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
         "context_dependency": context,
         "failure_risk": min(1.0, 0.55 * list_gap + 0.25 * context
                             + (0.20 if not ends_final else 0.0)),
+        "action": _action(text),
     }
     c["argo_features"] = {k: round(max(0.0, min(1.0, v)), 3) for k, v in feat.items()}
     c["hook_speed"] = _hook_speed(c, segments)
@@ -808,6 +824,39 @@ def editor_pass(segments, duration, moments=None, max_chunks=6):
     return stories, clean, content_type
 
 
+def _pre_score(c):
+    f = c.get("argo_features") or {}
+    return (0.32 * f.get("hook", 0) + 0.24 * f.get("payoff", 0)
+            + 0.16 * f.get("event", 0) + 0.10 * f.get("visual", 0)
+            + 0.08 * f.get("emotion", 0) + 0.06 * f.get("shareability", 0)
+            + 0.04 * f.get("self_sufficient", 0))
+
+
+def _context_variants(cands, segments, duration, energy, laughs, moments, scenes, motion,
+                      limit=8):
+    """For the strongest candidates, also test the window that starts at the previous
+    sentence. The common failure is a clip that opens on a question after the action
+    already happened; the judge can only choose the better start if it sees both."""
+    starts = [s["start"] for s in _sentences(segments)]
+    if not starts:
+        return []
+    out = []
+    for c in sorted(cands, key=lambda x: -_pre_score(x))[:limit]:
+        prev = [x for x in starts if x < c["start"] - 0.6 and c["start"] - x <= 10.0]
+        if not prev:
+            continue
+        v = dict(c)
+        v["start"] = round(max(prev), 2)
+        v["anchor_kind"] = "context"
+        v["context_variant"] = True
+        _enforce_window(v, segments, duration)
+        if v.get("_drop") or V._starts_on_filler(segments, v["start"]):
+            continue
+        measure_candidate(v, segments, energy, laughs, moments, scenes, motion)
+        out.append(v)
+    return out
+
+
 def _build_candidates(segments, duration, energy, laughs, moments, scenes, motion, stories, editor_cuts=None):
     scenes = _scene_times(scenes)
     sparks = spark_scan(segments)
@@ -844,6 +893,10 @@ def _build_candidates(segments, duration, energy, laughs, moments, scenes, motio
     cands = _dedupe(cands, segments)[:MAX_CANDIDATES]
     for c in cands:
         measure_candidate(c, segments, energy, laughs, moments, scenes, motion)
+    variants = _context_variants(cands, segments, duration, energy, laughs, moments,
+                                 scenes, motion)
+    if variants:
+        cands = _dedupe(cands + variants, segments)[:MAX_CANDIDATES]
     return cands, sparks
 
 
@@ -1101,6 +1154,16 @@ def score_candidate(c, j, content_type):
     score = 30.0 + 69.0 * (blend ** 1.12)
     if f.get("event", 0.0) >= 0.7:
         score = min(99.0, score + 3.5)
+    if (content_type or "").lower() == "sports":
+        # A sports highlight without the measured event is an interview, not a
+        # highlight. Reward the roar/cut-density coverage and push a quiet talking
+        # segment out of the podium instead of letting it win on coherence alone.
+        score += 8.0 * f.get("event", 0.0) + 4.0 * f.get("visual", 0.0)
+        score += 10.0 * f.get("action", 0.0)
+        if f.get("event", 0.0) < 0.20 and f.get("visual", 0.0) < 0.20:
+            score -= 12.0
+        if f.get("action", 0.0) < 0.10:
+            score -= 6.0
     flags = set(c.get("flags") or [])
     fatal = flags & FATAL_FLAGS
     if fatal:
@@ -1279,6 +1342,14 @@ def _temporal_iou(a, b):
     return inter / union
 
 
+def _contained(a, b):
+    """Is one window essentially a sub-clip of the other? A 14s cut inside a 56s
+    cut of the same overtake is not a second highlight."""
+    inter = max(0.0, min(a["end"], b["end"]) - max(a["start"], b["start"]))
+    shortest = max(1e-6, min(a["end"] - a["start"], b["end"] - b["start"]))
+    return inter / shortest > 0.65
+
+
 def _similarity(a, b, segments, spread):
     """How much two candidates are the same editorial beat: shared words + proximity.
     Semantic-only similarity would miss the same exchange cut twice; temporal-only
@@ -1310,13 +1381,15 @@ def _select(pool, count, duration, segments):
         for c in pool_round:
             if len(picked) >= count:
                 break
-            if c in picked:
+            if c in picked or c.get("tier") == "reject":
                 continue
             if any(abs(c["start"] - p["start"]) < max(8.0, spread * 0.55) for p in picked):
                 continue
             if any(abs(c["end"] - p["end"]) < 2.0 for p in picked):
                 continue
             if any(_temporal_iou(c, p) > 0.45 for p in picked):
+                continue
+            if any(_contained(c, p) for p in picked):
                 continue
             if any(_similarity(c, p, segments, spread) > 0.78 for p in picked):
                 continue
@@ -1334,7 +1407,7 @@ def _select(pool, count, duration, segments):
         for c in candidates:
             if len(picked) >= count:
                 break
-            if c in picked:
+            if c in picked or c.get("tier") == "reject":
                 continue
             if any(abs(c["start"] - p["start"]) < 8.0 for p in picked):
                 continue
@@ -1342,9 +1415,15 @@ def _select(pool, count, duration, segments):
                 continue
             if any(_temporal_iou(c, p) > 0.50 for p in picked):
                 continue
+            if any(_contained(c, p) for p in picked):
+                continue
             if any(_similarity(c, p, segments, spread) > 0.84 for p in picked):
                 continue
             picked.append(c)
+    if not picked and candidates:
+        # Never fail the whole job because every candidate was downgraded. Return
+        # the strongest one, honestly labelled; the gate still shows why.
+        picked = [candidates[0]]
     for c in picked:
         c["selected"] = True
     return picked
@@ -1383,7 +1462,18 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
         + 0.08 * c["argo_features"]["emotion"]
         + 0.06 * c["argo_features"]["shareability"]
         + 0.04 * c["argo_features"]["self_sufficient"]))
-    pool = cands[:MAX_JUDGE]
+    # The deterministic pre-score is a cheap shortlist, not a veto. An editor
+    # proposal or a measured peak that sits outside the top N must still reach the
+    # judge: those are exactly the moments a pure lexical score misses (an overtake,
+    # a goal, a reveal). Keep the shortlist bounded.
+    pool = list(cands[:MAX_JUDGE])
+    def _force(kind, n):
+        return sorted([c for c in cands if c.get("anchor_kind") == kind],
+                      key=lambda c: -_pre_score(c))[:n]
+    forced = _force("editor", 4) + _force("context", 6) + _force("peak", 2)
+    for c in forced:
+        if c not in pool:
+            pool.append(c)
     judgments = _judge_batch(pool, segments, content_type)
     for i, c in enumerate(pool):
         score_candidate(c, judgments.get(i) or _offline_judgement(c), content_type)

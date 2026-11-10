@@ -157,7 +157,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--ink); }
   position: sticky; top: 0; z-index: 20;
 }
 .topjob { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.appmark { width: 20px; height: 20px; color: var(--signal-strong); }
+.appmark { width: 20px; height: 20px; color: var(--ink); }
 .jobtitle { font-family: var(--font-display); font-size: 14px; font-weight: 650; color: var(--ink); }
 .topchips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .screens { width: 100%; max-width: 1440px; margin: 0 auto; padding: 28px 32px 56px; }

@@ -157,6 +157,12 @@ def test_dedupe():
     out = argon._dedupe([a, b, c], SEGS)
     check("argon: near-identical windows collapse", len(out) == 2, str(len(out)))
     check("argon: different beats survive", any(x["start"] == 40.0 for x in out))
+    check("argon: a sub-clip is not a second beat",
+          argon._contained({"start": 81.0, "end": 95.0},
+                           {"start": 46.5, "end": 103.0}))
+    check("argon: adjacent beats are not contained",
+          not argon._contained({"start": 10.0, "end": 30.0},
+                               {"start": 30.0, "end": 50.0}))
 
 
 # --------------------------------------------------------------------------- 4: gate

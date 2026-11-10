@@ -72,7 +72,7 @@ else
   TMP="$BIN/.cb-ffmpeg-dl"
   mkdir -p "$TMP"
   if [ "$PLATFORM" = "windows" ]; then
-    URL="https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    URL="https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip"
     OUT="$TMP/ff.zip"
     ( have curl && curl -L --fail -o "$OUT" "$URL" ) || ( have wget && wget -O "$OUT" "$URL" )
     if [ -f "$OUT" ]; then

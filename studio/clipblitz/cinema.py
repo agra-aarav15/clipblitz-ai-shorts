@@ -41,9 +41,9 @@ def scene_map(src, threshold=0.30, max_seconds=7200):
     threshold 0.30 is a good cinematic default: it catches hard cuts without firing on
     fast motion inside a single shot. Returns [] when detection is unavailable.
     """
-    args = [ffmpeg(), "-hide_banner", "-nostats", "-i", src,
+    args = [ffmpeg(), "-hide_banner", "-nostats", "-skip_frame", "nokey", "-i", src,
             "-filter:v", f"select='gt(scene,{threshold})',showinfo",
-            "-f", "null", "-"]
+            "-an", "-sn", "-f", "null", "-"]
     code, out, err = _run(args, timeout=max_seconds)
     marks = []
     for line in err.splitlines():

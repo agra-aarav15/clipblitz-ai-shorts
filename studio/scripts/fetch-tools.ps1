@@ -47,7 +47,7 @@ if ($have -and -not $Force) {
 } else {
     Write-Host '[get ] ffmpeg (about 80 MB) ...' -ForegroundColor Cyan
     $zip = Join-Path $env:TEMP 'cb-ffmpeg.zip'
-    $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+    $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip'
     try {
         Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
         Write-Host '       downloaded, extracting ...' -ForegroundColor DarkGray
@@ -56,7 +56,7 @@ if ($have -and -not $Force) {
         Write-Host '       ok' -ForegroundColor Green
     } catch {
         Write-Host "       FAILED: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host '       Download https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -ForegroundColor Yellow
+        Write-Host '       Download https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.zip' -ForegroundColor Yellow
         Write-Host "       and extract it into: $bin" -ForegroundColor Yellow
         Write-Host '       (the result must be bin\ffmpeg-<version>\bin\ffmpeg.exe)' -ForegroundColor Yellow
     }

@@ -106,8 +106,13 @@ def _ytdlp(url, dest_dir):
     ]
     last_err = None
     for extra in attempts:
-        cmd = [ytdlp(), "--no-playlist", "--no-warnings", "-f", "bv*+ba/b",
-               "--merge-output-format", "mp4", "--write-info-json", "-o", tpl]
+        # Prefer H.264 at 1080p. YouTube otherwise serves AV1/VP9, which the
+        # bundled ffmpeg decodes far more slowly (and older essentials builds
+        # have no dav1d at all). The clip renderer only needs 1080p.
+        cmd = [ytdlp(), "--no-playlist", "--no-warnings",
+               "-S", "vcodec:h264,res:1080,acodec:aac",
+               "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+               "--write-info-json", "-o", tpl]
         if ffdir:
             cmd += ["--ffmpeg-location", ffdir]
         cmd += extra

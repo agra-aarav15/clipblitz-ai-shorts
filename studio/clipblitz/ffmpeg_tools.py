@@ -88,9 +88,9 @@ def scene_cuts(video, threshold=0.30):
     is sparse commentary. Returns sorted [t, ...]."""
     try:
         proc = subprocess.run(
-            [ffmpeg(), "-i", video, "-vf",
-             f"scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
-             "-an", "-f", "null", "-"],
+            [ffmpeg(), "-skip_frame", "nokey", "-i", video, "-vf",
+             f"select='gt(scene,{max(0.10, float(threshold) * 0.4)})',metadata=print:file=-",
+             "-an", "-sn", "-f", "null", "-"],
             capture_output=True, text=True, errors="replace", timeout=900)
         return sorted(float(m) for m in re.findall(r"pts_time:([\d.]+)", proc.stdout))
     except Exception:

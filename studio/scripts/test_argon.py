@@ -502,6 +502,46 @@ def test_tail_pad():
           "d=0.12" in (fg or simple or ""), str(fg or simple)[-40:])
 
 
+def test_boundary_and_opening():
+    """The edge model is measured, not a guess: a dangling opening and a cut through
+    a word must score worse than a clean sentence with a pause after it."""
+    words = [
+        {"word": "But", "start": 0.0, "end": 0.2},
+        {"word": "that", "start": 0.2, "end": 0.4},
+        {"word": "was", "start": 0.4, "end": 0.7},
+        {"word": "wrong.", "start": 0.7, "end": 1.0},
+        {"word": "The", "start": 1.6, "end": 1.8},
+        {"word": "truth", "start": 1.8, "end": 2.0},
+        {"word": "is", "start": 2.0, "end": 2.2},
+        {"word": "simple.", "start": 2.2, "end": 2.5},
+    ]
+    segs = [{"start": 0.0, "end": 1.0, "text": "But that was wrong.", "words": words[:4]},
+            {"start": 1.6, "end": 2.5, "text": "The truth is simple.", "words": words[4:]}]
+    opening, issue = argon._opening_review(segs, 0.0, 2.5)
+    check("argon: a dangling conjunction is measured as a weak opening",
+          issue == "dangling" and opening < 0.5, f"{issue} {opening}")
+    clean, clean_issue = argon._opening_review(segs, 1.6, 2.5)
+    check("argon: a clean sentence opening scores high",
+          clean >= 0.9 and not clean_issue, f"{clean} {clean_issue}")
+    boundary, gap, final = argon._boundary_review(segs, 1.0)
+    check("argon: a finished sentence before a pause scores as a strong ending",
+          final and gap >= 0.5 and boundary >= 0.7, f"{boundary} {gap} {final}")
+    clipped, _gap, _final = argon._boundary_review(segs, 0.5)
+    check("argon: a cut through a word scores as a weak ending",
+          clipped < 0.35, str(clipped))
+    run_words = [{"word": "one", "start": 0.0, "end": 1.0},
+                 {"word": "two", "start": 1.0, "end": 2.0}]
+    run_segs = [{"start": 0.0, "end": 2.0, "text": "one two", "words": run_words}]
+    continuous, _g, _f = argon._boundary_review(run_segs, 1.0)
+    check("argon: continuous speech is not mistaken for a clean pause",
+          continuous < 0.60, str(continuous))
+
+    anchors = argon._payoff_anchors(segs, [])
+    check("argon: a self-summary line is mined as a payoff anchor",
+          any(a.get("label") == "self-summary" for a in anchors),
+          str([a.get("label") for a in anchors]))
+
+
 def test_manual():
     brains_off()
     c = argon.rank_single(SEGS, DURATION, ENERGY, 8.0, 28.0, SCENES, LAUGHS, MOTION)
@@ -527,6 +567,7 @@ def main():
     test_pipeline_contract()
     test_render_payload()
     test_tail_pad()
+    test_boundary_and_opening()
     test_manual()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

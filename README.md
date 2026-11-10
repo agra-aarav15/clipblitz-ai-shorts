@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.2"><b>Download v5.0.2 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.1.0"><b>Download v5.1.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -35,6 +35,21 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 5. **Traceable score v2** — computed strictly from the judge's ratings and acoustic factors (energy, laughter, pacing). No fake numbers.
 
 ---
+
+## What's new in v5.1.0
+
+- **ARGON now scores both edges of a clip.** It measures the ending from the last word,
+  the next word and the real pause between them; a cut through a word scores 0.15, a
+  continuous next word does not count as a pause, and a finished sentence with room
+  scores 0.78-1.0. It also labels a dangling opening ("But the main reason..."), a
+  two-word fragment and a mid-sentence start, and repairs a weak opening to the previous
+  or next complete sentence.
+- **Self-summary lines** ("the point is", "the result was", "what I learned") are mined
+  as payoff anchors, not only laughter and measured peaks.
+- **Competitor study**: SupoClip's AGPL code was not copied; its boundary/opening ideas
+  were independently implemented. AutoShorts is a generator, not a clip selector. The two
+  Haris repositories are release-only, so only their README feature gaps were recorded.
+  Details: `studio/docs/COMPETITOR-NOTES.md`.
 
 ## What's new in v5.0.2
 
@@ -69,7 +84,7 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.0.2)
+## ARGON, the unified engine (ClipBlitz Studio v5.1.0)
 
 One engine chooses the cut from spoken hooks, story arcs, measured peaks and cinematic beats.
 The older engines stay for comparison and fallback:
@@ -189,7 +204,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.0.2-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.2).
+1. Download **`ClipBlitzStudio-5.1.0-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.1.0).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

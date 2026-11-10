@@ -68,7 +68,7 @@ MAX_SPEAK_CHARS = 2600       # transcript sent per judge candidate, capped
 CORE_FACTORS = ("hook", "story", "payoff", "energy", "pacing", "event")
 EXTRA_FACTORS = ("emotion", "novelty", "visual", "self_sufficient", "loop",
                  "clarity", "shareability", "open_loop", "context_dependency",
-                 "failure_risk", "action")
+                 "failure_risk", "action", "boundary", "opening")
 FEATURES = CORE_FACTORS + EXTRA_FACTORS
 
 FILLERS = V.FILLER_STARTS
@@ -101,6 +101,17 @@ SHARE_WORDS = ("everyone", "nobody", "never", "always", "best", "worst", "first"
 RESOLUTION_WORDS = ("so that's why", "that's why", "the lesson", "turns out",
                     "which means", "and that changed", "the point is", "in the end",
                     "finally", "it worked", "it failed", "the result", "the truth is")
+
+SUMMARY_CUES = ("the point is", "the lesson is", "what i learned", "in the end",
+                "the result was", "that's why", "that is why", "the truth is",
+                "what matters", "here's the thing", "so the key", "the takeaway",
+                "looking back", "if i had to")
+
+DANGLING_OPENERS = ("but", "and", "so", "because", "cause", "plus", "also", "or",
+                    "nor", "which", "that's", "then", "however", "still")
+DANGLING_PHRASES = ("which is why", "which means", "that's why", "that is why",
+                    "so the reason", "so the main reason", "the reason is",
+                    "going back to", "like i said", "as i mentioned")
 
 ACTION_WORDS = ("overtake", "overtakes", "overtaken", "pass", "passes", "passed",
                 "battle", "fight", "fights", "win", "wins", "won", "podium",
@@ -392,6 +403,94 @@ def _scene_count(scenes, a, b):
 
 # ---------------------------------------------------------------- measurement
 
+def _opening_review(segments, a, b):
+    """Measure the first sentence as a standalone opening (0..1, issue).
+
+    A clip that opens on "But the main reason..." or on a two-word fragment makes
+    the viewer supply context they do not have. This is a measurement, not an LLM
+    opinion, and it is deliberately biased toward finding a defect."""
+    sents = _sentences(segments)
+    first = next((s for s in sents if s["end"] > a + 0.01 and s["start"] < b), None)
+    if first is None:
+        return 0.45, "no_sentence"
+    words = first.get("words") or []
+    tokens = []
+    for w in words:
+        tok = re.sub(r"[^a-z0-9']+", "", str(w.get("word") or "").lower())
+        if tok:
+            tokens.append(tok)
+    if not tokens:
+        text = first.get("text") or ""
+        tokens = re.findall(r"[a-z0-9']+", text.lower())
+    content = [t for t in tokens if t not in V.FILLER_STARTS]
+    low = _norm(first.get("text") or " ".join(tokens))
+    issue = ""
+    if tokens and (tokens[0] in DANGLING_OPENERS
+                   or any(low.startswith(p) for p in DANGLING_PHRASES)):
+        issue = "dangling"
+    elif 0 < len(content) <= 2 and len(sents) > 1:
+        issue = "fragment"
+    elif a > first["start"] + 0.40:
+        issue = "mid_sentence"
+    if V._starts_on_filler(segments, a):
+        issue = issue or "filler"
+    score = {"dangling": 0.34, "fragment": 0.30, "mid_sentence": 0.52,
+             "filler": 0.18, "no_sentence": 0.45}.get(issue, 1.0)
+    return score, issue
+
+
+def _boundary_review(segments, b):
+    """Measure how clean the ending is: sentence punctuation plus the pause that
+    follows it. A word cut in half scores near zero; a finished sentence with room
+    after it scores near one. Returns (0..1, gap_seconds, ends_final)."""
+    sents = _sentences(segments)
+    last_sent = None
+    for sent in sents:
+        if sent["start"] < b - 0.01:
+            last_sent = sent
+    words = []
+    for sent in sents:
+        for w in sent.get("words") or []:
+            try:
+                ws, we = float(w.get("start")), float(w.get("end"))
+            except (TypeError, ValueError):
+                continue
+            words.append((ws, we, str(w.get("word") or "")))
+    if not words:
+        return 0.45, 3.0, False
+    words.sort()
+    before = [w for w in words if w[0] < b + 0.01]
+    if not before:
+        return 0.45, 3.0, False
+    last = max(before, key=lambda x: (x[1], x[0]))
+    last_end, last_word = last[1], last[2]
+    if last_end > b + 0.05:
+        # The cut lands inside a word. No pause can make that a clean ending.
+        return 0.15, 0.0, False
+    tail_text = (last_sent or {}).get("text") or ""
+    final = bool(re.search(r"[.!?…][\"')\]}]*$", last_word.strip())) or bool(
+        re.search(r"[.!?…][\"')\]}]*$", tail_text.strip()))
+    after = [ws for ws, _we, _word in words if ws > last[0] + 0.001]
+    if not after:
+        return 1.0, 3.0, final
+    gap = max(0.0, min(after) - last_end)
+    if gap >= 4.0:
+        base = 0.92
+    elif gap >= 1.2:
+        base = 0.82
+    elif gap >= 0.45:
+        base = 0.70 if final else 0.55
+    elif gap >= 0.15:
+        base = 0.55 if final else 0.38
+    else:
+        base = 0.40 if final else 0.20
+    if final and gap >= 0.45:
+        base += 0.08
+    if last_word.rstrip().endswith("?"):
+        base += 0.03
+    return min(1.0, base), gap, final
+
+
 def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=None):
     """Measure one candidate. Everything here is deterministic.
 
@@ -420,15 +519,17 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
     cuts = _scene_count(scenes, a, b)
     context = _context_dependency(head)
     list_gap = _list_incomplete(text)
+    opening, opening_issue = _opening_review(segments, a, b)
+    boundary, end_gap, boundary_final = _boundary_review(segments, b)
 
     feat = {
-        "hook": min(1.0, 0.60 * pull + 0.24 * energy_f
-                    + 0.16 * (1.0 if question else 0.0)),
-        "story": min(1.0, 0.42 * (1.0 if starts_clean and ends_final else 0.55)
-                     + 0.20 * (1.0 - filler) + 0.20 * min(1.0, dur / 35.0)
-                     + 0.18 * (1.0 - list_gap)),
-        "payoff": min(1.0, 0.48 * tail_laugh + 0.22 * (1.0 if ends_final else 0.0)
-                      + 0.16 * laugh_f + 0.14 * _resolution(tail)),
+        "hook": min(1.0, 0.52 * pull + 0.22 * energy_f
+                    + 0.14 * (1.0 if question else 0.0) + 0.12 * opening),
+        "story": min(1.0, 0.36 * (1.0 if starts_clean and ends_final else 0.50)
+                     + 0.18 * (1.0 - filler) + 0.16 * min(1.0, dur / 35.0)
+                     + 0.16 * (1.0 - list_gap) + 0.14 * boundary),
+        "payoff": min(1.0, 0.38 * tail_laugh + 0.16 * (1.0 if ends_final else 0.0)
+                      + 0.12 * laugh_f + 0.14 * _resolution(tail) + 0.20 * boundary),
         "energy": max(0.0, min(1.0, energy_f)),
         "pacing": max(0.0, min(1.0, c["measured"]["pacing"])),
         "event": max(0.0, min(1.0, event_f)),
@@ -436,10 +537,10 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
         "novelty": max(0.0, min(1.0, _lexical_novelty(text))),
         "visual": max(0.0, min(1.0, 0.55 * mean_motion + 0.30 * peak_motion
                                 + 0.15 * min(1.0, cuts / 2.0))),
-        "self_sufficient": max(0.0, min(1.0, 0.36 * (1.0 if starts_clean else 0.0)
-                                        + 0.30 * (1.0 if ends_final else 0.0)
-                                        + 0.20 * min(1.0, n_words / 45.0)
-                                        + 0.14 * (1.0 - context))),
+        "self_sufficient": max(0.0, min(1.0, 0.30 * (1.0 if starts_clean else 0.0)
+                                        + 0.24 * (1.0 if ends_final else 0.0)
+                                        + 0.16 * min(1.0, n_words / 45.0)
+                                        + 0.12 * (1.0 - context) + 0.18 * boundary)),
         "loop": max(0.0, min(1.0, 0.40 * (1.0 if question else 0.0)
                              + 0.30 * (1.0 if ends_final else 0.0)
                              + 0.30 * (1.0 if question and tail_laugh >= 0.2 else 0.0))),
@@ -450,9 +551,12 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
         "open_loop": max(0.0, min(1.0, pull if kind in ("question", "challenge", "claim")
                                   else 0.20)),
         "context_dependency": context,
-        "failure_risk": min(1.0, 0.55 * list_gap + 0.25 * context
-                            + (0.20 if not ends_final else 0.0)),
+        "failure_risk": min(1.0, 0.45 * list_gap + 0.20 * context
+                            + (0.15 if not ends_final else 0.0)
+                            + 0.20 * (1.0 - boundary)),
         "action": _action(text),
+        "boundary": boundary,
+        "opening": opening,
     }
     c["argo_features"] = {k: round(max(0.0, min(1.0, v)), 3) for k, v in feat.items()}
     c["hook_speed"] = _hook_speed(c, segments)
@@ -462,7 +566,12 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
                        "starts_clean": starts_clean, "ends_final": ends_final,
                        "question_open": question, "scenes": cuts,
                        "context_dependency": round(context, 3),
-                       "list_incomplete": round(list_gap, 3)}
+                       "list_incomplete": round(list_gap, 3),
+                       "boundary": round(boundary, 3),
+                       "end_gap": round(end_gap, 2),
+                       "ends_final_measured": boundary_final,
+                       "opening": round(opening, 3),
+                       "opening_issue": opening_issue}
     return c
 
 
@@ -514,9 +623,13 @@ def _payoff_anchors(segments, laughs, limit=10):
                     "label": "laughter payoff"})
     for s in _sentences(segments):
         res = _resolution(s["text"])
-        if res >= 0.34 or s["text"].rstrip().endswith("!"):
+        low = _norm(s["text"])
+        summary = any(cue in low[:180] for cue in SUMMARY_CUES)
+        if res >= 0.34 or summary or s["text"].rstrip().endswith("!"):
             out.append({"start": s["start"], "end": s["end"], "kind": "payoff",
-                        "priority": 0.62 + 0.20 * res, "label": "resolution line"})
+                        "priority": 0.62 + 0.20 * res + (0.12 if summary else 0.0),
+                        "label": "self-summary" if summary else "resolution line"})
+    out.sort(key=lambda x: -float(x.get("priority", 0)))
     return out[:limit]
 
 
@@ -1024,6 +1137,9 @@ def _judge_batch(cands, segments, content_type):
                 "context_dependency": c.get("text_stats", {}).get(
                     "context_dependency", 0.0),
                 "list_incomplete": c.get("text_stats", {}).get("list_incomplete", 0.0),
+                "boundary": c.get("text_stats", {}).get("boundary", 0.0),
+                "opening": c.get("text_stats", {}).get("opening", 0.0),
+                "opening_issue": c.get("text_stats", {}).get("opening_issue", ""),
             },
         })
     prompt = ARGON_JUDGE_PROMPT.format(clips=json.dumps(payload, ensure_ascii=False))
@@ -1251,10 +1367,23 @@ def _repair(c, j, segments, duration, laughs, scenes):
     ends = [s["end"] for s in sents]
     before = (c["start"], c["end"])
 
+    # 0) A dangling conjunction or a two-word fragment: prefer the previous
+    #    sentence (it supplies the missing context), else the next full sentence.
+    issue = (c.get("text_stats") or {}).get("opening_issue")
+    if issue in ("dangling", "fragment"):
+        prev = [s for s in starts if s < c["start"] and c["start"] - s <= 10.0]
+        nxt = [s for s in starts if s > c["start"] and s - c["start"] <= 8.0]
+        if prev and c["end"] - max(prev) <= MAX_S:
+            c["start"] = max(prev)
+            moved = True
+        elif nxt and c["end"] - nxt[0] >= MIN_S:
+            c["start"] = nxt[0]
+            moved = True
+
     # 1) Context / mid-thought opening: move back to the previous sentence start, but
     #    never more than 10s (a longer rerun is a different story, not a repair).
     if flags & {"starts_mid_thought", "confusing_context", "not_standalone",
-                "context_dependent", "filler_open"} or j.get("starts_abrupt"):
+                "context_dependent", "filler_open", "weak_opening"} or j.get("starts_abrupt"):
         prev = [s for s in starts if s < c["start"] and c["start"] - s <= 10.0]
         if prev:
             c["start"] = max(prev)
@@ -1330,7 +1459,9 @@ def _repair_pool(pool, segments, duration, laughs, scenes, energy, moments,
 # ---------------------------------------------------------------- selection
 
 def _ends_well(c):
-    return c.get("qc") == "verified" or c["measured"].get("tail_laugh", 0.0) >= 0.25
+    return (c.get("qc") == "verified"
+            or c["measured"].get("tail_laugh", 0.0) >= 0.25
+            or c["argo_features"].get("boundary", 0.0) >= 0.65)
 
 
 def _temporal_iou(a, b):

@@ -1,5 +1,8 @@
 # Verification - ClipBlitz Studio 5.0.1
 
+> Superseded by `VERIFICATION-v5.0.2.md`: GLM 5.3 Flash found a fallback-tail edge case that could
+> land 0.1s inside a long next word. 5.0.2 fixes it.
+
 Patch release: the ARGON ending fix. No new engine, no new dependency, no cloud call.
 
 ## What changed

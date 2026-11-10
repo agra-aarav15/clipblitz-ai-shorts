@@ -487,6 +487,16 @@ def test_tail_pad():
           8.45 <= paused["end"] <= 8.60 and paused["tail"] >= 0.45,
           str(paused.get("end")) + " tail=" + str(paused.get("tail")))
 
+    long_word = [{"word": f"w{i}", "start": float(i), "end": float(i + 1)}
+                 for i in range(8)] + [{"word": "again", "start": 8.2, "end": 12.0}]
+    long_job = {"duration": 30.0,
+                "segments": [{"start": 0.0, "end": 12.0, "text": "long word",
+                              "words": long_word}]}
+    limited = pipeline._tighten_edges(long_job, {"start": 0.0, "end": 8.0})
+    check("argon: the fallback tail never lands inside the next word",
+          limited["end"] <= 8.15 + 0.01 and limited["end"] >= 8.0,
+          str(limited.get("end")) + " tail=" + str(limited.get("tail")))
+
     fg, simple = pipeline.ffmpeg_tools._filtergraph("blur", None, 10.0)
     check("argon: the closing fade is short, not a fade-to-black",
           "d=0.12" in (fg or simple or ""), str(fg or simple)[-40:])

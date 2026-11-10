@@ -287,12 +287,12 @@ def _tighten_edges(job, m):
                 continue
             if ws >= last - 0.01:
                 gap = ws - last
-                if gap >= 0.45:
+                if gap >= 0.50:
                     cand = min(last + wanted, ws - 0.05)
                     if cand - last >= 0.45:
                         cut = cand
                         break
-            if we > limit and last >= b - 0.01:
+            if we > limit:
                 hit_limit = True
                 break
             last = max(last, we)
@@ -301,6 +301,10 @@ def _tighten_edges(job, m):
             # the transcript simply ended; otherwise finish the current word and keep
             # the shorter tail rather than chop a syllable.
             cut = last + (min(wanted, 0.30) if hit_limit else wanted)
+            if hit_limit and ws > last:
+                # Never let the short fallback tail land inside the word that
+                # triggered the limit. End before that word instead.
+                cut = max(last, min(cut, ws - 0.05))
         b = cut
     src_end = job.get("duration")
     if src_end:

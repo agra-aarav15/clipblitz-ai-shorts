@@ -17,7 +17,7 @@ One app, one default editor: **ARGON** (hook + story + cinema in one pass). The 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v5.0.1 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
+ClipBlitz Studio v5.0.2 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 

@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.1"><b>Download v5.0.1 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.2"><b>Download v5.0.2 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -35,6 +35,13 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 5. **Traceable score v2** — computed strictly from the judge's ratings and acoustic factors (energy, laughter, pacing). No fake numbers.
 
 ---
+
+## What's new in v5.0.2
+
+- **Tail fallback edge case.** If commentary was continuous and the next word was longer
+  than the 1.2s search window, the short fallback tail could land 0.1s inside that word.
+  The tail now clamps to the next word's start. Covered by a regression test (71 ARGON
+  checks). This is the only change from 5.0.1.
 
 ## What's new in v5.0.1
 
@@ -62,7 +69,7 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.0.1)
+## ARGON, the unified engine (ClipBlitz Studio v5.0.2)
 
 One engine chooses the cut from spoken hooks, story arcs, measured peaks and cinematic beats.
 The older engines stay for comparison and fallback:
@@ -182,7 +189,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.0.1-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.1).
+1. Download **`ClipBlitzStudio-5.0.2-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.0.2).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

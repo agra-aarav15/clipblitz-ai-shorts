@@ -157,7 +157,7 @@ A short honest podium is preferred to three cuts of the same joke.
 | `clipblitz/learning.py` | ARGON has its own learning profile name |
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
 | `scripts/test_argon.py` | 63 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
-| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.1; ARGON is the documented default; legacy engines remain |
+| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.0.2; ARGON is the documented default; legacy engines remain |
 
 The old ProX/B2/APEX paths are preserved for byte-fidelity tests and as fallbacks. Nothing in
 `rights.py` changed: the agent still cannot publish, judge for the owner, or clear rights.

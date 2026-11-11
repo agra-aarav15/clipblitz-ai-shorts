@@ -1635,6 +1635,47 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     return picked, lab, "argon-editor" if has_brain() else "argon-measured", content_type
 
 
+def rejudge_clips(clips, segments, content_type="other"):
+    """Re-judge already-rendered ARGON clips with the ARGON judge and re-score them.
+    The legacy virality.rejudge path expects candidate measurements and can leave the
+    tier stale; this keeps gate, score and tier on the same judge. Returns verified."""
+    if not clips or not has_brain():
+        return 0
+    pool = []
+    for clip in clips:
+        c = dict(clip)
+        feats = {}
+        for k, v in (clip.get("argon") or {}).items():
+            if k in FEATURES and isinstance(v, (int, float)):
+                feats[k] = max(0.0, min(1.0, float(v) / 100.0))
+        c["argo_features"] = feats
+        c["measured"] = dict(clip.get("measured") or {})
+        c["flags"] = list(clip.get("flags") or [])
+        c["text_stats"] = {
+            "wps": 0.0,
+            "starts_clean": feats.get("opening", 0.0) >= 0.5,
+            "ends_final": feats.get("boundary", 0.0) >= 0.5,
+            "scenes": 0,
+            "context_dependency": feats.get("context_dependency", 0.0),
+            "list_incomplete": feats.get("failure_risk", 0.0),
+            "boundary": feats.get("boundary", 0.0),
+            "opening": feats.get("opening", 0.0),
+        }
+        pool.append(c)
+    judgments = _judge_batch(pool, segments, content_type)
+    verified = 0
+    for i, c in enumerate(pool):
+        score_candidate(c, judgments.get(i) or _offline_judgement(c), content_type)
+        clip = clips[i]
+        for key in ("score", "tier", "qc", "verdict", "reason", "factors",
+                    "argon", "flags", "gate"):
+            if key in c:
+                clip[key] = c[key]
+        if clip.get("qc") == "verified":
+            verified += 1
+    return verified
+
+
 def rank_single(segments, duration, energy, start, end, scenes=None, laughs=None,
                 motion=None):
     """A manual window measured by the same engine. No invented judge: if the brain is

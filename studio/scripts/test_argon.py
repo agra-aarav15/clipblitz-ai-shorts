@@ -563,6 +563,34 @@ def test_boundary_and_opening():
           str([a.get("label") for a in anchors]))
 
 
+def test_rejudge_updates_tier():
+    """A re-judge that finds a dead ending must clear a stale 'strong' badge."""
+    saved_has, saved_judge = argon.has_brain, argon._judge_batch
+    try:
+        argon.has_brain = lambda: True
+        argon._judge_batch = lambda cands, segs, ct: {
+            0: {"alone": True, "starts_abrupt": False, "ends_abrupt": True,
+                "coherence": 6, "hook": 8, "payoff": 1, "emotion": 6,
+                "shareability": 5, "rewatch": 4, "clarity": 6,
+                "retention_3s": 7, "retention_end": 2,
+                "flags": ["ends_before_payoff"], "verdict": "no payoff"}
+        }
+        clip = {"start": 0.0, "end": 30.0, "score": 90, "tier": "strong",
+                "qc": "unverified", "flags": [], "gate": {"passed": True, "reasons": []},
+                "measured": {"energy": 0.6, "pacing": 0.6, "event": 0.2,
+                             "laughter": 0.0, "tail_laugh": 0.0},
+                "argon": {"hook": 80, "story": 80, "payoff": 80, "emotion": 60,
+                          "shareability": 60, "clarity": 80, "loop": 50,
+                          "self_sufficient": 80, "boundary": 80, "opening": 80,
+                          "failure_risk": 10, "context_dependency": 10}}
+        n = argon.rejudge_clips([clip], SEGS, "other")
+        check("argon: a re-judge that finds no payoff clears the tier",
+              n == 0 and clip["tier"] == "reject" and clip["score"] <= 58,
+              f"{clip['tier']} {clip['score']} {clip['qc']}")
+    finally:
+        argon.has_brain, argon._judge_batch = saved_has, saved_judge
+
+
 def test_manual():
     brains_off()
     c = argon.rank_single(SEGS, DURATION, ENERGY, 8.0, 28.0, SCENES, LAUGHS, MOTION)
@@ -589,6 +617,7 @@ def main():
     test_render_payload()
     test_tail_pad()
     test_boundary_and_opening()
+    test_rejudge_updates_tier()
     test_manual()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

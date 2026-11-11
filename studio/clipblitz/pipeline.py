@@ -116,6 +116,23 @@ def save():
 _load_jobs()
 
 
+def _normalize_loaded_tiers():
+    """Old jobs can carry a tier that predates a re-judge. Recompute it from the
+    stored score/gate/flags so a 55 never renders as 'strong' after a restart."""
+    for j in JOBS.values():
+        if j.get("engine_id") != "argon":
+            continue
+        for c in j.get("clips") or []:
+            if not isinstance(c, dict) or "score" not in c:
+                continue
+            passed = bool((c.get("gate") or {}).get("passed", True))
+            c["tier"] = argon._tier(c.get("score", 0), passed,
+                                    set(c.get("flags") or []))
+
+
+_normalize_loaded_tiers()
+
+
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
             demo=False, framing="blur", top_n=None, engine=None, source=None, auto_zoom=False):
     # One product engine. Legacy engine ids are accepted only so an old caller does
@@ -581,11 +598,21 @@ def process(job_id, src_path):
 
         # QC re-check: if the judge was rate-limited during the run, cool down and retry
         # — verdicts/scores refresh without re-rendering (windows never change here).
-        if virality.has_brain() and any(c.get("qc") != "verified" for c in job_["clips"]):
+        if argon.has_brain() and any(c.get("qc") != "verified" for c in job_["clips"]):
             _set(job_, status="running", progress=98, stage="QC judge re-check (rate-limit cooldown)")
-            time.sleep(40)
+            time.sleep(20)
             try:
-                ok = virality.rejudge(job_["clips"], segments, job_.get("content_type") or "other")
+                if eng == "argon":
+                    ok = argon.rejudge_clips(job_["clips"], segments,
+                                             job_.get("content_type") or "other")
+                else:
+                    ok = virality.rejudge(job_["clips"], segments,
+                                          job_.get("content_type") or "other")
+                # A downgraded cut must not keep a stale "strong" badge. Drop a rejected
+                # clip only when at least one verified/strong clip survives.
+                kept = [c for c in job_["clips"] if c.get("tier") != "reject"]
+                if kept:
+                    job_["clips"] = kept
                 save()
                 if ok:
                     _set(job_, stage=f"QC judge verified {ok}/{len(job_['clips'])} clips")

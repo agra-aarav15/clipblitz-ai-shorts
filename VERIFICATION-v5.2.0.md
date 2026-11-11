@@ -57,16 +57,19 @@ not a promise of permanent uptime; a local Ollama server is the permanent/free o
   longer used to fill the third slot; returning two strong cuts is preferred to two strong
   plus one weak.
 - The tail search reaches 5.5s to finish a sentence and find a real pause, still clamped
-  before the next word. F1 job `d1180f9e`: three verified cuts at 96/90/85, tails
-  0.77s / 0.80s / 0.49s; measured-laugh tail 1.15s on the Sam interview.
+  before the next word. F1 measured tails: 0.77s, 0.80s, 0.49s; measured-laugh tail 1.15s.
 - Fresh 68-minute job `9c2cedef` produced three verified cuts (86, 66, 85) spanning
   106s, 3268s and 25s. The 66 was `usable` with `low_energy`/`slow_open`; the new
   strong-only podium would keep the 86 and 85, not the filler.
+- A later run (`06bd0a7b`) exposed a stale-tier bug: the legacy re-judge updated scores
+  but not tiers, leaving 55/58 as "strong". ARGON now re-judges with its own gate/score,
+  updates the tier, and drops a rejected clip when a better one survives. Old jobs are
+  normalized on load.
 
 ## Tests
 
 ```
-test_argon           79 passed, 0 failed
+test_argon           80 passed, 0 failed
 test_engines         29 passed, 0 failed, 1 skipped
 test_learning        28 passed, 0 failed
 test_agent           82 passed, 0 failed
@@ -80,7 +83,7 @@ test_quality         35 passed, 0 failed
 test_marketplace     94 passed, 0 failed
 ```
 
-**688 passed, 0 failed, 1 skipped.**
+**689 passed, 0 failed, 1 skipped.**
 
 New tests: one-engine mapping, provider pool/order/multi-key/no-key-leak, transcript cache,
 opening/ending boundary, visible tail, coverage-aware scoring.

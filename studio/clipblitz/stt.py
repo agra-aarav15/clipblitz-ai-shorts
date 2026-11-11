@@ -7,6 +7,7 @@ are retried with backoff. Every segment may carry word-level timings
 [{word, start, end}] which the caption engine uses for word-by-word animation.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -241,3 +242,38 @@ def transcribe(wav, mode):
     if mode == "local":
         return transcribe_local(wav)
     return transcribe_heuristic(wav)
+
+
+def transcribe_cached(wav, mode, source=None):
+    """Transcribe once per source file/mode. A 68-minute episode costs six API calls
+    the first time; a re-run or a second engine pass must not pay for them again.
+
+    The key is the ORIGINAL source, not the per-job temp wav, so a new job on the
+    same video hits the cache. Passing only a wav still works."""
+    try:
+        key_path = source or wav
+        stat = os.stat(key_path)
+        raw = f"{os.path.abspath(key_path)}|{stat.st_size}|{int(stat.st_mtime)}|{mode}|{CONFIG.get('stt_model')}"
+        key = hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:20]
+    except OSError:
+        return transcribe(wav, mode)
+    folder = os.path.join(CONFIG["data_dir"], "cache")
+    path = os.path.join(folder, f"stt-{key}.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list) and data:
+            return data
+    except (OSError, ValueError):
+        pass
+    segments = transcribe(wav, mode)
+    if segments:
+        try:
+            os.makedirs(folder, exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(segments, f, ensure_ascii=False)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return segments

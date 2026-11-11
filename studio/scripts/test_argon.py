@@ -412,6 +412,8 @@ def test_render_payload():
          "gate": {"passed": True, "reasons": []}, "flags": [],
          "argon": {"emotion": 80, "retention_3s": 9},
          "factors": {"hook": 80, "story": 80, "payoff": 80},
+         "measured": {"energy": 0.7, "pacing": 0.8, "event": 0.5,
+                      "laughter": 0.2, "tail_laugh": 0.1},
          "reason": "test", "engine_id": "argon"}
     real_cut = pipeline.ffmpeg_tools.cut_clip
     real_ass = pipeline.captions.build_ass
@@ -433,6 +435,9 @@ def test_render_payload():
           clip.get("argon", {}).get("retention_3s") == 9, str(clip.get("argon")))
     check("argon: the rendered clip is tagged with its engine",
           clip.get("engine_id") == "argon" and clip.get("engine") == "ARGON unified")
+    check("argon: the rendered clip keeps the measured signals a re-judge needs",
+          clip.get("measured", {}).get("energy") == 0.7
+          and "tail_laugh" in clip.get("measured", {}), str(clip.get("measured")))
 
 
 def test_tail_pad():
@@ -494,8 +499,24 @@ def test_tail_pad():
                               "words": long_word}]}
     limited = pipeline._tighten_edges(long_job, {"start": 0.0, "end": 8.0})
     check("argon: the fallback tail never lands inside the next word",
-          limited["end"] <= 8.15 + 0.01 and limited["end"] >= 8.0,
+          (limited["end"] <= 8.15 + 0.01 or limited["end"] >= 12.0)
+          and limited["end"] >= 8.0,
           str(limited.get("end")) + " tail=" + str(limited.get("tail")))
+
+    long_run = [{"word": f"w{i}", "start": float(i), "end": float(i + 1)}
+                 for i in range(8)]
+    long_run += [{"word": "more", "start": 8.0, "end": 9.0},
+                  {"word": "words", "start": 9.0, "end": 10.0},
+                  {"word": "here", "start": 10.0, "end": 11.0},
+                  {"word": "finish", "start": 11.0, "end": 11.5},
+                  {"word": "next", "start": 12.0, "end": 12.3}]
+    run_job = {"duration": 30.0,
+               "segments": [{"start": 0.0, "end": 12.3, "text": "long run",
+                             "words": long_run}]}
+    extended = pipeline._tighten_edges(run_job, {"start": 0.0, "end": 8.0})
+    check("argon: a sentence finishing 2-3s after the old cut still gets a tail",
+          extended["end"] >= 11.4 and extended["tail"] >= 0.45,
+          str(extended.get("end")) + " tail=" + str(extended.get("tail")))
 
     fg, simple = pipeline.ffmpeg_tools._filtergraph("blur", None, 10.0)
     check("argon: the closing fade is short, not a fade-to-black",

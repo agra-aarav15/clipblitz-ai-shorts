@@ -1,18 +1,32 @@
-"""Dual-brain AI layer: primary provider + automatic failover.
+"""Multi-provider AI layer: ordered brains with automatic failover.
 
-Keys/config are hot-loaded from .env on every call (paste a key → it works, no
-restart). The primary is Groq (CB_AI_*); a Gemini key (CB_GEMINI_KEY) adds Google's
-OpenAI-compatible endpoint as failover, and CB_AI_PROVIDER=gemini flips the order.
+The app talks one OpenAI-compatible chat API. This module turns whatever keys are
+configured into an ordered pool and fails over on rate limits, provider 5xx,
+network errors and empty answers. No provider is required for the deterministic
+engine; a provider only improves the editor/judge passes.
 
-Failover triggers: rate limits (429), provider 5xx, network errors, and empty
-reasoning-only answers (the gpt-oss quirk). Rate limits respect Retry-After.
+Supported without extra code:
+  groq        CB_AI_KEY / CB_GROQ_KEYS, CB_AI_BASE, CB_AI_MODEL
+  gemini      CB_GEMINI_KEY / CB_GEMINI_KEYS (OpenAI-compatible endpoint)
+  openrouter  CB_OPENROUTER_KEY, CB_OPENROUTER_MODEL
+  cerebras    CB_CEREBRAS_KEY, CB_CEREBRAS_MODEL
+  together    CB_TOGETHER_KEY, CB_TOGETHER_MODEL
+  openai      CB_OPENAI_KEY, CB_OPENAI_MODEL
+  pollinations no key, free fallback: text.pollinations.ai/openai
+  local       CB_LOCAL_BASE (default http://127.0.0.1:11434/v1), CB_LOCAL_MODEL
+
+`CB_AI_ORDER` is a comma-separated order such as "groq,cerebras,gemini,local".
+Keys/config are hot-loaded from .env on every call, so a key pasted mid-session
+works without a restart. The local probe is cached for 60s and never blocks a run.
 """
 
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .config import app_root
@@ -21,17 +35,13 @@ _ROOT = app_root()
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 GEMINI_MODEL = os.environ.get("CB_GEMINI_MODEL", "").strip() or "gemini-3.6-flash"
+POLLINATIONS_BASE = "https://text.pollinations.ai/openai"
+LOCAL_BASE = os.environ.get("CB_LOCAL_BASE", "").strip() or "http://127.0.0.1:11434/v1"
+LOCAL_MODEL = os.environ.get("CB_LOCAL_MODEL", "").strip() or "qwen2.5:7b"
 
-
-def _retired_model_successor(e):
-    """Providers announce retirements with the replacement in the body
-    ('... models/gemini-3.6-flash for the latest ...') — read it and self-heal."""
-    try:
-        body = e.read().decode("utf-8", "replace")
-    except Exception:
-        return None
-    m = re.search(r"use models/([\w.\-]+)", body) or re.search(r"models/([\w.\-]+) is no longer", body)
-    return m.group(1) if m else None
+_LOCAL_CACHE = {"at": 0.0, "ready": False, "base": ""}
+_COOLDOWN = {}  # provider name -> monotonic time it may be tried again
+_CALL_ORDER = ("groq", "gemini", "cerebras", "openrouter", "together", "openai", "pollinations", "local")
 
 
 def _read_env_keys():
@@ -47,31 +57,129 @@ def _read_env_keys():
     return keys
 
 
+def _split_keys(value):
+    return [k.strip() for k in (value or "").split(",") if k.strip()]
+
+
+def _base_ready(base):
+    """A 0.2s TCP probe, cached, so a missing local server costs nothing."""
+    parsed = urllib.parse.urlparse(base)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    now = time.time()
+    if _LOCAL_CACHE["base"] == base and now - _LOCAL_CACHE["at"] < 60.0:
+        return _LOCAL_CACHE["ready"]
+    ready = False
+    try:
+        with socket.create_connection((host, port), timeout=0.2):
+            ready = True
+    except OSError:
+        ready = False
+    _LOCAL_CACHE.update({"at": now, "ready": ready, "base": base})
+    return ready
+
+
+def _entry(name, base, key, model, headers=None):
+    return {"name": name, "base": base.rstrip("/"), "key": key or "",
+            "model": model or "", "headers": headers or {}}
+
+
+def _provider_pool(env):
+    pool = []
+
+    groq_keys = _split_keys(env.get("CB_GROQ_KEYS", "")) or _split_keys(env.get("CB_AI_KEY", ""))
+    groq_base = env.get("CB_AI_BASE", "").strip() or "https://api.groq.com/openai/v1"
+    groq_model = env.get("CB_AI_MODEL", "").strip() or "openai/gpt-oss-120b"
+    for i, key in enumerate(groq_keys):
+        pool.append(_entry(f"groq{i + 1}" if len(groq_keys) > 1 else "groq",
+                           groq_base, key, groq_model))
+
+    gemini_keys = _split_keys(env.get("CB_GEMINI_KEYS", "")) or _split_keys(env.get("CB_GEMINI_KEY", ""))
+    for i, key in enumerate(gemini_keys):
+        pool.append(_entry(f"gemini{i + 1}" if len(gemini_keys) > 1 else "gemini",
+                           GEMINI_BASE, key, GEMINI_MODEL))
+
+    or_key = env.get("CB_OPENROUTER_KEY", "").strip()
+    if or_key:
+        pool.append(_entry(
+            "openrouter", "https://openrouter.ai/api/v1", or_key,
+            env.get("CB_OPENROUTER_MODEL", "").strip() or "meta-llama/llama-3.3-70b-instruct:free",
+            {"HTTP-Referer": "http://localhost:4300", "X-Title": "ClipBlitz Studio"}))
+
+    cb_key = env.get("CB_CEREBRAS_KEY", "").strip()
+    if cb_key:
+        pool.append(_entry(
+            "cerebras", "https://api.cerebras.ai/v1", cb_key,
+            env.get("CB_CEREBRAS_MODEL", "").strip() or "llama-3.3-70b"))
+
+    tg_key = env.get("CB_TOGETHER_KEY", "").strip()
+    if tg_key:
+        pool.append(_entry(
+            "together", "https://api.together.xyz/v1", tg_key,
+            env.get("CB_TOGETHER_MODEL", "").strip() or "meta-llama/Llama-3.3-70B-Instruct-Turbo"))
+
+    oa_key = env.get("CB_OPENAI_KEY", "").strip()
+    if oa_key:
+        pool.append(_entry(
+            "openai", "https://api.openai.com/v1", oa_key,
+            env.get("CB_OPENAI_MODEL", "").strip() or "gpt-4o-mini"))
+
+    # No-key, free fallback. It is rate-limited and not a promise of uptime, but it
+    # gives the judge somewhere to go when every configured key is exhausted.
+    if env.get("CB_POLLINATIONS", "on").strip().lower() not in ("0", "off", "false", "no"):
+        pool.append(_entry(
+            "pollinations", POLLINATIONS_BASE, "",
+            env.get("CB_POLLINATIONS_MODEL", "").strip() or "openai",
+            {"HTTP-Referer": "http://localhost:4300", "X-Title": "ClipBlitz Studio"}))
+
+    local_base = env.get("CB_LOCAL_BASE", "").strip() or LOCAL_BASE
+    local_model = env.get("CB_LOCAL_MODEL", "").strip() or LOCAL_MODEL
+    if local_base and _base_ready(local_base):
+        pool.append(_entry("local", local_base, env.get("CB_LOCAL_KEY", "").strip() or "local",
+                           local_model))
+
+    wanted = [x.strip().lower() for x in env.get("CB_AI_ORDER", "").split(",") if x.strip()]
+    if wanted:
+        rank = {name: i for i, name in enumerate(wanted)}
+        pool.sort(key=lambda b: rank.get(b["name"].rstrip("0123456789"), len(wanted)))
+    elif env.get("CB_AI_PROVIDER", "").strip().lower() == "gemini":
+        pool.sort(key=lambda b: 0 if b["name"].startswith("gemini") else 1)
+    return pool
+
+
 def brains():
-    """Ordered list of usable brains: [{name, base, key, model}]."""
-    env = _read_env_keys()
-    gemini_key = env.get("CB_GEMINI_KEY", "").strip()
-    groq = {
-        "name": "groq",
-        "base": env.get("CB_AI_BASE", "").strip() or "https://api.groq.com/openai/v1",
-        "key": env.get("CB_AI_KEY", "").strip(),
-        "model": env.get("CB_AI_MODEL", "").strip() or "openai/gpt-oss-120b",
-    }
-    gemini = {"name": "gemini", "base": GEMINI_BASE, "key": gemini_key, "model": GEMINI_MODEL}
-    order = [gemini, groq] if env.get("CB_AI_PROVIDER", "").strip().lower() == "gemini" else [groq, gemini]
-    return [b for b in order if b["key"]]
+    """Ordered list of usable brains: [{name, base, key, model, headers}]."""
+    return _provider_pool(_read_env_keys())
+
+
+def brains_status():
+    """Safe health payload: provider/model names only, never a key."""
+    return [{"name": b["name"], "model": b["model"]} for b in brains()]
+
+
+def _retired_model_successor(e):
+    """Providers announce retirements with the replacement in the body
+    ('... models/gemini-3.6-flash for the latest ...') — read it and self-heal."""
+    try:
+        body = e.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    m = re.search(r"use models/([\w.\-]+)", body) or re.search(r"models/([\w.\-]+) is no longer", body)
+    return m.group(1) if m else None
 
 
 def _call_one(brain, payload, timeout=180, model_override=None):
-    # Each brain serves ITS OWN model — the caller's "model" field is just a hint for
-    # the primary. Sending the primary's model name to the failover provider 404s.
+    # Each brain serves ITS OWN model. Sending the primary's model name to a
+    # failover provider 404s, so the caller's model is only a hint.
     model = model_override or brain["model"] or payload.get("model")
     body = json.dumps({**payload, "model": model}).encode()
+    headers = {"Content-Type": "application/json", "User-Agent": "ClipBlitz/5.1"}
+    if brain.get("key"):
+        headers["Authorization"] = f"Bearer {brain['key']}"
+    headers.update(brain.get("headers") or {})
     req = urllib.request.Request(
         f"{brain['base'].rstrip('/')}/chat/completions", data=body, method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": "ClipBlitz/0.3",
-                 "Authorization": f"Bearer {brain['key']}"},
-    )
+        headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as res:
         out = json.loads(res.read())
     content = out["choices"][0]["message"].get("content")
@@ -86,27 +194,46 @@ class EmptyAnswer(Exception):
 
 def ai_chat(payload, attempts_per_brain=2):
     """One chat completion across brains: 429-aware retries per brain, then failover.
-    Raises the last error only if every brain failed."""
-    usable = brains()
+    A rate-limited provider goes on cooldown so parallel editor chunks do not all
+    wait on the same exhausted key. Raises the last error only if every brain failed."""
+    now = time.time()
+    usable = [b for b in brains() if _COOLDOWN.get(b["name"], 0.0) <= now]
     if not usable:
-        raise RuntimeError("no AI key configured (CB_AI_KEY / CB_GEMINI_KEY in .env)")
+        # Everything is cooling down. Wait only for the soonest, once.
+        soonest = min(brains(), key=lambda b: _COOLDOWN.get(b["name"], 0.0), default=None)
+        if soonest is None:
+            raise RuntimeError(
+                "no AI provider configured (set CB_AI_KEY, CB_GEMINI_KEY, "
+                "CB_OPENROUTER_KEY, CB_CEREBRAS_KEY, CB_TOGETHER_KEY, CB_OPENAI_KEY, "
+                "or run a local OpenAI-compatible server at CB_LOCAL_BASE)")
+        wait = max(0.0, _COOLDOWN.get(soonest["name"], 0.0) - now)
+        if wait > 60:
+            raise RuntimeError("all AI providers are cooling down")
+        time.sleep(wait + 0.2)
+        usable = [b for b in brains() if _COOLDOWN.get(b["name"], 0.0) <= time.time()]
+    if not usable:
+        raise RuntimeError("all AI providers are cooling down")
+    try:
+        timeout = max(30, min(240, int(os.environ.get("CB_AI_TIMEOUT", "120"))))
+    except (TypeError, ValueError):
+        timeout = 120
     last = None
     for brain in usable:
         for attempt in range(attempts_per_brain):
             try:
-                return _call_one(brain, payload)
+                return _call_one(brain, payload, timeout=timeout)
             except urllib.error.HTTPError as e:
                 last = e
                 if e.code == 404:
                     successor = _retired_model_successor(e)
-                    if successor:  # provider told us the replacement model — use it
+                    if successor:
                         try:
                             return _call_one(brain, payload, model_override=successor)
                         except urllib.error.HTTPError:
                             pass
-                    break  # this brain can't serve this request — try the other brain
+                    break
                 if e.code in (400, 401, 403):
-                    break  # this brain can't serve this request — try the other brain
+                    break
                 if e.code == 429:
                     retry_after = e.headers.get("Retry-After")
                     wait = min(90, float(retry_after)) if (retry_after or "").replace(".", "").isdigit() \
@@ -117,5 +244,6 @@ def ai_chat(payload, attempts_per_brain=2):
             except (EmptyAnswer, urllib.error.URLError, TimeoutError, OSError, KeyError,
                     ValueError) as e:
                 last = e
+                _COOLDOWN[brain["name"]] = time.time() + 15
                 time.sleep(2 + attempt * 3)
     raise last or RuntimeError("all AI brains failed")

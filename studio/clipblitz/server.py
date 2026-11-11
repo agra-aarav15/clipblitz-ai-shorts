@@ -127,28 +127,23 @@ class Handler(BaseHTTPRequestHandler):
             yt_ok = False
             if social.youtube_connected():
                 yt_ok = social.youtube_channel() is not None  # real token check
-            from .brains import brains
+            from .brains import brains, brains_status
             from . import hardware
             return self._json(200, {
                 "ok": True, "name": "ClipBlitz Studio", "version": APP_VERSION,
                 "engine": "ARGON unified", "default_engine": CONFIG.get("engine_default", "argon"),
+                # One engine. The legacy names are kept only for loading old jobs;
+                # they can no longer be selected, and no new job uses them.
                 "engines": [
                     {"id": "argon", "name": "ARGON unified",
-                     "note": "hook + story + cinema in one engine: multi-scale windows, judge, adversarial gate"},
-                    {"id": "prox", "name": "ProX v5",
-                     "note": "story-first cuts, judged and quality-gated"},
-                    {"id": "b2", "name": "B2 Pro X",
-                     "note": "cuts on shot boundaries, film grade, sound leads the cut"},
-                    {"id": "apex", "name": "APEX hook-first",
-                     "note": "retention-first hook cuts: cold-open on the strongest line, tight 8-30s"},
-                    {"id": "both", "name": "Both engines",
-                     "note": "one analysis pass, both cuts side by side"},
+                     "note": "the only engine: measured edges, multi-scale windows, judge and adversarial gate"},
                 ],
                 "hardware": hardware.profile(),
                 "ffmpeg": ffmpeg_available(), "stt": stt_mode(),
                 "ai_picker": bool(brains()), "top_n": CONFIG["top_n"],
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,
                 "brains": [b["name"] for b in brains()],
+                "providers": brains_status(),
                 # the rights gate's options come from the server so the UI copy can
                 # never drift from what the backend actually stores
                 "rights": pipeline.RIGHTS, "rights_note": pipeline.RIGHTS_NOTE,
@@ -457,10 +452,9 @@ class Handler(BaseHTTPRequestHandler):
             return 0
 
     def _engine(self, qs):
-        eng = (qs.get("engine") or [CONFIG.get("engine_default", "argon")])[0]
-        if eng not in ("prox", "b2", "apex", "argon", "both"):
-            eng = CONFIG.get("engine_default", "argon")
-        return eng if eng in ("prox", "b2", "apex", "argon", "both") else "argon"
+        """One product engine. Legacy query values are accepted and mapped to ARGON
+        so old bookmarks/scripts do not break, but they can never start a legacy run."""
+        return "argon"
 
     def _render_refused(self):
         hw = hardware.profile()
@@ -858,7 +852,7 @@ def serve(port=None):
         print(f"ClipBlitz Studio is already running -> http://localhost:{port}  "
               f"(open that tab; or kill the old instance first)")
         sys.exit(0)
-    print(f"ClipBlitz Studio v{APP_VERSION} (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both)  ->  "
+    print(f"ClipBlitz Studio v{APP_VERSION} (engine: ARGON)  ->  "
           f"http://localhost:{port}", flush=True)
     from . import hardware
     hw = hardware.profile()

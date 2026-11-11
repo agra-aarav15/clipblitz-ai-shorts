@@ -42,7 +42,9 @@ Pipeline
 
 import json
 import math
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from . import virality as V
 from .brains import ai_chat
@@ -861,10 +863,9 @@ def editor_pass(segments, duration, moments=None, max_chunks=6):
     if not has_brain() or not segments:
         return [], [], "other"
     stories, cuts, votes = [], [], {}
-    chunks = V._chunks(segments, max_chars=8500, max_chunks=max_chunks)
-    for chunk in chunks:
-        if not chunk:
-            continue
+    chunks = [c for c in V._chunks(segments, max_chars=8500, max_chunks=max_chunks) if c]
+
+    def _editor_chunk(chunk):
         a, b = float(chunk[0]["start"]), float(chunk[-1]["end"])
         events = []
         for m in moments or []:
@@ -879,12 +880,27 @@ def editor_pass(segments, duration, moments=None, max_chunks=6):
             events="\n".join(events[:6]) or "(no measured peaks in this chunk)",
         )
         try:
-            data = V._parse_json(ai_chat({
+            return V._parse_json(ai_chat({
                 "model": CONFIG["ai_model"],
                 "messages": [{"role": "user", "content": prompt + V._owner_guidance()}],
                 "temperature": 0.3,
             }))
         except Exception:
+            return None
+
+    # Chunks are independent. Parallel calls are the difference between a long
+    # episode spending 20 minutes in the editor pass and spending five.
+    try:
+        workers = max(1, min(4, int(os.environ.get("CB_EDITOR_WORKERS", "3"))))
+    except (TypeError, ValueError):
+        workers = 3
+    if len(chunks) > 1 and workers > 1 and has_brain():
+        with ThreadPoolExecutor(max_workers=min(workers, len(chunks))) as pool:
+            results = list(pool.map(_editor_chunk, chunks))
+    else:
+        results = [_editor_chunk(chunk) for chunk in chunks]
+    for data in results:
+        if not isinstance(data, dict):
             continue
         ct = str(data.get("content_type") or "").strip().lower()
         if ct:
@@ -1504,8 +1520,11 @@ def _select(pool, count, duration, segments):
     if not pool:
         return []
     candidates = sorted(pool, key=lambda c: -(c["score"] + (4 if c["qc"] == "verified" else 0)))
-    passing = [c for c in candidates if _ends_well(c) and c.get("tier") != "reject"]
-    rest = [c for c in candidates if c not in passing]
+    # Quality over a fixed count. A "usable" clip with measured defects is not a
+    # highlight; return fewer strong cuts rather than pad the podium with one.
+    passing = [c for c in candidates
+               if c.get("tier") in ("viral", "strong") and _ends_well(c)]
+    rest = []
     spread = max(14.0, 0.08 * duration)
     picked = []
     for pool_round in (passing, rest):
@@ -1532,25 +1551,8 @@ def _select(pool, count, duration, segments):
             picked.append(c)
         if len(picked) >= count:
             break
-    # If the strict spread leaves the podium short, relax the temporal floor but keep
-    # the duplicate-beat test. A shorter honest podium beats a duplicate.
-    if len(picked) < count:
-        for c in candidates:
-            if len(picked) >= count:
-                break
-            if c in picked or c.get("tier") == "reject":
-                continue
-            if any(abs(c["start"] - p["start"]) < 8.0 for p in picked):
-                continue
-            if any(abs(c["end"] - p["end"]) < 2.0 for p in picked):
-                continue
-            if any(_temporal_iou(c, p) > 0.50 for p in picked):
-                continue
-            if any(_contained(c, p) for p in picked):
-                continue
-            if any(_similarity(c, p, segments, spread) > 0.84 for p in picked):
-                continue
-            picked.append(c)
+    # If the strict spread leaves the podium short, keep it short. Filling the third
+    # slot with a usable-but-flawed clip is how a "top 3" becomes a "top 2 plus filler".
     if not picked and candidates:
         # Never fail the whole job because every candidate was downgraded. Return
         # the strongest one, honestly labelled; the gate still shows why.
@@ -1598,12 +1600,25 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     # judge: those are exactly the moments a pure lexical score misses (an overtake,
     # a goal, a reveal). Keep the shortlist bounded.
     pool = list(cands[:MAX_JUDGE])
+    # Coverage, not just lexical rank. A 68-minute interview can have all of its
+    # highest pre-scores in the first two minutes; without one candidate per time
+    # slice the judge never sees the rest of the episode and the podium cannot
+    # cover it. Add the best measured candidate from each slice.
+    slices = 6 if duration >= 2400 else 4 if duration >= 900 else 3
+    for i in range(slices):
+        lo, hi = duration * i / slices, duration * (i + 1) / slices
+        inside = [c for c in cands if lo <= c["start"] < hi]
+        if not inside:
+            continue
+        best = max(inside, key=_pre_score)
+        if best not in pool and len(pool) < MAX_JUDGE + slices:
+            pool.append(best)
     def _force(kind, n):
         return sorted([c for c in cands if c.get("anchor_kind") == kind],
                       key=lambda c: -_pre_score(c))[:n]
-    forced = _force("editor", 4) + _force("context", 6) + _force("peak", 2)
+    forced = _force("editor", 3) + _force("context", 3) + _force("peak", 3)
     for c in forced:
-        if c not in pool:
+        if c not in pool and len(pool) < MAX_JUDGE + slices + 6:
             pool.append(c)
     judgments = _judge_batch(pool, segments, content_type)
     for i, c in enumerate(pool):

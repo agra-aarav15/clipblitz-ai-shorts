@@ -45,7 +45,7 @@ DEFAULT_CLIPS = 3
 MAX_CLIPS = 8
 DEFAULT_ENGINE = "argon"
 MCP_PROTOCOL = "2024-11-05"
-ENGINES = ("prox", "b2", "apex", "argon", "both")
+ENGINES = ("argon",)
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi")
 
 TERMINAL = ("done", "error")
@@ -240,7 +240,7 @@ def start(video, clips=DEFAULT_CLIPS, engine=DEFAULT_ENGINE, style=None, answer=
     an error the caller can see (with local=True as the deliberate override).
     """
     clips = max(1, min(int(clips or DEFAULT_CLIPS), MAX_CLIPS))
-    engine = engine if engine in ENGINES else DEFAULT_ENGINE
+    engine = "argon"
     st = Studio(port)
     if not local and port_open(st.port):
         health = st.health()
@@ -371,8 +371,7 @@ CUT_SCHEMA = {
         "clips": {"type": "integer", "minimum": 1, "maximum": MAX_CLIPS,
                   "description": f"How many clips to cut (default {DEFAULT_CLIPS})."},
         "engine": {"type": "string", "enum": list(ENGINES),
-                   "description": "argon, prox, b2, apex, or both. Default argon: the "
-                                  "unified engine that combines spoken hooks, story arcs and "
+                   "description": "argon. The only engine: it combines spoken hooks, story arcs and "
                                   "cinematic boundaries."},
         "style": {"type": "string", "description": "Caption style id (optional)."},
         "rights": {"type": "string", "enum": sorted(pipeline.RIGHTS_IDS),
@@ -489,7 +488,7 @@ def call_tool(name, args):
         if answer and answer not in pipeline.RIGHTS_IDS:
             return {"error": f"rights must be one of {sorted(pipeline.RIGHTS_IDS)}"}, True
         res = cut(video, clips=args.get("clips", DEFAULT_CLIPS),
-                  engine=args.get("engine", "b2"), style=args.get("style"),
+                  engine=args.get("engine", "argon"), style=args.get("style"),
                   answer=answer, seconds=args.get("wait_seconds", 1800),
                   local=bool(args.get("local")))
         return res, not res.get("ok")

@@ -118,9 +118,9 @@ _load_jobs()
 
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
             demo=False, framing="blur", top_n=None, engine=None, source=None, auto_zoom=False):
-    engine = engine if engine in ENGINES else CONFIG.get("engine_default", "b2")
-    if engine not in ENGINES:
-        engine = "b2"
+    # One product engine. Legacy engine ids are accepted only so an old caller does
+    # not crash; every new job is ARGON.
+    engine = "argon"
     job_id = uuid.uuid4().hex[:8]
     JOBS[job_id] = {
         "id": job_id, "name": name, "status": "queued", "stage": "waiting",
@@ -181,11 +181,8 @@ def resume_autopost(job_id):
 
 
 def _variant(job, engine):
-    """Resolve an engine override for single re-renders; 'both' jobs default to b2."""
-    if engine in ("prox", "b2", "apex", "argon"):
-        return engine
-    eng = job.get("engine_id", "argon")
-    return "b2" if eng == "both" else eng
+    """One product engine. Legacy overrides are accepted but mapped to ARGON."""
+    return "argon"
 
 
 def _set(job, **kw):
@@ -279,7 +276,7 @@ def _tighten_edges(job, m):
         if ws < b:
             last = max(last, we)
     if last:
-        limit = b + 1.2
+        limit = b + 5.5
         cut = None
         hit_limit = False
         for ws, we in words:
@@ -289,7 +286,7 @@ def _tighten_edges(job, m):
                 gap = ws - last
                 if gap >= 0.50:
                     cand = min(last + wanted, ws - 0.05)
-                    if cand - last >= 0.45:
+                    if cand - last >= 0.449:
                         cut = cand
                         break
             if we > limit:
@@ -414,6 +411,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "topic": m.get("topic", ""),
         "score": m.get("score", 50),
         "factors": m.get("factors", {}),
+        "measured": m.get("measured", {}),
         "tier": m.get("tier"),
         "gate": m.get("gate"),
         "flags": m.get("flags") or [],
@@ -493,7 +491,7 @@ def process(job_id, src_path):
 
         _set(job_, stage="transcribing", progress=20)
         mode = stt_mode()
-        segments = stt.transcribe(wav, mode)
+        segments = stt.transcribe_cached(wav, mode, source=src_path)
         _set(job_, segments=segments,
              stage=f"transcribed via {mode} ({len(segments)} blocks)", progress=40)
 

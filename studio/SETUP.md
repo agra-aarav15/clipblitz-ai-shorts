@@ -1,7 +1,7 @@
 # SETUP — ClipBlitz Studio
 
-One app, one default editor: **ARGON** (hook + story + cinema in one pass). The legacy
-**ProX v5** and **B2 Pro X** engines, **APEX**, and a side-by-side **Both** mode remain available.
+One app, one engine: **ARGON** (hook + story + cinema in one pass). The legacy ProX v5,
+B2 Pro X, APEX and Both modes are retired from the product; old jobs still load.
 
 ---
 
@@ -17,12 +17,15 @@ One app, one default editor: **ARGON** (hook + story + cinema in one pass). The 
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v5.1.0 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
+ClipBlitz Studio v5.2.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
-Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_ENGINE`
-(default `argon`), `CB_DATA` (data directory), `CB_FFMPEG_DIR`, `CB_TOP_N`, `CB_TAIL_PAD` (default 0.8s, clamped 0.4-1.5).
+Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_DATA` (data
+directory), `CB_FFMPEG_DIR`, `CB_TOP_N`, `CB_TAIL_PAD` (default 0.8s, clamped 0.4-1.5),
+`CB_EDITOR_WORKERS` (parallel editor chunks, default 3), `CB_AI_ORDER` (provider order),
+and the provider keys in `.env.example` (Groq, Gemini, OpenRouter, Cerebras, Together,
+OpenAI, a local OpenAI-compatible server, plus the no-key Pollinations fallback).
 
 The interface opens in the previous dark theme. The **Desk theme** button in the top bar
 switches to the light Cutting Desk theme; the choice is remembered in this browser. The

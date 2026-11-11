@@ -4,32 +4,25 @@
 
 # ClipBlitz Studio
 
-**One unified editor, plus the engines that came before it.** Drop one long video; **ARGON**
-(hook + story + cinema) is the default. ProX v5, B2 Pro X, APEX and a side-by-side **Both**
-mode remain available as fallbacks and for comparison.
-Runs on any fresh PC and on your phone over Wi-Fi. Pure Python standard library, self-hosted
-fonts, no build step, no CDN, no tracking.
+**One engine: ARGON.** Drop one long video; it finds the moments, measures both edges,
+judges the exact transcript, and renders vertical cuts with captions. The old ProX v5,
+B2 Pro X, APEX and Both modes are retired from the product; old jobs still load, but no
+new job can select them.
 
-- **ARGON (default)** — the unified engine. It builds one candidate graph from spoken hooks,
-  story arcs, measured peaks, cinematic beats and an LLM editor pass that proposes exact
-  windows. It explores multiple sentence-aligned lengths, judges the exact final transcript,
-  rejects a great hook with a dead ending, repairs named defects deterministically, and selects
-  a diverse podium with MMR. It also trims edge silence, detects burned-in source captions and
-  moves the new captions above them, can follow faces with an optional auto crop, adds a
-  subtle slow zoom, and gives every rendered clip a poster thumbnail.
-- **ProX v5** — the story-first engine: segments the episode into stories, drafts the tightest
-  cut inside each, lands every ending on the payoff, then a strict QC judge reads the exact
-  final clip and scores it. Verified cuts are badged; anything else says "unverified".
-- **B2 Pro X** — the cinematic engine on the same spine: cuts land on real shot boundaries,
-  payoffs land on the shot that carries them, a film grade (S-curve, vignette) is applied, and
-  the sound leads the cut (J-cut) so the incoming clip pulls you in.
-- **APEX** — the hook-first engine. Where the other engines find a story and let it land, APEX
-  finds the line that *stops a scroll* and cuts the tightest window (8-30s) that pays it off.
-  It mines a different signal — open questions, hard numbers, contrarian claims, challenge
-  lines — and grades how fast the hook hits (a slow open is a real cost here, not a virtue).
-  It skips the shot-boundary pass on purpose: this engine is about the spoken hook.
-- **Both** — one analysis pass, two story-engine cuts per moment, side by side. Same story,
-  same judge verdict and score; the cut timing and the grade differ. Compare and pick.
+Runs on any fresh PC and on your phone over Wi-Fi. Pure Python standard library,
+self-hosted fonts, no build step, no CDN, no tracking.
+
+- **ARGON** builds one candidate graph from spoken hooks, story arcs, self-summary lines,
+  measured peaks and cinematic beats, plus an LLM editor pass that proposes exact windows.
+  It explores multiple sentence-aligned lengths, judges the exact final transcript, rejects
+  a great hook with a dead ending, repairs named defects deterministically, and selects a
+  diverse podium with MMR. The opening and ending are measured, not assumed: a cut through
+  a word scores 0.15, continuous speech is not a pause, and a finished sentence keeps real
+  room after it. It also trims edge silence, detects burned-in source captions and moves
+  the new captions above them, can follow faces with an optional auto crop, adds a subtle
+  slow zoom, and gives every rendered clip a poster thumbnail.
+- **Retired:** ProX v5, B2 Pro X, APEX and Both. Their source remains only so old jobs can
+  be read; they are not exposed in the UI, health payload or agent tools.
 
 ![Studio with the engine selector](docs/shots/01-studio.png)
 
@@ -39,14 +32,30 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.1.0 (engines: ARGON / ProX v5 / B2 Pro X / APEX / Both) → http://localhost:4300
+ClipBlitz Studio v5.2.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
 The startup lines above are the whole install: ffmpeg and yt-dlp ship in `bin\`, the UI and
 fonts are served locally, and your API keys live only in this machine's `.env`.
 
-![Comparison mode — both engines, side by side](docs/shots/03-compare.png)
+
+## Providers
+
+ARGON does not require a provider: the deterministic pass runs offline. When an editor or
+QC judge is available, the app uses an ordered pool and fails over automatically:
+
+- **Free/keyed:** Groq, Gemini, Cerebras, OpenRouter free models, Together, OpenAI.
+- **Free/no key:** Pollinations (`text.pollinations.ai`) is the last shared fallback.
+- **Permanent/free/local:** any OpenAI-compatible server, including Ollama
+  (`ollama pull qwen2.5:7b`, then `ollama serve`). Set `CB_LOCAL_BASE` and
+  `CB_LOCAL_MODEL`; nothing leaves the machine.
+- Multiple keys per provider can be comma-separated (`CB_GROQ_KEYS`, `CB_GEMINI_KEYS`).
+  `CB_AI_ORDER` sets the order. A rate-limited provider goes on cooldown instead of making
+  every parallel call wait on the same exhausted key.
+
+Keys stay in the local `.env`; they are never sent to the UI, health payload or logs. See
+`.env.example` for every variable.
 
 ## What is honest here
 
@@ -121,13 +130,12 @@ one logged choice. Three layers learn from those choices, each with its own evid
 | Layer | Needs | Moves |
 |---|---|---|
 | Global taste | 10 choices | payoff/hook/pacing/story, up to 10% per factor |
-| Per engine | 15 choices **on that engine** | that engine only, up to 5% more, so B2 and ProX can drift apart into what each does best for you |
+| Per engine | 15 choices **on ARGON** | ARGON only, up to 5% more, so the local model follows what you keep |
 | Factor over-index | 8 choices that carried a candidate pool | the measured factor your kept cuts beat their own pool on, up to 6% |
 
 Older choices count for less (half as much after 45 days), so the engine follows your taste
 instead of being haunted by your first week. Below a threshold nothing moves, so a fresh install
-ranks exactly like the shipped engine, and a `both`-engines run always scores on the shared
-profile because one analysis pass has exactly one ranking. The Connect screen shows the real
+ranks exactly like the shipped engine. There is one analysis pass and one ranking. The Connect screen shows the real
 counts, shares, medians and the plain-language *why* behind every multiplier in effect, with a
 Reset button. The store is a local `data/learning.json`; nothing is uploaded and there is no
 cloud training.
@@ -170,9 +178,8 @@ model shifts a proposal's score by at most 8 points — it never touches a rende
 
 **Make this** is the only place the scout causes a download: it records your make first and
 then runs the normal import, so the whole rights layer applies exactly as it always does.
-The **judgment queue** also offers the strongest evidence the taste model can get — the same
-moment cut by both engines in one `both` job — for a real kept-versus-rejected call with
-measured factors on both sides.
+The **judgment queue** can still read pairs from older comparison jobs, but new jobs are
+ARGON-only and do not create `both` pairs.
 
 From a terminal or an agent: `python -m clipblitz.agent scout "podcast clips"`, or the
 `scout_search` and `scout_queue` MCP tools — an agent can search and read the queue, but it
@@ -235,25 +242,21 @@ Run it from the Scout screen, `GET /api/clipbench` (last board) or `POST` (run n
 run.py --bench`, `python -m clipblitz.agent clipbench`, or the `clipbench` MCP tool.
 `CB_CLIPBENCH=off` switches the board off; `CB_LAB=0` removes it with the rest of the lab.
 
-## The engines, technically
+## ARGON, technically
 
-One codebase, branched per job. ARGON is the unified selection pass; B2 Pro X is a strict
-superset of ProX v5, and APEX remains a separate hook-first pass:
+One selection pass (`argon.rank`) and one render path. The engine:
 
-| | ARGON | ProX v5 | B2 Pro X | APEX |
-|---|---|---|---|---|
-| Selection | anchors + multi-scale windows (`argon.rank`) | story arcs (`virality.rank`) | story arcs, cinema-timed | spark lines + peak moments (`apex.rank`) |
-| Cut length | 10-75s, chosen per anchor | 18-75s | 18-75s | 8-30s, tight on purpose |
-| Cut boundaries | sentence edges, filler ban, laugh ride, optional shot snap | story + edge rules (sentence starts, laugh endings) | the same, snapped to measured shot boundaries and re-timed to scene grammar | sentence edges only (no shot-boundary pass) |
-| Scoring | hook + story + payoff + emotion + visual, non-compensatory gate | payoff-dominant blend | payoff-dominant blend | hook-dominant blend (`hook` 0.34, plus a measured hook-speed factor) |
-| Look | S-curve grade, vignette, J-cut | clean 1080x1920 blur-pad | S-curve grade, vignette, optional grain | S-curve grade, vignette |
-| Sound | J-cut: audio leads the picture by 0.35s | fade in/out | J-cut: audio leads the picture by 0.35s | J-cut, same as B2 |
-| Extra passes | sparks + peaks + story + cinema anchors; retention judge; adversarial gate; repair | — | scene map + motion map (cached per video) | spark scan (questions/claims/numbers/challenges) |
+- measures every candidate with the same factor set the local learning store understands;
+- measures the opening (dangling conjunction, fragment, mid-sentence) and the ending
+  (last word, next word, real pause), and repairs a weak opening;
+- judges the exact cut, then applies a non-compensatory gate so a strong hook cannot save a
+  dead ending or a clip that needs earlier context;
+- measures the first pause after the old cut (up to 5.5s) and keeps 0.5-0.8s of room, or
+  1.15s after a measured laugh, without cutting the next word;
+- selects a diverse podium with temporal/containment/lexical duplicate rejection.
 
-`both` runs the analysis once and renders each moment twice — the ProX cut from the
-pre-cinema bounds, the B2 cut from the cinema-snapped bounds. ARGON and APEX each carry
-their own learning profile, so what you keep on one does not move the story engines'
-weights.
+The legacy `virality.rank` / `apex.rank` functions remain as frozen reference code and for
+old-job replay; the product never starts them.
 
 ## Layout
 
@@ -269,7 +272,7 @@ data/             jobs.json + clips + uploads (created on first run; never commi
 SETUP.md          fresh PC, phone, Termux, YouTube OAuth
 ```
 
-Ports on this machine: Studio **4300**, classic ClipBlitz 4301, B2 Pro X 4302 (they can run
+Ports on this machine: Studio **4300**. The classic ClipBlitz 4301 and B2 Pro X 4302 ports are retired; if they still run on an old install, they can run
 side by side; each is self-contained).
 
 ## The other two screens
@@ -295,9 +298,9 @@ network, no ffmpeg):
 
 ```
 python scripts/test_argon.py      # windows, gate, judge, repair, editor pass, captions, face crop
-python scripts/test_engines.py    # prox-only == legacy ProX v5, b2-only untouched, both honest
+python scripts/test_engines.py    # frozen legacy reference code (not exposed in the product)
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds
-python scripts/test_agent.py      # MCP framing, tool honesty, risk/licence/receipt, both engines learn apart
+python scripts/test_agent.py      # MCP framing, provider pool, transcript cache, risk/licence/receipt
 python scripts/test_trainer.py    # pretrain/post-train pairs, deterministic fit, holdout gate, CB_LAB off
 python scripts/test_rights.py     # gate modes, source registry, override record, hold/resume, certificate + verifier
 python scripts/test_scout.py      # metadata-only fetch, measured features, judgment pairs, holdout gate, MCP + CLI

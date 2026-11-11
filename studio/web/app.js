@@ -152,14 +152,16 @@ fetch('/api/health').then(r => r.json()).then(h => {
      ("yt-" / "dlp"). Every value here is real; nothing is invented. */
   caps.className = 'chip eng' + (h.ffmpeg && h.ytdlp ? ' gold' : ' err');
   caps.innerHTML = [
-    `<span class="erow">${esc(h.engine || 'ProX v5')}<span class="sep">/</span>top ${esc(String(h.top_n))}</span>`,
-    `<span class="erow">brain ${esc((h.brains || ['none']).join(' + '))}</span>`,
+    `<span class="erow">${esc(h.engine || 'ARGON unified')}<span class="sep">/</span>top ${esc(String(h.top_n))}</span>`,
+    `<span class="erow">brain ${esc((h.brains || []).length
+      ? (h.brains[0] + ((h.brains.length > 1) ? ` +${h.brains.length - 1}` : ''))
+      : 'none')}</span>`,
     `<span class="erow">ffmpeg ${h.ffmpeg ? IC('check') : IC('x')}` +
       `<span class="sep">/</span>yt-dlp ${h.ytdlp ? IC('check') : IC('x')}</span>`
   ].join('');
   const live = $('livechip');
   live.innerHTML = h.ai_picker
-    ? IC('signal') + ' AI ready / v' + esc(h.version || '')
+    ? IC('signal') + ' AI ready / ' + esc(String((h.brains || []).length)) + ' / v' + esc(h.version || '')
     : IC('warn') + ' offline mode';
   live.className = 'chip' + (h.ai_picker ? ' ok' : ' err');
   HEALTH = h;

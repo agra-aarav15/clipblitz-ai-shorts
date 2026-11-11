@@ -1,8 +1,9 @@
 # ARGON - master plan, model routing, and handoff brief
 
 Status: **implemented in this workspace** as `clipstudio/clipblitz/argon.py`, wired into the
-pipeline, server, agent/MCP, learning store and UI as the new default engine (`engine_id:
-"argon"`). Old engines remain available as regression fallbacks. This file is the design record
+pipeline, server, agent/MCP, learning store and UI as the **only product engine** (`engine_id:
+"argon"`). The old ProX/B2/APEX paths remain only as frozen reference code for old-job replay.
+This file is the design record
 and the copy-paste brief for another model.
 
 > Note on the supplied screenshot: the image content arrived badly corrupted/repeated and did
@@ -156,10 +157,10 @@ A short honest podium is preferred to three cuts of the same joke.
 | `clipblitz/config.py` | `CB_ENGINE` default is `argon` |
 | `clipblitz/learning.py` | ARGON has its own learning profile name |
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
-| `scripts/test_argon.py` | 63 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
-| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.1.0; ARGON is the documented default; legacy engines remain |
+| `scripts/test_argon.py` | 79 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
+| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.2.0; ARGON is the only product engine; legacy paths are frozen |
 
-The old ProX/B2/APEX paths are preserved for byte-fidelity tests and as fallbacks. Nothing in
+The old ProX/B2/APEX paths are preserved only for byte-fidelity tests and old-job replay. Nothing in
 `rights.py` changed: the agent still cannot publish, judge for the owner, or clear rights.
 
 ---
@@ -197,16 +198,16 @@ Files that matter:
 - clipblitz/server.py           (engine validation, /api/health, default)
 - clipblitz/agent.py            (MCP/CLI surface; default engine)
 - clipblitz/learning.py         (six-factor learning store and per-engine profile)
-- scripts/test_argon.py         (63 offline checks)
-- scripts/test_engines.py       (ProX/B2 fidelity regression)
+- scripts/test_argon.py         (79 offline checks)
+- scripts/test_engines.py       (frozen legacy reference; not a product engine)
 - README.md, SETUP.md           (docs may lag the code)
 
 Context:
-ARGON replaces ProX v5 (story-first), B2 Pro X (cinema-first) and APEX (hook-first) with one
+ARGON replaced ProX v5 (story-first), B2 Pro X (cinema-first) and APEX (hook-first) with one
 engine: a four-channel anchor graph (spoken sparks, story arcs, measured peaks, cinematic beats),
 multi-scale sentence-aligned windows (10-75s), 16 deterministic features, an exact-transcript
 retention judge, a non-compensatory gate, a deterministic repair loop, and MMR diversity.
-It is now the default engine. Old engines remain as regression fallbacks.
+It is now the only product engine. Old engines remain only as frozen reference code.
 
 Hard constraints:
 - Pure Python standard library + bundled ffmpeg. No pip, npm, CDN, or build step.
@@ -215,7 +216,7 @@ Hard constraints:
 - A great hook must not compensate for a dead ending or a context-dependent opening.
 - Rights behavior must not change: no publish tool, no evasion, rights gate stays human.
 - Keep the six existing learning factor names: hook, story, payoff, energy, pacing, event.
-- Do not break ProX/B2 byte-fidelity tests.
+- Do not expose ProX/B2/APEX/Both in the UI, health payload or agent tools.
 
 Your job:
 1. Read argon.py end to end and list every real defect: wrong math, unsafe assumptions,
@@ -255,9 +256,9 @@ Return: findings, evidence, patch list, and unresolved questions.
 
 | Check | Result |
 |---|---|
-| `python scripts/test_argon.py` | 63 passed, 0 failed |
+| `python scripts/test_argon.py` | 79 passed, 0 failed |
 | `python scripts/test_engines.py` | 30 passed, 0 failed |
-| `python scripts/test_agent.py` | 75 passed, 0 failed |
+| `python scripts/test_agent.py` | 82 passed, 0 failed |
 | `python scripts/test_learning.py` | 28 passed, 0 failed |
 | `python scripts/test_trainer.py` | 64 passed, 0 failed |
 | `python scripts/test_rights.py` | 62 passed, 0 failed |
@@ -266,9 +267,9 @@ Return: findings, evidence, patch list, and unresolved questions.
 | `python scripts/test_daily.py` | 69 passed, 0 failed |
 | `python scripts/test_social.py` | 45 passed, 0 failed |
 | `python scripts/test_quality.py` | 35 passed, 0 failed |
-| `python scripts/test_marketplace.py` | 77 passed, 0 failed |
+| `python scripts/test_marketplace.py` | 94 passed, 0 failed |
 | Real demo job through `/api/demo?engine=argon` | done; 2 ARGON clips, 1080x1920 (24.9s / 46.3s); the overlap rule was tightened after this run |
-| `/api/health` | `default_engine: argon`; engines: argon, prox, b2, apex, both |
+| `/api/health` | `default_engine: argon`; engines: argon only |
 
 The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched.
 
@@ -312,6 +313,21 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
 - The blur-pad background is blurred at quarter resolution, and ARGON drops the expensive
   vignette. A 10s ARGON render fell from ~30s to ~11s on this laptop; a full demo job fell from
   538s to 174s.
+- **One product engine.** ProX/B2/APEX/Both are retired from the UI, health payload and
+  agent tools; `new_job` and every API engine override map to ARGON. The legacy modules
+  remain only as frozen reference code and for old-job replay.
+- **Provider pool.** Groq, Gemini, Cerebras, OpenRouter, Together, OpenAI, a no-key
+  Pollinations fallback, and any local OpenAI-compatible server (Ollama/LM Studio). Multiple
+  keys per provider, `CB_AI_ORDER`, a 120s call timeout and provider cooldowns. Keys never
+  appear in health/logs.
+- **Speed.** Transcripts are cached by original source file (not the per-job wav), editor
+  chunks run in parallel (`CB_EDITOR_WORKERS=3`), and a 68-minute episode fell from 48.8
+  minutes to 26.4 minutes on the same machine.
+- **Coverage.** The judge pool now guarantees one candidate from each time slice, so a long
+  interview cannot put all judged candidates in its first two minutes. The podium admits only
+  viral/strong cuts; a third "usable" clip is no longer used as filler.
+- **Ending.** The tail search reaches 5.5s to finish a sentence and find a real pause, still
+  clamped before the next word. F1 tails measured 0.49-0.80s, with a 1.15s laugh tail.
 - The dark interface remains the default; the Cutting Desk light theme is a toggle.
 
 ## 8. Known limits (do not paper over)

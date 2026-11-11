@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/shots/01-studio.png" width="900" alt="ClipBlitz Studio — One window, two engines" />
+  <img src="docs/shots/01-studio.png" width="900" alt="ClipBlitz Studio — One engine, ARGON" />
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.1.0"><b>Download v5.1.0 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.2.0"><b>Download v5.2.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -26,15 +26,33 @@
 
 ClipBlitz is an AI-powered video editor that turns podcasts, interviews, gaming sessions, and long YouTube videos into viral, vertical shorts ready for YouTube Shorts, TikTok, and Instagram Reels.
 
-Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a professional human editor:
+Unlike tools that blindly split videos every 30 seconds, ARGON treats a clip as a complete
+spoken unit with a measured opening and ending:
 
-1. **Story pass** — segments the episode into complete, self-contained stories (setup, build-up, punchline/payoff).
-2. **Draft pass** — drafts the tightest 15-60s cut inside each story, prioritizing regions with audience laughter and vocal energy.
-3. **Deterministic edge rules** — snaps starts to sentence boundaries (no "um", "so", or mid-word starts) and rides endings through audience reactions.
-4. **Strict QC judge** — an independent LLM pass reads the exact final transcript of the cut and issues a pass/fail verdict (`verified` vs `unverified`).
-5. **Traceable score v2** — computed strictly from the judge's ratings and acoustic factors (energy, laughter, pacing). No fake numbers.
+1. **Anchor graph** — spoken hooks, story arcs, self-summary lines, measured peaks and
+   cinematic beats become candidate windows at several sentence-aligned lengths.
+2. **Edge model** — measures the first sentence (dangling conjunction, fragment, mid-sentence
+   start) and the ending (last word, next word, real pause). A cut through a word scores 0.15;
+   continuous speech is not a pause; a finished sentence keeps 0.5-0.8s of room.
+3. **Exact-transcript judge** — an independent LLM reads the exact cut, rates it and names
+   concrete defects. It never invents a timestamp.
+4. **Non-compensatory gate + repair** — a great hook cannot save a dead ending or a clip that
+   needs earlier context. Repairs are deterministic and re-measured.
+5. **Coverage-aware podium** — the judge sees one candidate per time slice, and only
+   viral/strong cuts are published. Two strong clips beat three with filler.
 
 ---
+
+## What's new in v5.2.0
+
+- **One engine.** ProX v5, B2 Pro X, APEX and Both are retired from the UI, health payload
+  and agent tools. Old jobs still load; every new job is ARGON.
+- **Many providers.** Groq, Gemini, Cerebras, OpenRouter, Together, OpenAI, a no-key
+  Pollinations fallback, and any local OpenAI-compatible server (Ollama). Multiple keys,
+  ordered failover, cooldowns, 120s timeout. A 68-minute episode fell from 48.8 to 26.4
+  minutes with transcript caching and parallel editor chunks.
+- **Better coverage.** The judge pool guarantees one candidate per time slice; the podium
+  no longer fills a third slot with a usable-but-flawed clip.
 
 ## What's new in v5.1.0
 
@@ -73,8 +91,8 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 - **ARGON, one unified engine.** A four-channel anchor graph (spoken hooks, story arcs,
   measured peaks, cinematic beats), multi-scale sentence-aligned windows, 16 measured
   features, an exact-transcript retention judge, a non-compensatory ending/context gate, a
-  deterministic repair loop, and MMR diversity. It is the default engine; ProX v5, B2 Pro X,
-  APEX and Both remain available as fallbacks and for comparison.
+  deterministic repair loop, and MMR diversity. It became the only product engine in 5.2.0;
+  ProX v5, B2 Pro X, APEX and Both are retired.
 - **A judge that names the defect.** The LLM returns hook, payoff, emotion, shareability,
   rewatch, clarity, retention-at-3s, retention-to-end and concrete flags. It never invents a
   timestamp; it rates the exact final window.
@@ -84,24 +102,21 @@ Unlike tools that blindly split videos every 30 seconds, ClipBlitz thinks like a
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.1.0)
+## ARGON, the unified engine (ClipBlitz Studio v5.2.0)
 
-One engine chooses the cut from spoken hooks, story arcs, measured peaks and cinematic beats.
-The older engines stay for comparison and fallback:
+ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
+cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
+ProX v5, B2 Pro X, APEX and Both are retired; their source remains only as frozen reference
+code so old jobs still load.
 
-| Engine | How it cuts | Look & Feel | Audio |
-|---|---|---|---|
-| **ARGON** | Hook + story + cinema anchors, multi-scale windows, retention judge, gate, repair | Cinematic grade + vignette | J-cut: audio leads picture by 0.35s |
-| **ProX v5** | Story-first + sentence snap + QC judge | Clean 1080x1920 vertical blur-pad | 0.18s fade in/out |
-| **B2 Pro X** | Shot-boundary snap + scene grammar | Cinematic film grade | J-cut: audio leads picture by 0.35s |
-| **APEX** | Hook-first, tight 8-30s | Cinematic grade | J-cut |
-| **Both** | One analysis pass, two story-engine cuts side by side | Compare both grades and timings | Pick your favorite cut |
+## Providers
 
-<p align="center">
-  <img src="docs/shots/03-compare.png" width="850" alt="Both engines side by side in the comparison view" />
-</p>
-
----
+ARGON runs offline without any key. When an editor/judge is available, the app uses an
+ordered pool and fails over: Groq, Gemini, Cerebras, OpenRouter, Together, OpenAI, a no-key
+**Pollinations** fallback, and any local OpenAI-compatible server (**Ollama/LM Studio** —
+the permanent/free option). Multiple keys per provider, `CB_AI_ORDER`, 120s timeout and
+provider cooldowns. Keys stay in `.env`; they are never sent to health, UI or logs. See
+`studio/.env.example`.
 
 ## Works on any fresh PC — and on your phone
 
@@ -162,7 +177,7 @@ those choices, each with its own evidence bar:
 | Layer | Needs | Moves |
 |---|---|---|
 | Global taste | 10 choices | payoff / hook / pacing / story, up to **10% per factor** |
-| Per engine | 15 choices **on that engine** | that engine only, up to 5% more, so B2 and ProX can drift apart into what each does best for you |
+| Per engine | 15 choices **on ARGON** | ARGON only, up to 5% more, so the local model follows what you keep |
 | Factor over-index | 8 choices that carried a candidate pool | the measured factor your kept cuts beat their own pool on, up to 6% |
 
 Recent choices count more than old ones (half as much after 45 days), so the engine follows your
@@ -204,7 +219,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.1.0-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.1.0).
+1. Download **`ClipBlitzStudio-5.2.0-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.2.0).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.
@@ -238,8 +253,6 @@ studio/                 # Flagship ClipBlitz Studio (port 4300) — both engines
   plugin/               # Agent plugin: MCP server, /cut command, skill
   android/              # Android WebView companion app source
   SETUP.md              # Complete guide for fresh PCs, phones, and Termux
-clipblitz/              # Classic ClipBlitz v3.5 (ProX v5 engine only, port 4301)
-b2prox/                 # Classic B2 Pro X (Cinematic engine only, port 4302)
 docs/shots/             # Unaltered, real screenshots of every screen
 BEGINNER-GUIDE.md       # Zero-terminal guide for non-developers
 SETUP-YOUTUBE.md        # YouTube Data API v3 OAuth walkthrough

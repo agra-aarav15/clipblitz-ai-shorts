@@ -509,6 +509,75 @@ def test_agent_job_summary_shape():
           "post" not in out["clips"][0] and out["rights"] == "own")
 
 
+def test_one_engine():
+    """The product is ARGON-only. Legacy names are accepted and mapped, never run."""
+    from clipblitz import pipeline, server
+    check("one engine: the server maps a legacy engine request to argon",
+          server.Handler._engine(None, {"engine": ["b2"]}) == "argon")
+    job_id = pipeline.new_job("engine-check", top_n=1, engine="apex")
+    try:
+        check("one engine: a new job is always argon",
+              pipeline.JOBS[job_id].get("engine_id") == "argon",
+              str(pipeline.JOBS[job_id].get("engine_id")))
+    finally:
+        pipeline.JOBS.pop(job_id, None)
+
+
+def test_transcript_cache():
+    """A re-run must not pay for the same long transcription twice."""
+    from clipblitz import stt
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    calls = {"n": 0}
+    saved = stt.transcribe
+    try:
+        def fake(wav, mode):
+            calls["n"] += 1
+            return [{"start": 0.0, "end": 1.0, "text": "hello", "words": []}]
+        stt.transcribe = fake
+        first = stt.transcribe_cached(path, "api")
+        second = stt.transcribe_cached(path, "api")
+        check("cache: the same source is transcribed once",
+              calls["n"] == 1 and first == second, str(calls["n"]))
+    finally:
+        stt.transcribe = saved
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def test_provider_pool():
+    """Provider access is a pool, not two hard-coded names. Keys never leak."""
+    from clipblitz import brains as B
+    saved_env, saved_ready = B._read_env_keys, B._base_ready
+    try:
+        B._read_env_keys = lambda: {
+            "CB_AI_KEY": "g1,g2", "CB_GEMINI_KEY": "gm",
+            "CB_OPENROUTER_KEY": "or", "CB_CEREBRAS_KEY": "cb",
+            "CB_TOGETHER_KEY": "tg", "CB_OPENAI_KEY": "oa",
+            "CB_LOCAL_BASE": "http://127.0.0.1:11434/v1",
+            "CB_AI_ORDER": "cerebras,groq,gemini,openrouter,together,openai,local",
+        }
+        B._base_ready = lambda base: True
+        pool = B.brains()
+        names = [b["name"] for b in pool]
+        check("providers: many OpenAI-compatible providers are available",
+              {"groq1", "groq2", "gemini", "openrouter", "cerebras",
+               "together", "openai", "local"} <= set(names), str(names))
+        check("providers: CB_AI_ORDER is honoured",
+              names[0] == "cerebras", str(names[:3]))
+        check("providers: multiple keys rotate the same provider",
+              names.count("groq1") == 1 and names.count("groq2") == 1)
+        status = B.brains_status()
+        check("providers: the health payload never carries a key",
+              all("key" not in row for row in status)
+              and {row["name"] for row in status} == set(names), str(status))
+    finally:
+        B._read_env_keys, B._base_ready = saved_env, saved_ready
+
+
 def main():
     test_mcp_handshake()
     test_tool_surface()
@@ -525,6 +594,9 @@ def main():
     test_per_engine_refinement()
     test_routing_never_races_the_studio()
     test_agent_job_summary_shape()
+    test_one_engine()
+    test_transcript_cache()
+    test_provider_pool()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")
     for name, _, detail in fails:

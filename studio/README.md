@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.2.1 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.3.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -46,10 +46,11 @@ ARGON does not require a provider: the deterministic pass runs offline. When an 
 QC judge is available, the app uses an ordered pool and fails over automatically:
 
 - **Free/keyed:** Groq, Gemini, Cerebras, OpenRouter free models, Together, OpenAI.
-- **Free/no key:** Pollinations (`text.pollinations.ai`) is the last shared fallback.
 - **Permanent/free/local:** any OpenAI-compatible server, including Ollama
-  (`ollama pull qwen2.5:7b`, then `ollama serve`). Set `CB_LOCAL_BASE` and
+  (`ollama pull qwen2.5:3b`, then `ollama serve`). Set `CB_LOCAL_BASE` and
   `CB_LOCAL_MODEL`; nothing leaves the machine.
+- **Free/no key:** Pollinations (`text.pollinations.ai`) is the last shared fallback
+  when no local server is running.
 - Multiple keys per provider can be comma-separated (`CB_GROQ_KEYS`, `CB_GEMINI_KEYS`).
   `CB_AI_ORDER` sets the order. A rate-limited provider goes on cooldown instead of making
   every parallel call wait on the same exhausted key.
@@ -253,7 +254,12 @@ One selection pass (`argon.rank`) and one render path. The engine:
   dead ending or a clip that needs earlier context;
 - measures the first pause after the old cut (up to 5.5s) and keeps 0.5-0.8s of room, or
   1.15s after a measured laugh, without cutting the next word;
-- selects a diverse podium with temporal/containment/lexical duplicate rejection.
+- separates an acoustic reaction from laughter: a suspense sting is not a joke, and the
+  ten-label emotion read (funny, suspense, shock, emotional, inspiring, angry, wholesome,
+  hype, informative, awkward) is shown on every card; English, Hinglish, Hindi and Urdu
+  cues are supported;
+- selects a diverse podium with temporal/containment/lexical duplicate rejection and an
+  emotion-diversity preference.
 
 The legacy `virality.rank` / `apex.rank` functions remain as frozen reference code and for
 old-job replay; the product never starts them.
@@ -297,6 +303,7 @@ The engine split and the learning loop have their own offline test scripts (stdl
 network, no ffmpeg):
 
 ```
+python scripts/test_emotion.py    # reaction vs laughter, all ten emotion labels, Hindi cues, diversity
 python scripts/test_argon.py      # windows, gate, judge, repair, editor pass, captions, face crop
 python scripts/test_engines.py    # frozen legacy reference code (not exposed in the product)
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds

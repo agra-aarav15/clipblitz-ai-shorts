@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.2.1"><b>Download v5.2.1 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.3.0"><b>Download v5.3.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -43,7 +43,7 @@ spoken unit with a measured opening and ending:
 
 ---
 
-## What's new in v5.2.1
+## What's new in v5.3.0
 
 - **One engine.** ProX v5, B2 Pro X, APEX and Both are retired from the UI, health payload
   and agent tools. Old jobs still load; every new job is ARGON.
@@ -91,7 +91,7 @@ spoken unit with a measured opening and ending:
 - **ARGON, one unified engine.** A four-channel anchor graph (spoken hooks, story arcs,
   measured peaks, cinematic beats), multi-scale sentence-aligned windows, 16 measured
   features, an exact-transcript retention judge, a non-compensatory ending/context gate, a
-  deterministic repair loop, and MMR diversity. It became the only product engine in 5.2.1;
+  deterministic repair loop, and MMR diversity. It became the only product engine in 5.3.0;
   ProX v5, B2 Pro X, APEX and Both are retired.
 - **A judge that names the defect.** The LLM returns hook, payoff, emotion, shareability,
   rewatch, clarity, retention-at-3s, retention-to-end and concrete flags. It never invents a
@@ -102,7 +102,7 @@ spoken unit with a measured opening and ending:
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.2.1)
+## ARGON, the unified engine (ClipBlitz Studio v5.3.0)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -219,7 +219,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.2.1-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.2.1).
+1. Download **`ClipBlitzStudio-5.3.0-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.3.0).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

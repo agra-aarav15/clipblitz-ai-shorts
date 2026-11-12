@@ -965,6 +965,7 @@ function clipCardHTML(job, c, i) {
     <div class="clipmeta">
       ${c.engine ? `<span class="engbadge">${esc(c.engine)}</span>` : ''}
       ${c.tier ? `<span class="engbadge">${esc(c.tier)}</span>` : ''}
+      ${c.emotion_label ? `<span class="engbadge emochip" title="dominant emotion read from the exact transcript">${esc(c.emotion_label)}</span>` : ''}
       <span>${c.duration}s / from ${fmt(c.start)}${c.custom ? ' / custom cut' : ''}</span>
       ${c.argon && Number.isFinite(c.argon.retention_3s) ? `<span class="dim mono">retention ${c.argon.retention_3s}/10 → ${c.argon.retention_end}/10</span>` : ''}
       ${(c.flags || []).length ? `<span class="dim">flags: ${esc(c.flags.join(', '))}</span>` : ''}

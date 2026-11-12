@@ -639,10 +639,13 @@ def _event_factor(moments, a, b):
     return best
 
 
-def measure(cands, segments, energy, laughs, moments=None):
-    """Deterministic factors per cut (no AI): energy (laugh-boosted), pacing, laughter,
-    the tail laugh — how hard the ENDING lands — and event coverage (the measured peak
-    moments of the video this cut actually contains)."""
+def measure(cands, segments, energy, laughs, moments=None, comedy=True):
+    """Deterministic factors per cut (no AI): energy, pacing, laughter, the tail
+    reaction — how hard the ENDING lands — and event coverage.
+
+    ``comedy=False`` keeps the raw acoustic burst in ``reaction`` but does not call
+    it laughter and does not let it inflate energy. A suspense sting and a joke can
+    have the same RMS envelope; only the words can tell them apart."""
     series, mean_db = energy if energy else ([], -30.0)
     for c in cands:
         if not isinstance(c, dict):
@@ -651,12 +654,13 @@ def measure(cands, segments, energy, laughs, moments=None):
         laugh = laughter_score(laughs or [], a, b) if laughs else 0.0
         tail_laugh = laughter_score(laughs or [], max(a, b - 8.0), b + 1.5) if laughs else 0.0
         energy_f = _energy_in(series, mean_db, a, b)
-        if laughs:
+        if laughs and comedy:
             energy_f = min(1.0, 0.35 * energy_f + 0.65 * laugh)
-        c["laugh"] = laugh
-        c["tail_laugh"] = tail_laugh
+        c["laugh"] = laugh if comedy else 0.0
+        c["tail_laugh"] = tail_laugh if comedy else 0.0
         c["measured"] = {"energy": energy_f, "pacing": _pacing(segments, a, b),
-                         "laughter": laugh, "tail_laugh": tail_laugh,
+                         "reaction": laugh, "laughter": laugh if comedy else 0.0,
+                         "tail_laugh": tail_laugh if comedy else 0.0,
                          "event": _event_factor(moments or [], a, b)}
     return cands
 
@@ -1142,7 +1146,7 @@ Return ONLY compact JSON, no markdown. For each clip, matching by index:
                 "messages": [{"role": "user", "content": META_PROMPT.format(
                     clips=json.dumps(payload_clips, ensure_ascii=False))}],
                 "temperature": 0.6,
-            })).get("clips"))
+            }, timeout=30)).get("clips"))
             meta = {}
             for c in out:
                 if not isinstance(c, dict) or _as_float(c.get("index")) is None:

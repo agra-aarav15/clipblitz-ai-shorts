@@ -24,6 +24,7 @@ import json
 import os
 import re
 import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -37,7 +38,7 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 GEMINI_MODEL = os.environ.get("CB_GEMINI_MODEL", "").strip() or "gemini-3.6-flash"
 POLLINATIONS_BASE = "https://text.pollinations.ai/openai"
 LOCAL_BASE = os.environ.get("CB_LOCAL_BASE", "").strip() or "http://127.0.0.1:11434/v1"
-LOCAL_MODEL = os.environ.get("CB_LOCAL_MODEL", "").strip() or "qwen2.5:7b"
+LOCAL_MODEL = os.environ.get("CB_LOCAL_MODEL", "").strip() or "qwen2.5:3b"
 
 _LOCAL_CACHE = {"at": 0.0, "ready": False, "base": ""}
 _COOLDOWN = {}  # provider name -> monotonic time it may be tried again
@@ -124,6 +125,15 @@ def _provider_pool(env):
             "openai", "https://api.openai.com/v1", oa_key,
             env.get("CB_OPENAI_MODEL", "").strip() or "gpt-4o-mini"))
 
+    local_base = env.get("CB_LOCAL_BASE", "").strip() or LOCAL_BASE
+    local_model = env.get("CB_LOCAL_MODEL", "").strip() or LOCAL_MODEL
+    if local_base and _base_ready(local_base):
+        pool.append(_entry("local", local_base, env.get("CB_LOCAL_KEY", "").strip() or "local",
+                           local_model))
+
+    # No-key, free fallback. It is rate-limited and not a promise of uptime; the
+    # local model above is the permanent option. It stays here so a machine without
+    # a local runtime can still try a hosted free tier.
     # No-key, free fallback. It is rate-limited and not a promise of uptime, but it
     # gives the judge somewhere to go when every configured key is exhausted.
     if env.get("CB_POLLINATIONS", "on").strip().lower() not in ("0", "off", "false", "no"):
@@ -131,12 +141,6 @@ def _provider_pool(env):
             "pollinations", POLLINATIONS_BASE, "",
             env.get("CB_POLLINATIONS_MODEL", "").strip() or "openai",
             {"HTTP-Referer": "http://localhost:4300", "X-Title": "ClipBlitz Studio"}))
-
-    local_base = env.get("CB_LOCAL_BASE", "").strip() or LOCAL_BASE
-    local_model = env.get("CB_LOCAL_MODEL", "").strip() or LOCAL_MODEL
-    if local_base and _base_ready(local_base):
-        pool.append(_entry("local", local_base, env.get("CB_LOCAL_KEY", "").strip() or "local",
-                           local_model))
 
     wanted = [x.strip().lower() for x in env.get("CB_AI_ORDER", "").split(",") if x.strip()]
     if wanted:
@@ -168,7 +172,29 @@ def _retired_model_successor(e):
     return m.group(1) if m else None
 
 
+_SEM_LOCK = threading.Lock()
+_SEMS = {}
+
+
+def _semaphore(name, capacity=1):
+    with _SEM_LOCK:
+        sem = _SEMS.get(name)
+        if sem is None:
+            sem = threading.BoundedSemaphore(capacity)
+            _SEMS[name] = sem
+        return sem
+
+
 def _call_one(brain, payload, timeout=180, model_override=None):
+    # Free tiers return 429 when two editor chunks and the judge all hit the same
+    # key at once. Queue per provider instead of pretending the quota is larger.
+    sem = _semaphore(brain["name"], 2 if brain["name"] in ("local", "openai") else 1)
+    with sem:
+        return _call_one_raw(brain, payload, timeout=timeout,
+                             model_override=model_override)
+
+
+def _call_one_raw(brain, payload, timeout=180, model_override=None):
     # Each brain serves ITS OWN model. Sending the primary's model name to a
     # failover provider 404s, so the caller's model is only a hint.
     model = model_override or brain["model"] or payload.get("model")
@@ -192,7 +218,7 @@ class EmptyAnswer(Exception):
     pass
 
 
-def ai_chat(payload, attempts_per_brain=2):
+def ai_chat(payload, attempts_per_brain=2, timeout=None):
     """One chat completion across brains: 429-aware retries per brain, then failover.
     A rate-limited provider goes on cooldown so parallel editor chunks do not all
     wait on the same exhausted key. Raises the last error only if every brain failed."""
@@ -213,10 +239,13 @@ def ai_chat(payload, attempts_per_brain=2):
         usable = [b for b in brains() if _COOLDOWN.get(b["name"], 0.0) <= time.time()]
     if not usable:
         raise RuntimeError("all AI providers are cooling down")
-    try:
-        timeout = max(30, min(240, int(os.environ.get("CB_AI_TIMEOUT", "120"))))
-    except (TypeError, ValueError):
-        timeout = 120
+    if timeout is None:
+        try:
+            timeout = max(30, min(240, int(os.environ.get("CB_AI_TIMEOUT", "60"))))
+        except (TypeError, ValueError):
+            timeout = 120
+    else:
+        timeout = max(5, min(240, int(timeout)))
     last = None
     for brain in usable:
         for attempt in range(attempts_per_brain):
@@ -235,11 +264,14 @@ def ai_chat(payload, attempts_per_brain=2):
                 if e.code in (400, 401, 403):
                     break
                 if e.code == 429:
+                    # Do not burn the request budget waiting on an exhausted key:
+                    # cool this provider down and fail over immediately. The editor
+                    # chunks and the judge have other providers to try.
                     retry_after = e.headers.get("Retry-After")
                     wait = min(90, float(retry_after)) if (retry_after or "").replace(".", "").isdigit() \
                         else 15 + attempt * 15
-                    time.sleep(wait)
-                    continue
+                    _COOLDOWN[brain["name"]] = time.time() + max(5.0, wait)
+                    break
                 time.sleep(2 + attempt * 3)
             except (EmptyAnswer, urllib.error.URLError, TimeoutError, OSError, KeyError,
                     ValueError) as e:

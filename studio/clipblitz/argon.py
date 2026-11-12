@@ -96,6 +96,96 @@ EMOTION_WORDS = ("love", "hate", "shocked", "insane", "crazy", "unbelievable",
                  "amazing", "terrible", "afraid", "scared", "angry", "proud",
                  "cried", "laughed", "died", "won", "lost", "best", "worst")
 
+# One taxonomy for the judge, the measured pass and the card. A clip gets one
+# dominant label and can carry a secondary label; "funny" is not a synonym for
+# "any reaction sound". The order is the tie-break priority when cue counts tie.
+EMOTION_LABELS = ("funny", "suspense", "shock", "emotional", "inspiring",
+                  "angry", "wholesome", "hype", "informative", "awkward")
+EMOTION_ALIASES = {
+    "tense": "suspense", "tension": "suspense", "mystery": "suspense",
+    "scary": "suspense", "fear": "suspense", "thriller": "suspense",
+    "surprise": "shock", "surprising": "shock", "twist": "shock",
+    "sad": "emotional", "heartfelt": "emotional", "moving": "emotional",
+    "inspired": "inspiring", "inspirational": "inspiring", "motivational": "inspiring",
+    "excited": "hype", "excitement": "hype", "energetic": "hype", "action": "hype",
+    "fun": "funny", "comedy": "funny", "humorous": "funny", "hilarious": "funny",
+    "cringe": "awkward", "uncomfortable": "awkward", "informative": "informative",
+    "educational": "informative", "warm": "wholesome", "heartwarming": "wholesome",
+    "furious": "angry", "outrage": "angry",
+}
+
+# Cues are lowercase words/phrases. A phrase counts more than a single word, and
+# the acoustic reaction signal only becomes "funny" when one of these cues exists.
+EMOTION_CUES = {
+    "funny": ("joke", "jokes", "joking", "funny", "laugh", "laughs", "laughed",
+              "laughing", "haha", "hilarious", "comedy", "punchline", "roast",
+              "silly", "banter", "made me laugh", "cracked up", "stand-up",
+              "standup", "comedian", "meme", "banter", "pee", "lizard",
+              "godzilla", "hokey", "bananas", "biscuit", "cup of tea", "dodgy",
+              "brown man", "horse with horns", "who let the dogs out", "swimming",
+              "seat full of water", "sweat from", "apart from that", "that's rude",
+              "i wish i could say", "something loose", "made a mistake", "oh dear",
+              "no please", "you're welcome", "deer", "sweat", "tent",
+              "grandstand", "sounds like", "just you", "fairly chill", "relax",
+              "bananas", "biscuit", "cup of tea", "rain on my bike", "मजेदार", "मज़ेदार", "हंसी", "हँसी",
+              "जोक", "जोक्स", "मजाक", "मज़ाक", "कॉमेडी", "हंस", "مزاحیہ", "ہنسی",
+              "جوك", "مذاق"),
+    "suspense": ("suspense", "mystery", "secret", "secrets", "what happened",
+                 "who did", "missing", "investigate", "investigation", "detective",
+                 "case", "clue", "evidence", "danger", "dangerous", "scared",
+                 "afraid", "threat", "warning", "nervous", "tension", "tense",
+                 "hidden", "behind", "trap", "suddenly", "wait", "reveal",
+                 "the truth", "no idea", "someone", "door", "phone call", "vanished",
+                 "राज", "रहस्य", "सच", "क्या हुआ", "कौन", "डर", "खतरा", "पुलिस",
+                 "जासूस", "जांच", "सबूत", "मामला", "छुपा", "दरवाजा", "फोन", "गायब",
+                 "शक", "पीछे", "راز", "کیا ہوا", "کون", "خوف", "خطرہ", "پولیس",
+                 "جاسوس", "تحقیق", "ثبوت", "معاملہ", "چھپا", "دروازہ", "فون", "غائب", "شک"),
+    "shock": ("shocked", "shocking", "unbelievable", "insane", "crazy", "sudden",
+              "out of nowhere", "twist", "scandal", "exposed", "arrested", "caught",
+              "died", "accident", "exploded", "banned", "record", "nobody expected",
+              "what the hell", "oh my god", "wtf", "शॉक", "हैरान", "अचानक", "धमाका",
+              "मौत", "हादसा", "सनसनी", "صدمہ", "حیران", "اچانک", "دھماکہ", "موت",
+              "حادثہ"),
+    "emotional": ("cried", "crying", "tears", "hurt", "pain", "lost", "grief",
+                  "passed away", "vulnerable", "heartbroken", "emotional", "love",
+                  "family", "mother", "father", "son", "daughter", "miss", "alone",
+                  "sad", "broke down", "hardest", "trauma", "childhood", "रोया",
+                  "रोई", "आंसू", "दर्द", "परिवार", "मां", "माँ", "पिता", "प्यार",
+                  "टूट", "अकेला", "رویا", "آنسو", "درد", "خاندان", "ماں", "والد",
+                  "محبت", "اکیلا"),
+    "inspiring": ("inspired", "inspiring", "dream", "never give up", "overcome",
+                  "struggle", "success", "prove", "proved", "believe", "hope",
+                  "change", "journey", "worked", "win", "champion", "first",
+                  "proud", "made it", "against all odds", "keep going", "सपना",
+                  "हार", "जीत", "मेहनत", "कोशिश", "कामयाब", "प्रेरणा", "खुद पर",
+                  "सपنا", "ہار", "جیت", "محنت", "کوشش", "کامیاب", "حوصلہ"),
+    "angry": ("angry", "furious", "hate", "rage", "fight", "argument", "stupid",
+              "idiot", "unfair", "betrayed", "disrespect", "shut up", "damn",
+              "hell", "wronged", "screaming", "yelling", "गुस्सा", "नाराज",
+              "बेइज्जती", "झगड़ा", "धोखा", "चिल्ला", "غصہ", "ناراض", "جھگڑا",
+              "دھوکہ", "چیخ"),
+    "wholesome": ("kind", "kindness", "helped", "helping", "thank", "grateful",
+                  "sweet", "wholesome", "care", "generous", "support", "together",
+                  "community", "good person", "made his day", "made her day",
+                  "मदद", "शुक्रिया", "दया", "भलाई", "अच्छा", "مدد", "شکریہ",
+                  "نیکی", "اچھا"),
+    "hype": ("let's go", "come on", "huge", "massive", "fast", "overtake",
+             "winner", "wins", "goal", "touchdown", "slam", "incredible",
+             "unreal", "best ever", "championship", "record", "yes", "wow",
+             "शानदार", "जबरदस्त", "तेज", "जीत", "गोल", "धमाल", "زبردست",
+             "تیز", "جیت", "گول"),
+    "informative": ("because", "reason", "means", "explain", "how to", "the way",
+                    "research", "study", "data", "science", "actually", "lesson",
+                    "learn", "understand", "here's why", "the point is", "क्यों",
+                    "कैसे", "मतलब", "सबक", "जानकारी", "वजह", "کیوں", "کیسے",
+                    "مطلب", "سبق", "معلومات", "وجہ"),
+    "awkward": ("awkward", "cringe", "embarrassing", "uncomfortable", "silence",
+                "weird", "strange", "oops", "mistake", "sorry", "uh", "um",
+                "अजीब", "शर्मिंदा", "खामोशी", "गलती", "عجیب", "شرمندہ",
+                "خاموشی", "غلطی"),
+}
+COMEDY_CUES = EMOTION_CUES["funny"]
+
 SHARE_WORDS = ("everyone", "nobody", "never", "always", "best", "worst", "first",
                "last", "only", "biggest", "fastest", "secret", "truth", "proof",
                "mistake", "wrong", "banned", "record", "million", "billion")
@@ -141,7 +231,7 @@ FATAL_FLAGS = {"starts_mid_thought", "ends_before_payoff", "no_payoff",
                "misleading", "empty"}
 WARNING_FLAGS = {"weak_hook", "low_energy", "repetitive", "context_dependent",
                  "slow_open", "weak_ending", "too_long", "filler_open",
-                 "screen_dependent", "list_incomplete"}
+                 "screen_dependent", "list_incomplete", "emotion_mismatch"}
 
 # ARGON's own blend. The story engines weight payoff above all; ARGON keeps payoff
 # important but treats hook and story as first-class because retention is decided in
@@ -310,11 +400,89 @@ def _shareability(text):
     return min(1.0, score)
 
 
-def _emotion(text):
+def _cue_hits(low, cues):
+    """Weighted cue count. Phrases are stronger evidence than single words, so a
+    line saying 'out of nowhere' beats a line containing only 'wait'."""
+    n = 0.0
+    tokens = None
+    for cue in cues:
+        # Devanagari/Urdu words do not get reliable \b boundaries in Python's Unicode
+        # regex mode, and substring matching turns "तुम्हारी" into "हार" (loss). Split
+        # on whitespace/punctuation and require the whole cue word instead.
+        if any(ord(ch) > 127 for ch in cue):
+            if " " in cue:
+                n += 1.5 * low.count(cue)
+            else:
+                if tokens is None:
+                    tokens = re.findall(r"[^\s.,!?;:…\"'()\[\]]+", low)
+                n += tokens.count(cue)
+        elif " " in cue:
+            n += 1.5 * low.count(cue)
+        else:
+            n += len(re.findall(r"\b" + re.escape(cue) + r"\b", low))
+    return n
+
+
+def _comedy_context(text, content_type=None, judge_label=None):
+    """Is there actual comedy evidence in the words? Acoustic energy bursts are not
+    jokes: a suspense sting, a crowd roar and a laugh all raise RMS. Only a comedy
+    cue (or a comedy clip type / judge label) may turn a burst into a laugh signal."""
+    if (content_type or "").lower() in ("comedy",):
+        return True
+    if judge_label and str(judge_label).lower() in ("funny", "comedy"):
+        return True
     low = _norm(text)
-    words = set(re.findall(r"[a-z']+", low))
-    hits = len(words & set(EMOTION_WORDS))
-    return min(1.0, 0.20 + 0.18 * hits + (0.12 if "!" in low else 0.0))
+    return any(cue in low for cue in COMEDY_CUES)
+
+
+def _emotion_profile(text, measured=None, content_type=None):
+    """Deterministic emotion read from the exact words plus safe measured signals.
+
+    Returns the dominant label, its intensity, and the full score map. It never
+    interprets an acoustic burst as laughter without a comedy cue, which is how a
+    tense detective scene stops being rated as a comedy just because it has a sting.
+    """
+    low = _norm(text)
+    reaction = float((measured or {}).get("reaction", 0.0) or 0.0)
+    raw = {}
+    for label in EMOTION_LABELS:
+        raw[label] = _cue_hits(low, EMOTION_CUES[label])
+    raw["funny"] = raw.get("funny", 0.0)
+    # Punctuation is weak evidence; never enough to choose an emotion by itself.
+    if "?" in low:
+        raw["suspense"] += 0.15
+        raw["informative"] += 0.10
+    if "!" in low:
+        raw["shock"] += 0.12
+        raw["hype"] += 0.12
+    ctype = (content_type or "").lower()
+    if ctype == "comedy":
+        raw["funny"] += 0.8
+    elif ctype == "sports":
+        raw["hype"] += 0.45 + 0.55 * float((measured or {}).get("event", 0.0) or 0.0)
+    elif ctype in ("interview", "podcast", "speech"):
+        raw["informative"] += 0.20
+    if _comedy_context(low):
+        raw["funny"] += 0.55 + 0.45 * reaction
+    # A reaction sound alone is not funny. It can reinforce a funny read but cannot
+    # create one; the same is true for hype in a sports cut with a measured event.
+    if raw["funny"] <= 0.0:
+        raw["funny"] = 0.0
+    top = max(raw.values()) if raw else 0.0
+    if top <= 0.0:
+        return {"label": "informative", "intensity": 0.2,
+                "scores": {k: 0 for k in EMOTION_LABELS}, "reaction": reaction}
+    # Stable priority: earlier labels win exact ties, so the output is reproducible.
+    label = next(k for k in EMOTION_LABELS if raw[k] == top)
+    intensity = min(1.0, top / 3.0)
+    return {"label": label, "intensity": round(intensity, 3),
+            "scores": {k: round(min(1.0, v / 3.0), 3) for k, v in raw.items()},
+            "reaction": round(reaction, 3)}
+
+
+def _emotion(text):
+    """Backward-compatible intensity helper used by older tests and reports."""
+    return _emotion_profile(text).get("intensity", 0.2)
 
 
 def _resolution(text):
@@ -500,9 +668,14 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
     already consume; the extra ARGON factors are shown on the card and used by the
     score, but are not silently fed into models that expect a six-dimensional vector.
     """
-    V.measure([c], segments, energy, laughs, moments)
     a, b = c["start"], c["end"]
     text = V._text_in(segments, a, b, 2400)
+    # Decide what kind of reaction this is BEFORE measuring: an acoustic burst is
+    # called laughter only when the words contain a comedy cue. A suspense sting is
+    # measured as reaction, not as a joke.
+    comedy = _comedy_context(text)
+    V.measure([c], segments, energy, laughs, moments, comedy=comedy)
+    emotion = _emotion_profile(text, c["measured"])
     head = V._text_in(segments, a, a + 6.0, 320)
     tail = V._text_in(segments, max(a, b - 6.0), b + 0.5, 320)
     dur = max(0.1, b - a)
@@ -535,7 +708,8 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
         "energy": max(0.0, min(1.0, energy_f)),
         "pacing": max(0.0, min(1.0, c["measured"]["pacing"])),
         "event": max(0.0, min(1.0, event_f)),
-        "emotion": min(1.0, 0.45 * _emotion(text) + 0.35 * laugh_f + 0.20 * tail_laugh),
+        "emotion": min(1.0, 0.72 * emotion["intensity"]
+                         + 0.18 * laugh_f + 0.10 * tail_laugh),
         "novelty": max(0.0, min(1.0, _lexical_novelty(text))),
         "visual": max(0.0, min(1.0, 0.55 * mean_motion + 0.30 * peak_motion
                                 + 0.15 * min(1.0, cuts / 2.0))),
@@ -574,6 +748,10 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
                        "ends_final_measured": boundary_final,
                        "opening": round(opening, 3),
                        "opening_issue": opening_issue}
+    c["emotion"] = dict(emotion)
+    c["emotion_label"] = emotion["label"]
+    c["emotion_scores"] = dict(emotion["scores"])
+    c["comedy_context"] = bool(comedy)
     return c
 
 
@@ -644,6 +822,29 @@ def _spark_anchors(sparks, limit=18):
                     "kind": "spark", "priority": 0.7 + 0.3 * s["pull"],
                     "spark": s, "label": s.get("kind") or "spoken hook"})
     return out
+
+
+def _emotion_anchors(segments, limit=12):
+    """One strong seed per emotion, not just per laugh. A video with a tense reveal,
+    a sad confession and a funny line should put all three into the candidate budget;
+    picking only acoustic peaks is what made every source look like a comedy."""
+    best = {}
+    for s in _sentences(segments):
+        p = _emotion_profile(s["text"])
+        label = p["label"]
+        if label == "informative" and p["intensity"] < 0.40:
+            continue
+        prev = best.get(label)
+        if prev is None or p["intensity"] > prev[0]:
+            best[label] = (p["intensity"], s)
+    out = []
+    for label, (intensity, s) in best.items():
+        out.append({"start": float(s["start"]), "end": float(s["end"]),
+                    "kind": "emotion", "priority": 0.58 + 0.30 * intensity,
+                    "emotion_label": label,
+                    "label": f"{label} beat"})
+    out.sort(key=lambda a: -a["priority"])
+    return out[:limit]
 
 
 def _cinema_anchors(scenes, motion, duration, limit=8):
@@ -891,7 +1092,7 @@ def editor_pass(segments, duration, moments=None, max_chunks=6):
     # Chunks are independent. Parallel calls are the difference between a long
     # episode spending 20 minutes in the editor pass and spending five.
     try:
-        workers = max(1, min(4, int(os.environ.get("CB_EDITOR_WORKERS", "3"))))
+        workers = max(1, min(4, int(os.environ.get("CB_EDITOR_WORKERS", "2"))))
     except (TypeError, ValueError):
         workers = 3
     if len(chunks) > 1 and workers > 1 and has_brain():
@@ -1002,6 +1203,7 @@ def _build_candidates(segments, duration, energy, laughs, moments, scenes, motio
         out.append(c)
     anchors = (_spark_anchors(sparks) + _payoff_anchors(segments, laughs)
                + _story_anchors(stories) + _peak_anchors(moments)
+               + _emotion_anchors(segments)
                + _cinema_anchors(scenes, motion, duration))
     # The anchor graph can contain the same second several times; keep the strongest
     # one so the candidate budget is spent on different moments, not on aliases.
@@ -1047,7 +1249,13 @@ For each clip return:
 - "coherence": 0-10 as a standalone story
 - "hook": 0-10 for the opening
 - "payoff": 0-10 for the ending landing
-- "emotion": 0-10 for felt emotion (laughter, shock, tension, relief)
+- "emotion_label": the dominant felt emotion in THIS exact window. Choose exactly
+  one of: funny, suspense, shock, emotional, inspiring, angry, wholesome, hype,
+  informative, awkward. A tense reveal is suspense, not funny. A crowd roar or a
+  reaction sound is not comedy unless the words or action are actually comic.
+- "emotion": 0-10 intensity of that dominant emotion. This is intensity, not a
+  second vote on whether the clip is funny.
+- "secondary_emotion": optional second label from the same list, or "" if none.
 - "shareability": 0-10 for "would someone send this to a friend?"
 - "rewatch": 0-10 for loop/rewatch value
 - "clarity": 0-10 for easy comprehension at normal speed
@@ -1069,6 +1277,7 @@ Clips:
 Return ONLY compact JSON, no markdown:
 {{"judgements": [{{"index": 0, "alone": true, "starts_abrupt": false,
 "ends_abrupt": false, "coherence": 8, "hook": 8, "payoff": 8, "emotion": 7,
+"emotion_label": "suspense", "secondary_emotion": "",
 "shareability": 7, "rewatch": 6, "clarity": 8, "retention_3s": 8,
 "retention_end": 8, "flags": [], "verdict": "..."}}]}}
 """
@@ -1104,6 +1313,13 @@ def _clean_flags(raw):
     return sorted(set(out))
 
 
+def _clean_emotion_label(value):
+    """Map judge vocabulary onto the one taxonomy; unknown labels are not invented."""
+    s = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    s = EMOTION_ALIASES.get(s, s)
+    return s if s in EMOTION_LABELS else ""
+
+
 def _offline_judgement(c):
     """No brain: never pretend a judge spoke. Measured factors only, labelled as such."""
     f = c.get("argo_features") or {}
@@ -1115,6 +1331,8 @@ def _offline_judgement(c):
         "hook": round(3.0 + 7.0 * f.get("hook", 0.5), 1),
         "payoff": round(3.0 + 7.0 * f.get("payoff", 0.5), 1),
         "emotion": round(3.0 + 7.0 * f.get("emotion", 0.5), 1),
+        "emotion_label": c.get("emotion_label") or "informative",
+        "secondary_emotion": "",
         "shareability": round(3.0 + 7.0 * f.get("shareability", 0.5), 1),
         "rewatch": round(3.0 + 7.0 * f.get("loop", 0.4), 1),
         "clarity": round(3.0 + 7.0 * f.get("clarity", 0.6), 1),
@@ -1132,6 +1350,18 @@ def _judge_batch(cands, segments, content_type):
         return {}
     if not has_brain():
         return {i: _offline_judgement(c) for i, c in enumerate(cands)}
+    # Free providers choke on a 14-candidate, 40k-character prompt. Small batches
+    # are more reliable and let one failed batch fall back without losing the rest.
+    if len(cands) > 3:
+        chunks = [cands[i:i + 3] for i in range(0, len(cands), 3)]
+        out = {}
+        with ThreadPoolExecutor(max_workers=min(2, len(chunks))) as pool:
+            results = list(pool.map(
+                lambda part: _judge_batch(part, segments, content_type), chunks))
+        for off, result in zip(range(0, len(cands), 3), results):
+            for i, j in (result or {}).items():
+                out[off + int(i)] = j
+        return out
     payload = []
     for i, c in enumerate(cands):
         verbatim = V._text_in(segments, c["start"], c["end"], MAX_SPEAK_CHARS)
@@ -1176,6 +1406,8 @@ def _judge_batch(cands, segments, content_type):
         for i, c in enumerate(cands):
             j = dict(base.get(i) or _offline_judgement(c))
             j.setdefault("emotion", 5)
+            j.setdefault("emotion_label", c.get("emotion_label") or "informative")
+            j.setdefault("secondary_emotion", "")
             j.setdefault("shareability", 5)
             j.setdefault("rewatch", 5)
             j.setdefault("clarity", j.get("coherence", 5))
@@ -1199,6 +1431,8 @@ def _judge_batch(cands, segments, content_type):
             "hook": _num(raw, "hook"),
             "payoff": _num(raw, "payoff"),
             "emotion": _num(raw, "emotion"),
+            "emotion_label": _clean_emotion_label(raw.get("emotion_label")),
+            "secondary_emotion": _clean_emotion_label(raw.get("secondary_emotion")),
             "shareability": _num(raw, "shareability"),
             "rewatch": _num(raw, "rewatch"),
             "clarity": _num(raw, "clarity"),
@@ -1236,6 +1470,34 @@ def _apply_judge(c, j):
     f["story"] = min(1.0, 0.52 * f["story"] + 0.48 * _num(j, "coherence") / 10.0)
     f["payoff"] = min(1.0, 0.50 * f["payoff"] + 0.50 * _num(j, "payoff") / 10.0)
     f["emotion"] = min(1.0, 0.55 * f["emotion"] + 0.45 * _num(j, "emotion") / 10.0)
+    # Reconcile the judge's label with the transcript. The judge sees the exact
+    # words and gets the final call, except for one failure mode we can prove: it
+    # calls a tense scene funny while the transcript contains suspense evidence and
+    # no comedy cue. Acoustic bursts must never create a comedy label on their own.
+    deterministic = _clean_emotion_label(c.get("emotion_label"))
+    judge_label = _clean_emotion_label(j.get("emotion_label"))
+    label = judge_label or deterministic or "informative"
+    det_intensity = float((c.get("emotion") or {}).get("intensity", 0.0) or 0.0)
+    mismatch = False
+    if (judge_label == "funny" and not c.get("comedy_context")
+            and deterministic in ("suspense", "shock", "emotional", "angry")
+            and c.get("emotion_scores", {}).get(deterministic, 0.0) >= 0.25):
+        mismatch = True
+    # A weak judge often defaults a fast, overlapping conversation to "awkward" or
+    # "informative". When the transcript has strong explicit cues for a different
+    # emotion, keep the transcript's label and record the disagreement.
+    if (judge_label in ("awkward", "informative") and deterministic
+            and deterministic not in ("awkward", "informative")
+            and det_intensity >= 0.55):
+        mismatch = True
+    if mismatch:
+        label = deterministic
+        flags = list(j.get("flags") or [])
+        if "emotion_mismatch" not in flags:
+            flags.append("emotion_mismatch")
+        j["flags"] = flags
+    c["emotion_label"] = label
+    c["secondary_emotion"] = _clean_emotion_label(j.get("secondary_emotion"))
     f["shareability"] = min(1.0, 0.55 * f["shareability"]
                             + 0.45 * _num(j, "shareability") / 10.0)
     f["clarity"] = min(1.0, 0.55 * f["clarity"] + 0.45 * _num(j, "clarity") / 10.0)
@@ -1275,7 +1537,10 @@ def _gate(c, j):
 def score_candidate(c, j, content_type):
     """Compute the calibrated score, the six learning factors, and the honest QC badge."""
     _apply_judge(c, j)
-    w = _weights(content_type)
+    # A funny sports clip is still a comedy cut. Without this, the sports profile
+    # (event 2.4x, visual 1.9x) buries a team-radio punchline under engine noise.
+    profile = "comedy" if (content_type or "").lower() == "sports" and c.get("emotion_label") == "funny" else content_type
+    w = _weights(profile)
     f = c["argo_features"]
     blend = sum(w.get(k, 0.0) * f.get(k, 0.0) for k in w)
     wsum = sum(w.values()) or 1.0
@@ -1286,6 +1551,11 @@ def score_candidate(c, j, content_type):
     score = 30.0 + 69.0 * (blend ** 1.12)
     if f.get("event", 0.0) >= 0.7:
         score = min(99.0, score + 3.5)
+    # A 55-second "funny" radio clip is usually three unrelated exchanges stitched
+    # together. Keep comedy focused; the same material scores better at 15-35s.
+    dur = max(0.0, c["end"] - c["start"])
+    if c.get("emotion_label") == "funny" and dur > 42.0:
+        score -= min(9.0, 0.45 * (dur - 42.0))
     if (content_type or "").lower() == "sports":
         # A sports highlight without the measured event is an interview, not a
         # highlight. Reward the roar/cut-density coverage and push a quiet talking
@@ -1324,6 +1594,9 @@ def score_candidate(c, j, content_type):
     c["argon"]["flags"] = sorted(flags)
     c["argon"]["retention_3s"] = int(round(_num(j, "retention_3s", 5)))
     c["argon"]["retention_end"] = int(round(_num(j, "retention_end", 5)))
+    c["argon"]["emotion_label"] = c.get("emotion_label") or "informative"
+    if c.get("secondary_emotion"):
+        c["argon"]["secondary_emotion"] = c["secondary_emotion"]
     c["argon"]["gate"] = c["gate"]
     c["verdict"] = (j.get("verdict") or "").strip()[:180]
     # An offline run has measurements, not a judge. It must never wear the verified
@@ -1544,9 +1817,15 @@ def _select(pool, count, duration, segments):
             if any(_similarity(c, p, segments, spread) > 0.78 for p in picked):
                 continue
             # MMR: a high score can still lose to a different beat. The penalty is
-            # bounded so quality remains the dominant term.
-            val = c["score"] / 100.0 - 0.16 * max(
+            # bounded so quality remains the dominant term. A small emotion-diversity
+            # bonus keeps the podium from being three versions of the same laugh when
+            # a different emotional beat is nearly as strong.
+            same_emotion = sum(1 for p in picked
+                               if p.get("emotion_label") == c.get("emotion_label"))
+            new_emotion = bool(picked) and same_emotion == 0
+            val = (c["score"] / 100.0 - 0.16 * max(
                 [_similarity(c, p, segments, spread) for p in picked] or [0.0])
+                - 0.03 * same_emotion + (0.025 if new_emotion else 0.0))
             c["_mmr"] = round(val, 4)
             picked.append(c)
         if len(picked) >= count:
@@ -1645,11 +1924,18 @@ def rejudge_clips(clips, segments, content_type="other"):
     for clip in clips:
         c = dict(clip)
         feats = {}
-        for k, v in (clip.get("argon") or {}).items():
-            if k in FEATURES and isinstance(v, (int, float)):
-                feats[k] = max(0.0, min(1.0, float(v) / 100.0))
+        for source in (clip.get("factors") or {}, clip.get("argon") or {}):
+            for k, v in source.items():
+                if k in FEATURES and isinstance(v, (int, float)):
+                    feats[k] = max(0.0, min(1.0, float(v) / 100.0))
         c["argo_features"] = feats
         c["measured"] = dict(clip.get("measured") or {})
+        c["emotion_label"] = clip.get("emotion_label") or ""
+        c["emotion_scores"] = dict(clip.get("emotion_scores") or {})
+        c["emotion"] = dict(clip.get("emotion") or {})
+        if not c["emotion"] and c["emotion_scores"]:
+            c["emotion"] = {"intensity": max(c["emotion_scores"].values())}
+        c["comedy_context"] = bool(clip.get("comedy_context"))
         c["flags"] = list(clip.get("flags") or [])
         c["text_stats"] = {
             "wps": 0.0,
@@ -1668,7 +1954,8 @@ def rejudge_clips(clips, segments, content_type="other"):
         score_candidate(c, judgments.get(i) or _offline_judgement(c), content_type)
         clip = clips[i]
         for key in ("score", "tier", "qc", "verdict", "reason", "factors",
-                    "argon", "flags", "gate"):
+                    "argon", "flags", "gate", "emotion_label",
+                    "secondary_emotion", "emotion_scores", "comedy_context"):
             if key in c:
                 clip[key] = c[key]
         if clip.get("qc") == "verified":

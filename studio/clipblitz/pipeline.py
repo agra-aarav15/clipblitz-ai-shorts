@@ -433,6 +433,10 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "gate": m.get("gate"),
         "flags": m.get("flags") or [],
         "argon": m.get("argon"),
+        "emotion_label": m.get("emotion_label"),
+        "emotion_scores": m.get("emotion_scores") or {},
+        "emotion": m.get("emotion") or {},
+        "comedy_context": bool(m.get("comedy_context")),
         "start": round(m["start"], 1), "end": round(m["end"], 1),
         "duration": round(m["end"] - m["start"], 1),
         "tail": m.get("tail"),
@@ -608,11 +612,18 @@ def process(job_id, src_path):
                 else:
                     ok = virality.rejudge(job_["clips"], segments,
                                           job_.get("content_type") or "other")
-                # A downgraded cut must not keep a stale "strong" badge. Drop a rejected
-                # clip only when at least one verified/strong clip survives.
+                # A downgraded cut must not keep a stale "strong" badge. Drop rejected
+                # clips even if that leaves an empty podium: a job with no strong clip
+                # is more honest than three clips the final judge just rejected.
                 kept = [c for c in job_["clips"] if c.get("tier") != "reject"]
                 if kept:
                     job_["clips"] = kept
+                elif job_["clips"]:
+                    job_["clips"] = []
+                    job_["empty_reason"] = ("The final judge rejected every rendered cut. "
+                                            "Try a source with self-contained stories, or "
+                                            "use a manual cut from the transcript.")
+                    _set(job_, stage="no clip passed the final judge")
                 save()
                 if ok:
                     _set(job_, stage=f"QC judge verified {ok}/{len(job_['clips'])} clips")
@@ -628,7 +639,8 @@ def process(job_id, src_path):
                 _set(job_, receipt=path)
         except Exception:
             pass
-        _set(job_, status="done", stage="done", progress=100)
+        _set(job_, status="done", progress=100,
+             stage=(job_.get("empty_reason") and "no clip passed the final judge") or "done")
     except Exception as e:
         import traceback
         tb = traceback.format_exc().strip().splitlines()

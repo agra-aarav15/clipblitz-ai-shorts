@@ -33,9 +33,14 @@ def test_provider_list():
     check("connect: every supported provider is exposed", want <= set(names), str(names))
     check("connect: provider metadata has labels and hints",
           all(p.get("label") and p.get("hint") for p in st["providers"]))
+    secret_rows = [st[p["key"]] for p in st["providers"]
+                   if p.get("secret") and st.get(p["key"], {}).get("set")]
     check("connect: secrets are never returned in clear",
-          all(not (p.get("secret") and p.get("masked") and "****" not in p["masked"])
-              for p in st["providers"] if p.get("set")))
+          all("****" in row.get("masked", "") for row in secret_rows),
+          str([row.get("masked") for row in secret_rows]))
+    check("connect: the masker hides the middle of a key",
+          "****" in keys._mask("gsk_1234567890abcdef")
+          and "1234567890" not in keys._mask("gsk_1234567890abcdef"))
 
 
 def test_save_merge():
@@ -54,6 +59,13 @@ def test_save_merge():
         check("connect: save uncomments a placeholder in place",
               "CB_LOCAL_MODEL=clipblitz-local" in text)
         check("connect: save appends a new variable", "CB_AI_ORDER=groq,local" in text)
+        bad = keys.save({"ai_order": "groq,not-a-provider"})
+        check("connect: an invalid order is not written",
+              not bad.get("saved") and "not-a-provider" not in open(path, encoding="utf-8").read())
+        cleared = keys.save({"groq": ""})
+        check("connect: a saved key can be cleared",
+              "groq" in (cleared.get("saved") or [])
+              and "CB_AI_KEY=\n" in open(path, encoding="utf-8").read())
     finally:
         keys.ENV_PATH = old
         try:

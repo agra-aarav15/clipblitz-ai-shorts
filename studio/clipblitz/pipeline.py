@@ -74,7 +74,7 @@ def _engine_fields(engine):
         return {"cinematic_grade": False, "cinematic_grain": False,
                 "ratio": "9:16", "audio_lead": 0.0}
     return {"cinematic_grade": True, "cinematic_grain": False,
-            "ratio": "9:16", "audio_lead": 0.35}
+            "ratio": "9:16", "audio_lead": 0.0}
 
 
 def _load_jobs():
@@ -365,7 +365,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         ass_name = base + ".ass"  # relative → ffmpeg runs with cwd=clips_dir (path-safe)
     # The transformative-edit layers this render actually applied. Every entry is a real
     # step taken by this render - captions burned into the pixels, a vertical reframe,
-    # the film grade, the J-cut - so the badge on the card is a fact, not a claim about
+    # the film grade - so the badge on the card is a fact, not a claim about
     # the law. (Whether a use is fair is the owner's call, made on the rights gate.)
     layers = []
     if ass_name:
@@ -381,8 +381,6 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     if fields["cinematic_grade"]:
         layers.append("film grade (S-curve + vignette)" if eng != "argon"
                       else "film grade (S-curve)")
-    if fields["audio_lead"]:
-        layers.append("J-cut (the sound leads the picture)")
     if m.get("_tightened"):
         layers.append("edge silence trimmed")
     if moved_captions:

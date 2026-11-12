@@ -150,9 +150,14 @@ def save(updates):
     """Merge {logical_name: value} into .env, preserving every other line.
     Commented-out placeholder lines get uncommented in place; unknown keys append."""
     updates = {k: (v or "").strip() for k, v in (updates or {}).items()
-               if k in KEY_VARS and (v or "").strip()}
+               if k in KEY_VARS}
     if not updates:
         return {"saved": [], "status": status()}
+    if "ai_order" in updates:
+        check = test("ai_order", updates["ai_order"])
+        if not check.get("ok"):
+            return {"saved": [], "error": check.get("detail") or "invalid provider order",
+                    "status": status()}
     try:
         lines = open(ENV_PATH, encoding="utf-8").read().splitlines()
     except OSError:

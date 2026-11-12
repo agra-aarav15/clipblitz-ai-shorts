@@ -1994,6 +1994,7 @@ function renderProviderKeys(st) {
                  value="${esc(value)}" placeholder="${esc(p.placeholder || '')}"
                  autocomplete="off" spellcheck="false" />
           <button class="btn small" data-savekey="${esc(p.key)}" type="button">Test &amp; save</button>
+          ${p.secret ? `<button class="btn ghost small" data-clearkey="${esc(p.key)}" type="button">Clear</button>` : ''}
         </div>
         <div class="dim">${esc(p.hint || '')}${cur.model ? ' / ' + esc(cur.model) : ''}</div>
       </div>
@@ -2021,6 +2022,23 @@ async function loadKeyStates() {
 }
 
 document.addEventListener('click', async (ev) => {
+  const clear = ev.target.closest('[data-clearkey]');
+  if (clear) {
+    const which = clear.dataset.clearkey;
+    clear.disabled = true;
+    try {
+      const resp = await fetch('/api/keys', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [which]: '' }),
+      });
+      const r = await resp.json();
+      if (!resp.ok) throw new Error(r.error || resp.statusText);
+      toast('Cleared ' + which);
+      loadKeyStates();
+    } catch (e) { toast('Could not clear: ' + String(e.message || e), true); }
+    clear.disabled = false;
+    return;
+  }
   const b = ev.target.closest('[data-savekey]');
   if (!b) return;
   const which = b.dataset.savekey;

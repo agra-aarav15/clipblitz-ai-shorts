@@ -51,6 +51,13 @@ def test_filtergraph():
     blur = F._filtergraph("blur", None, 10.0)[0]
     check("reframe: blur remains available as an explicit option",
           bool(blur) and "boxblur" in blur)
+    auto = F._filtergraph("auto", None, 10.0,
+                          focus_path=[(0.0, 0.3), (5.0, 0.7)])[1]
+    check("reframe: auto framing follows a supplied focus path",
+          "if(lt(t" in auto, auto[:90])
+    tall = F._filtergraph("crop", None, 10.0)[1]
+    check("reframe: fixed crop is guarded for tall sources",
+          "min(iw" in tall and "min(ih" in tall, tall[:90])
 
 
 def test_focus_path_fallback():
@@ -70,6 +77,31 @@ def test_focus_path_fallback():
             os.remove(src)
         except OSError:
             pass
+
+
+def test_tall_render():
+    src = os.path.join(tempfile.gettempdir(), "cb_reframe_tall.mp4")
+    out = os.path.join(tempfile.gettempdir(), "cb_reframe_tall_out.mp4")
+    try:
+        F.run([F.ffmpeg(), "-y", "-v", "error", "-f", "lavfi",
+               "-i", "testsrc2=size=1080x2400:rate=30:duration=1",
+               "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+               "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+               "-c:a", "aac", src], timeout=60)
+        F.cut_clip(src, 0.0, 1.0, out, framing="crop", grade=False, vignette=False)
+        probe = subprocess.run(
+            [F.ffprobe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", out],
+            capture_output=True, text=True, timeout=30).stdout.strip()
+        check("reframe: a tall source renders with fixed crop", probe == "1080,1920", probe)
+    except Exception as e:
+        check("reframe: a tall source renders with fixed crop", False, str(e))
+    finally:
+        for p in (src, out):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 def test_real_render():
@@ -104,6 +136,7 @@ def main():
     test_expression()
     test_filtergraph()
     test_focus_path_fallback()
+    test_tall_render()
     test_real_render()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

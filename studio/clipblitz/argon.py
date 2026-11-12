@@ -1556,19 +1556,19 @@ def score_candidate(c, j, content_type):
         nonlocal score
         if abs(value) > 1e-9:
             score += value
-            steps.append({"op": "add", "name": name, "value": round(value, 3)})
+            steps.append({"op": "add", "name": name, "value": round(value, 6)})
 
     def mul(name, value):
         nonlocal score
         if abs(value - 1.0) > 1e-9:
             score *= value
-            steps.append({"op": "mul", "name": name, "value": round(value, 3)})
+            steps.append({"op": "mul", "name": name, "value": round(value, 6)})
 
     def cap(name, value):
         nonlocal score
         if score > value:
             score = value
-            steps.append({"op": "cap", "name": name, "value": round(value, 3)})
+            steps.append({"op": "cap", "name": name, "value": round(value, 6)})
 
     if f.get("event", 0.0) >= 0.7:
         add("measured peak event", 3.5)
@@ -1612,7 +1612,7 @@ def score_candidate(c, j, content_type):
         "factors": {k: round(float(f.get(k, 0.0)), 4) for k in w},
         "contributions": {k: round(float(w.get(k, 0.0) * f.get(k, 0.0)) / wsum, 4)
                           for k in w},
-        "base": round(base_score, 3),
+        "base": round(base_score, 6),
         "steps": steps,
         "gate": {"passed": passed, "reasons": gate_reasons},
         "judge": {"offline": bool(j.get("_offline")),
@@ -1668,6 +1668,16 @@ def verify_score(c):
     gate and adjustments, the trace is invalid."""
     t = c.get("score_trace") or {}
     try:
+        weights = t.get("weights") or {}
+        factors = t.get("factors") or {}
+        if not weights or not factors:
+            return False
+        wsum = sum(float(v) for v in weights.values()) or 1.0
+        blend = sum(float(weights.get(k, 0.0)) * float(factors.get(k, 0.0))
+                    for k in weights) / wsum
+        derived = 30.0 + 69.0 * (max(0.0, min(1.0, blend)) ** 1.12)
+        if abs(derived - float(t["base"])) > 0.02:
+            return False
         score = float(t["base"])
         for step in t.get("steps") or []:
             op, value = step.get("op"), float(step.get("value", 0.0))

@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.4.0 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.4.1 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -99,7 +99,7 @@ it, a reference, an expiry date — because a claim is argued with paperwork, no
 
 `GET /api/job/<id>/receipt` writes the edit receipt: the exact window of every cut, the engine
 that rendered it, the transformative work that render actually applied (burned-in captions, the
-reframe, the grade, the J-cut), and sha256 hashes of the source and each output file.
+reframe, the grade), and sha256 hashes of the source and each output file.
 
 `GET /api/job/<id>/certificate` bundles all of it — the risk report, the licence record, the
 edit receipt and the sha256 of the source and every render — into one artifact with its own

@@ -444,7 +444,12 @@ class Handler(BaseHTTPRequestHandler):
             body = json_body()
             if body is None:
                 return self._json(400, {"error": "bad json"})
-            result = keys.save({k: v for k, v in body.items() if k in keys.KEY_VARS})
+            updates = {k: v for k, v in body.items() if k in keys.KEY_VARS}
+            if "ai_order" in updates:
+                check = keys.test("ai_order", updates["ai_order"])
+                if not check.get("ok"):
+                    return self._json(400, {"error": check.get("detail") or "invalid provider order"})
+            result = keys.save(updates)
             result["tests"] = {k: keys.test(k) for k in result["saved"]}
             return self._json(200, result)
         if path == "/api/keys/test":

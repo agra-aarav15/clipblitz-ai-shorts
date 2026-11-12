@@ -181,7 +181,7 @@ def _face_centres(img, frontal, profile):
     return out
 
 
-def focus_path(src, start, end, samples=8, target_ratio=9 / 16):
+def focus_path(src, start, end, samples=8):
     """A smooth 9:16 crop path that follows the largest face.
 
     Returns [(seconds_from_clip_start, centre_x_fraction), ...]. The renderer turns

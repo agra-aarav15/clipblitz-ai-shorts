@@ -138,6 +138,32 @@ def write_srt(path, entries):
 STYLE = "force_style='Fontsize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,MarginV=48'"
 
 
+def _video_stream_index(src):
+    """Pick the real moving video stream, not a cover-art still in stream 0."""
+    try:
+        out = run([ffprobe(), "-v", "error", "-select_streams", "v",
+                   "-show_streams", "-of", "json", src], timeout=20).stdout
+        streams = json.loads(out).get("streams") or []
+        best, best_score = 0, -1
+        for st in streams:
+            idx = int(st.get("index", 0))
+            try:
+                frames = int(st.get("nb_frames") or 0)
+            except (TypeError, ValueError):
+                frames = 0
+            try:
+                dur = float(st.get("duration") or 0)
+            except (TypeError, ValueError):
+                dur = 0.0
+            codec = str(st.get("codec_name") or "").lower()
+            score = (1 if frames > 1 else 0) + (1 if dur > 0.1 else 0) +                     (1 if codec not in ("mjpeg", "png", "bmp") else 0)
+            if score > best_score:
+                best, best_score = idx, score
+        return best
+    except Exception:
+        return 0
+
+
 def _focus_x_expr(path):
     """Build a per-frame crop-x expression from [(t, centre_fraction), ...].
 
@@ -162,7 +188,8 @@ def _focus_x_expr(path):
 
 
 def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, ratio="9:16",
-                 crop_x=None, vignette=True, auto_zoom=False, focus_path=None):
+                 crop_x=None, vignette=True, auto_zoom=False, focus_path=None,
+                 vsrc="0:v"):
     """Vertical reframing filter chains. 'focus' is a full-height 9:16 crop that
     follows the subject; 'blur' fits the whole frame on a blurred background; crop
     variants cut to 9:16 with a fixed focus. Every chain ends with a short fade."""
@@ -177,13 +204,19 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     zoom = (f",zoompan=z='min(zoom+0.0004,1.05)':x='iw/2-(iw/zoom/2)':"
             f"y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30" if auto_zoom else "")
     if framing == "crop-left":
-        return None, f"crop=ih*9/16:ih:0:0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
+        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x=0:y=(ih-oh)/2,"
+                      f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing == "crop-right":
-        return None, f"crop=ih*9/16:ih:(iw-ih*9/16):0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
+        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x=iw-ow:y=(ih-oh)/2,"
+                      f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing in ("crop", "auto"):
-        x = ("(iw-ih*9/16)/2" if crop_x is None
-             else f"min({max(0, int(crop_x))}\\,iw-ih*9/16)")
-        return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
+        if framing == "auto" and focus_path:
+            x = _focus_x_expr(focus_path)
+        else:
+            x = ("(iw-ow)/2" if crop_x is None
+                 else f"min({max(0, int(crop_x))}\\,iw-ow)")
+        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
+                      f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing == "focus":
         x = _focus_x_expr(focus_path) or "(iw-ih*9/16)/2"
         # min() keeps a portrait source from asking for a crop wider than the frame.
@@ -194,7 +227,7 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     # Blurring at 1/4 size and scaling back is visually identical here and several
     # times cheaper than boxblur=20:5 on the full 1080x1920 canvas.
     bw, bh = max(2, (W // 4) // 2 * 2), max(2, (H // 4) // 2 * 2)
-    chain = ("[0:v]split=2[bg][fg];"
+    chain = (f"[{vsrc}]split=2[bg][fg];"
              f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,"
              f"crop={W}:{H},scale={bw}:{bh},boxblur=6:2,scale={W}:{H}[bgb];"
              "[fg]scale=%d:-2[fgs];" % W +
@@ -203,8 +236,8 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
 
 
 def _audio_fade(dur, lead=0.0):
-    """Audio fade in/out. `lead` > 0 adds a J-cut style audio lead: the audio starts slightly
-    before the picture would, so the incoming cut carries the viewer in."""
+    """Audio fade in/out. The old audio-lead path is disabled because it delayed
+    audio without delaying picture; this function now only fades."""
     return (f"afade=t=in:st=0:d=0.15,"
             f"afade=t=out:st={max(0.0, dur - 0.18):.2f}:d=0.18")
 
@@ -228,11 +261,15 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
     subject), burn subtitles (.ass) if given, polish edges with audio+video fades.
     sub_name is relative to cwd (pass the clips dir)."""
     duration = round(end - start, 2)
+    vsrc = f"0:{_video_stream_index(src)}"
     complex_fg, simple_vf = _filtergraph(framing, sub_name, duration,
                                          grade_film=grade, grain=grain, ratio=ratio,
                                          crop_x=crop_x, vignette=vignette,
-                                         auto_zoom=auto_zoom, focus_path=focus_path)
-    lead = max(0.0, float(audio_lead or 0.0))
+                                         auto_zoom=auto_zoom, focus_path=focus_path,
+                                         vsrc=vsrc)
+    # The old J-cut delayed audio without delaying picture, which put sound 350 ms
+    # late. It is disabled until a real audio-lead graph (with caption shift) exists.
+    lead = 0.0
     af = ["-af", _audio_fade(duration)]
     if lead > 0.01:
         # pull the picture a touch later so the audio (which starts at -ss start-lead) is already
@@ -245,7 +282,7 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
                        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
     else:
-        args = base + ["-vf", simple_vf, "-map", "0:v:0", "-map", "0:a?", *af,
+        args = base + ["-vf", simple_vf, "-map", vsrc, "-map", "0:a?", *af,
                        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
     try:
@@ -256,13 +293,13 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
                                                    grade_film=grade, grain=grain, ratio=ratio,
                                                    crop_x=crop_x, vignette=vignette,
                                                    auto_zoom=auto_zoom,
-                                                   focus_path=focus_path)
+                                                   focus_path=focus_path, vsrc=vsrc)
             if complex_fg2 is not None:
                 args = base + ["-filter_complex", complex_fg2, "-map", "[v]", "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
             else:
-                args = base + ["-vf", simple_vf2, "-map", "0:v:0", "-map", "0:a?", *af,
+                args = base + ["-vf", simple_vf2, "-map", vsrc, "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
             run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))

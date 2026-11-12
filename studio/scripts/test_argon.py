@@ -293,7 +293,11 @@ def test_face_crop_filter():
     _, centre = ffmpeg_tools._filtergraph("auto", None, 10.0)
     check("argon: auto framing uses the face offset when supplied",
           auto and "min(620" in auto, auto)
-    check("argon: auto framing falls back to centre crop", centre and "(iw-ih*9/16)/2" in centre)
+    check("argon: auto framing falls back to centre crop", centre and "(iw-ow)/2" in centre)
+    _, tracked = ffmpeg_tools._filtergraph("auto", None, 10.0,
+                                           focus_path=[(0.0, 0.3), (5.0, 0.7)])
+    check("argon: auto framing follows a supplied focus path",
+          tracked and "if(lt(t" in tracked, tracked)
     check("argon: vision reports its availability without throwing",
           isinstance(vision.available(), bool))
 
@@ -391,7 +395,7 @@ def test_pipeline_contract():
           str(sorted(pipeline.ENGINES)))
     fields = pipeline._engine_fields("argon")
     check("argon: gets the cinematic finish",
-          fields["cinematic_grade"] and fields["audio_lead"] > 0, str(fields))
+          fields["cinematic_grade"] and fields["audio_lead"] == 0, str(fields))
     check("argon: explicit re-render resolves to itself",
           pipeline._variant({"engine_id": "both"}, "argon") == "argon")
     job_id = pipeline.new_job("argon-test", engine="argon", top_n=2)
@@ -604,6 +608,10 @@ def test_manual():
     check("argon: the score trace records weights and gate",
           bool(c.get("score_trace", {}).get("weights"))
           and "passed" in c.get("score_trace", {}).get("gate", {}))
+    fake = {"score": 90, "score_trace": {"base": 90.0, "steps": [],
+                                         "weights": {}, "factors": {}}}
+    check("argon: a trace without weights cannot claim reproducibility",
+          not argon.verify_score(fake))
 
 
 def main():

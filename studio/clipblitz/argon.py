@@ -1939,13 +1939,45 @@ def _select(pool, count, duration, segments):
 
 # ---------------------------------------------------------------- public entry
 
+def _measured_fallback(duration, count, energy, laughs, moments, scenes, motion):
+    """No transcript: still return measured, scored windows instead of bare spans.
+
+    A release build without an STT key used to render an even window with score=None,
+    no emotion and no trace. That looked broken. The audio/visual measurements are
+    still real, so use them and label the result as measured-only.
+    """
+    wins = V._even_windows(duration, count)
+    cands = []
+    for w in wins:
+        c = dict(w)
+        try:
+            measure_candidate(c, [], energy, laughs, moments or [], scenes, motion)
+            score_candidate(c, _offline_judgement(c), "other")
+        except Exception:
+            c.setdefault("score", 1)
+            c.setdefault("tier", "reject")
+            c.setdefault("qc", "unverified")
+            c.setdefault("factors", {})
+            c.setdefault("argon", {})
+            c.setdefault("flags", [])
+            c.setdefault("gate", {"passed": False, "reasons": ["no transcript"]})
+        c["title"] = c.get("title") or "Measured highlight"
+        c["hook"] = c.get("hook") or ""
+        c["reason"] = "no transcript; measured audio/visual only"
+        c["verdict"] = "measured only - no transcript or judge"
+        c["qc"] = "unverified"
+        cands.append(c)
+    return cands, cands, "argon-measured", "other"
+
+
 def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
          cinema_marks=None, motion=None):
     """ARGON's full pass. Same return contract as virality.rank / apex.rank:
     (picked_moments, candidate_pool, picker, content_type)."""
     count = max(1, min(8, int(count or 3)))
     if not segments:
-        return V._even_windows(duration, count), [], "argon-windows", "other"
+        return _measured_fallback(duration, count, energy, laughs, [],
+                                  scenes, motion)
 
     moments = V.mine_moments(segments, duration, energy, laughs, scenes)
     content_type = "other"
@@ -1961,7 +1993,8 @@ def rank(segments, duration, count=3, energy=None, laughs=None, scenes=None,
     cands, sparks = _build_candidates(segments, duration, energy, laughs, moments,
                                       cinema_marks or scenes, motion, stories, editor_cuts)
     if not cands:
-        return V._even_windows(duration, count), [], "argon-windows", content_type
+        return _measured_fallback(duration, count, energy, laughs, moments,
+                                  scenes, motion)
     cands.sort(key=lambda c: -(
         0.32 * c["argo_features"]["hook"]
         + 0.24 * c["argo_features"]["payoff"]

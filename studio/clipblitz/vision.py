@@ -181,6 +181,31 @@ def _face_centres(img, frontal, profile):
     return out
 
 
+def _subject_centre(img):
+    """Fallback when no face is detected: pick the 9:16 window with the most edge
+    detail, ignoring the top/bottom bands where captions and furniture live. This
+    keeps a side-on subject in frame instead of blindly centre-cropping them out."""
+    if cv2 is None or img is None:
+        return 0.5
+    h, w = img.shape[:2]
+    if h < 8 or w < 8:
+        return 0.5
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    edges[:int(h * 0.05)] = 0
+    edges[int(h * 0.85):] = 0
+    crop_w = max(2, int(h * 9 / 16))
+    best, best_score = 0.5, -1.0
+    for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
+        left = int(round((w - crop_w) * frac))
+        left = max(0, min(w - crop_w, left))
+        score = float(edges[:, left:left + crop_w].sum())
+        score *= 1.0 - 0.08 * abs(frac - 0.5)
+        if score > best_score:
+            best, best_score = frac, score
+    return best if best_score > 0 else 0.5
+
+
 def focus_path(src, start, end, samples=8):
     """A smooth 9:16 crop path that follows the largest face.
 
@@ -208,7 +233,7 @@ def focus_path(src, start, end, samples=8):
                 faces.sort(key=lambda f: (-f[1], abs(f[0] - 0.5)))
                 raw.append(faces[0][0])
             else:
-                raw.append(0.5)
+                raw.append(_subject_centre(img))
         # Median-of-three removes a one-frame false detection without lagging a pan.
         smooth = []
         for i, x in enumerate(raw):

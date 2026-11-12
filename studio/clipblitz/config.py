@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "5.4.2"
+APP_VERSION = "5.4.3"
 
 
 def _load_env(path):

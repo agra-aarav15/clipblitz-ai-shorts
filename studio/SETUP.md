@@ -17,7 +17,7 @@ B2 Pro X, APEX and Both modes are retired from the product; old jobs still load.
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v5.4.2 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.4.3 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 

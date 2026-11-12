@@ -60,6 +60,19 @@ def test_filtergraph():
           "min(iw" in tall and "min(ih" in tall, tall[:90])
 
 
+def test_subject_centre():
+    try:
+        import cv2
+        import numpy as np
+        img = np.zeros((720, 1280, 3), dtype="uint8")
+        cv2.rectangle(img, (900, 150), (1200, 650), (255, 255, 255), -1)
+        centre = vision._subject_centre(img)
+        check("reframe: a faceless side subject is not centre-cropped out",
+              centre > 0.55, str(centre))
+    except Exception as e:
+        check("reframe: a faceless side subject is not centre-cropped out", False, str(e))
+
+
 def test_focus_path_fallback():
     # A source with no detectable face must still return a centre path, not [].
     src = os.path.join(tempfile.gettempdir(), "cb_reframe_blank.mp4")
@@ -135,6 +148,7 @@ def test_real_render():
 def main():
     test_expression()
     test_filtergraph()
+    test_subject_centre()
     test_focus_path_fallback()
     test_tall_render()
     test_real_render()

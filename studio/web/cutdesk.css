@@ -529,3 +529,9 @@ textarea { resize: vertical; }
 .tracemeta { margin-top: 6px; font: 11px/1.5 var(--font-mono); color: var(--muted); }
 .tracegrid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .traceitem { font: 10px/1.4 var(--font-mono); color: var(--ink-2); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; }
+
+.providergrid { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 4px; }
+.pstat { font: 10px/1.4 var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; }
+.pstat b { font-weight: 600; color: var(--ink-2); }
+.pstat.ok { border-color: var(--ok); color: var(--ok); }
+.pstat.ok b { color: var(--ok); }

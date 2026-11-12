@@ -1980,6 +1980,15 @@ function keyState(id, v) {
   el.className = 'keystate' + (v.set ? ' ok' : '');
 }
 
+function renderProviderStatus(st) {
+  const box = $('provider-status');
+  if (!box) return;
+  box.innerHTML = (st.providers || []).map((p) => {
+    const cur = st[p.key] || {};
+    return `<span class="pstat${cur.set ? ' ok' : ''}">${esc(p.label)} <b>${cur.set ? 'ready' : 'empty'}</b></span>`;
+  }).join('');
+}
+
 function renderProviderKeys(st) {
   const box = $('provider-keys');
   if (!box) return;
@@ -2006,6 +2015,7 @@ function renderProviderKeys(st) {
 async function loadKeyStates() {
   try {
     const st = await (await fetch('/api/keys')).json();
+    renderProviderStatus(st);
     renderProviderKeys(st);
     (st.providers || []).forEach((p) => keyState(`state-${p.key}`, st[p.key] || {}));
     const ytOk = (st.yt_client_id || {}).set && (st.yt_client_secret || {}).set;

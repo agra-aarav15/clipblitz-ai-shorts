@@ -302,6 +302,20 @@ def test_face_crop_filter():
           isinstance(vision.available(), bool))
 
 
+def test_no_transcript_fallback():
+    picked, pool, picker, ctype = argon.rank([], 100, count=2,
+                                             energy=([], -30), laughs=[],
+                                             scenes=[], motion=[])
+    check("argon: no transcript still returns measured scored windows",
+          len(picked) == 2 and all(c.get("score") is not None for c in picked),
+          str([c.get("score") for c in picked]))
+    check("argon: no transcript is labelled measured-only",
+          all(c.get("qc") == "unverified" and "no transcript" in (c.get("reason") or "")
+              for c in picked))
+    check("argon: no transcript still has a score trace",
+          all(argon.verify_score(c) for c in picked))
+
+
 def test_rank_offline():
     brains_off()
     picked, lab, picker, ctype = argon.rank(SEGS, DURATION, count=3, energy=ENERGY,
@@ -643,6 +657,7 @@ def main():
     test_editor_pass()
     test_caption_overlap()
     test_face_crop_filter()
+    test_no_transcript_fallback()
     test_rank_offline()
     test_judge()
     test_pipeline_contract()

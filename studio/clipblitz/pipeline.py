@@ -134,7 +134,7 @@ _normalize_loaded_tiers()
 
 
 def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False, privacy=None,
-            demo=False, framing="blur", top_n=None, engine=None, source=None, auto_zoom=False):
+            demo=False, framing="focus", top_n=None, engine=None, source=None, auto_zoom=False):
     # One product engine. Legacy engine ids are accepted only so an old caller does
     # not crash; every new job is ARGON.
     engine = "argon"
@@ -143,7 +143,7 @@ def new_job(name, style=None, position="bottom", size_scale=1.0, auto_post=False
         "id": job_id, "name": name, "status": "queued", "stage": "waiting",
         "progress": 0, "clips": [], "candidates": [], "segments": [],
         "error": None, "mode": None, "content_type": None, "picker": None,
-        "created": time.time(), "demo": bool(demo), "framing": framing or "blur",
+        "created": time.time(), "demo": bool(demo), "framing": framing or "focus",
         "style": style or captions.DEFAULT_STYLE,
         "position": position, "size_scale": float(size_scale or 1.0),
         "auto_post": bool(auto_post), "privacy": privacy or CONFIG["privacy"],
@@ -370,8 +370,14 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     layers = []
     if ass_name:
         layers.append("captions burned into the picture")
-    layers.append("vertical reframing" + (" with a blur pad" if job.get("framing", "blur") == "blur"
-                                          else " to centre crop"))
+    framing = job.get("framing", "focus")
+    layers.append("vertical reframing")
+    if framing == "blur":
+        layers.append("blur pad")
+    elif framing == "focus":
+        layers.append("subject-following focus crop")
+    else:
+        layers.append("fixed crop")
     if fields["cinematic_grade"]:
         layers.append("film grade (S-curve + vignette)" if eng != "argon"
                       else "film grade (S-curve)")
@@ -385,23 +391,29 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         layers.append("slow zoom")
 
     crop_x = None
-    if job.get("framing") == "auto":
+    focus_path = None
+    if framing in ("focus", "auto"):
         try:
             v = _vision()
             if v and v.available():
-                crop_x = v.face_crop_x(src_path, m["start"], m["end"])
+                focus_path = v.focus_path(src_path, m["start"], m["end"], samples=8)
+                if not focus_path and framing == "auto":
+                    crop_x = v.face_crop_x(src_path, m["start"], m["end"])
         except Exception:
+            focus_path = None
             crop_x = None
-        layers.append("face-aware crop" if crop_x is not None else "centre crop")
+        layers.append("subject-following focus crop" if focus_path
+                      else "centre focus crop")
 
     note = ffmpeg_tools.cut_clip(src_path, m["start"], m["end"],
                                  os.path.join(clips_dir, base + ".mp4"), ass_name,
-                                 cwd=clips_dir, framing=job.get("framing", "blur"),
+                                 cwd=clips_dir, framing=framing,
                                  grade=fields["cinematic_grade"],
                                  grain=fields["cinematic_grain"],
                                  ratio="9:16" if eng == "prox" else (job.get("ratio") or "9:16"),
                                  audio_lead=fields["audio_lead"], crop_x=crop_x,
-                                 vignette=(eng != "argon"), auto_zoom=job.get("auto_zoom", False))
+                                 vignette=(eng != "argon"), auto_zoom=job.get("auto_zoom", False),
+                                 focus_path=focus_path)
     thumb = None
     try:
         thumb_path = os.path.join(clips_dir, base + ".jpg")
@@ -426,7 +438,8 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "engine": ENGINES[eng]["name"],
         "engine_id": eng,
         "topic": m.get("topic", ""),
-        "score": m.get("score", 50),
+        "score": m.get("score"),
+        "score_trace": m.get("score_trace") or {},
         "factors": m.get("factors", {}),
         "measured": m.get("measured", {}),
         "tier": m.get("tier"),

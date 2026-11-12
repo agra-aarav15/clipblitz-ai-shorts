@@ -156,6 +156,81 @@ def face_crop_x(src, start, end, samples=4, target_ratio=9 / 16):
             pass
 
 
+def _face_centres(img, frontal, profile):
+    """Return [(centre_x_fraction, area_fraction)] for faces in one frame."""
+    if cv2 is None or img is None:
+        return []
+    fh, fw = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    boxes = []
+    kw = dict(scaleFactor=1.12, minNeighbors=4,
+              minSize=(max(14, fw // 18), max(14, fh // 18)))
+    if frontal is not None:
+        boxes += [tuple(int(v) for v in b) for b in frontal.detectMultiScale(gray, **kw)]
+    if profile is not None:
+        boxes += [tuple(int(v) for v in b) for b in profile.detectMultiScale(gray, **kw)]
+        flipped = cv2.flip(gray, 1)
+        for x, y, w, h in profile.detectMultiScale(flipped, **kw):
+            boxes.append((int(fw - x - w), int(y), int(w), int(h)))
+    out = []
+    for x, y, w, h in boxes:
+        area = w * h
+        if area < fw * fh * 0.003:
+            continue
+        out.append(((x + w / 2.0) / max(1.0, fw), area / max(1.0, fw * fh)))
+    return out
+
+
+def focus_path(src, start, end, samples=8, target_ratio=9 / 16):
+    """A smooth 9:16 crop path that follows the largest face.
+
+    Returns [(seconds_from_clip_start, centre_x_fraction), ...]. The renderer turns
+    this into a per-frame crop expression, so the subject stays in frame instead of
+    sitting in a blurred landscape plate. With no face, the path is the centre; the
+    result is still a full portrait crop, never a letterboxed landscape frame.
+    """
+    if cv2 is None or not src or not os.path.isfile(src):
+        return []
+    frontal, profile = _detectors()
+    if frontal is None and profile is None:
+        return []
+    duration = max(0.2, float(end) - float(start))
+    frames = _frames(src, start, end, max(3, int(samples or 8)))
+    if not frames:
+        return []
+    raw = []
+    try:
+        for i, (path, _fw, _fh) in enumerate(frames):
+            img = cv2.imread(path)
+            faces = _face_centres(img, frontal, profile)
+            if faces:
+                # Largest face wins; if two are close, the more central one wins.
+                faces.sort(key=lambda f: (-f[1], abs(f[0] - 0.5)))
+                raw.append(faces[0][0])
+            else:
+                raw.append(0.5)
+        # Median-of-three removes a one-frame false detection without lagging a pan.
+        smooth = []
+        for i, x in enumerate(raw):
+            window = raw[max(0, i - 1):i + 2]
+            smooth.append(sorted(window)[len(window) // 2])
+        n = len(smooth)
+        return [(round(duration * i / max(1, n - 1), 3), round(x, 4))
+                for i, x in enumerate(smooth)]
+    except Exception:
+        return []
+    finally:
+        for path, _w, _h in frames:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        try:
+            shutil.rmtree(os.path.dirname(frames[0][0]), ignore_errors=True)
+        except Exception:
+            pass
+
+
 def _probe_duration(src):
     try:
         out = subprocess.run(

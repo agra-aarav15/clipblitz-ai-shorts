@@ -39,8 +39,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (captions, clipbench, daily, ffmpeg_tools, hardware, learning, pipeline,
-               rights, scout, social, virality)
+from . import (argon, captions, clipbench, daily, ffmpeg_tools, hardware, learning,
+               pipeline, rights, scout, social, virality)
 from .config import (APP_VERSION, CONFIG, ffmpeg_available, stt_mode,
                      ytdlp_available)
 
@@ -250,6 +250,17 @@ class Handler(BaseHTTPRequestHandler):
                               cache="public, max-age=31536000, immutable")
 
         # copyright safety: the measured risk flags, and the written edit receipt
+        audit_m = re.fullmatch(r"/api/job/(\w+)/audit", path)
+        if audit_m:
+            job_ = pipeline.JOBS.get(audit_m.group(1))
+            if not job_:
+                return self._json(404, {"error": "unknown job"})
+            rows = argon.audit_clips(job_.get("clips") or [])
+            return self._json(200, {
+                "ok": all(r["reproducible"] for r in rows),
+                "clips": rows,
+                "note": "each score is recomputed from its recorded factors, weights, gate and adjustments",
+            })
         risk_m = re.fullmatch(r"/api/job/(\w+)/risk", path)
         if risk_m:
             job_ = pipeline.JOBS.get(risk_m.group(1))
@@ -440,7 +451,7 @@ class Handler(BaseHTTPRequestHandler):
             from . import keys
             body = json_body()
             if body is None or not body.get("which"):
-                return self._json(400, {"error": "which (groq|gemini|yt_client_id|yt_client_secret) required"})
+                return self._json(400, {"error": "which (provider key, local_base, local_model, ai_order, or youtube) required"})
             return self._json(200, keys.test(body["which"], body.get("value")))
 
         self._json(404, {"error": "not found"})
@@ -468,14 +479,14 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             scale = 1.0
         style = (qs.get("style") or ["wordpop"])[0]
-        framing = (qs.get("framing") or ["blur"])[0]
+        framing = (qs.get("framing") or ["focus"])[0]
         try:
             top_n = int((qs.get("top_n") or [CONFIG["top_n"]])[0])
         except ValueError:
             top_n = CONFIG["top_n"]
         return {
             "style": style if style in {s["id"] for s in captions.styles_for_api()} else "wordpop",
-            "framing": framing if framing in ("blur", "auto", "crop", "crop-left", "crop-right") else "blur",
+            "framing": framing if framing in ("focus", "blur", "auto", "crop", "crop-left", "crop-right") else "focus",
             "position": (qs.get("position") or ["bottom"])[0],
             "scale": min(1.6, max(0.5, scale)),
             "top_n": min(6, max(1, top_n)),

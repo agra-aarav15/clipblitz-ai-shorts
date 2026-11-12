@@ -92,6 +92,7 @@ def _public_clip(c, index, base_url=None):
         "engine_name": c.get("engine"),
         "start": c.get("start"), "end": c.get("end"), "duration": c.get("duration"),
         "factors": c.get("factors") or {},
+        "score_trace": c.get("score_trace") or {},
         "tier": c.get("tier"),
         "qc": c.get("qc"),
         "emotion": c.get("emotion_label"),

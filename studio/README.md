@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.3.0 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.4.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -83,6 +83,9 @@ trick. Content ID finds unlicensed re-uploads anyway, and hiding from it is what
 terminated. See the **Copyright and strikes** section in [SETUP.md](SETUP.md).
 
 ## Copyright safety, measured
+
+`GET /api/job/<id>/audit` recomputes every displayed score from its recorded trace and
+returns `reproducible: true/false` for each clip.
 
 `GET /api/job/<id>/risk` returns what can honestly be measured about a job before it goes
 anywhere: sustained non-speech audio outside your transcript (the shape of a music bed, theme
@@ -259,7 +262,13 @@ One selection pass (`argon.rank`) and one render path. The engine:
   hype, informative, awkward) is shown on every card; English, Hinglish, Hindi and Urdu
   cues are supported;
 - selects a diverse podium with temporal/containment/lexical duplicate rejection and an
-  emotion-diversity preference.
+  emotion-diversity preference;
+- reframes landscape sources with a full-height 9:16 focus crop that follows the largest
+  face, instead of a blurred landscape plate. The crop path is smoothed and clamped, and
+  the renderer writes a real 1080x1920 file;
+- records a score trace on every clip: base blend, weights, factor contributions, gate,
+  judge state and every adjustment. `GET /api/job/<id>/audit` recomputes each score from
+  that trace and returns `reproducible: true/false`.
 
 The legacy `virality.rank` / `apex.rank` functions remain as frozen reference code and for
 old-job replay; the product never starts them.
@@ -304,6 +313,8 @@ network, no ffmpeg):
 
 ```
 python scripts/test_emotion.py    # reaction vs laughter, all ten emotion labels, Hindi cues, diversity
+python scripts/test_reframe.py    # focus path, 9:16 crop, real 1080x1920 render
+python scripts/test_connect.py    # every provider in Connect, .env merge, routing validation
 python scripts/test_argon.py      # windows, gate, judge, repair, editor pass, captions, face crop
 python scripts/test_engines.py    # frozen legacy reference code (not exposed in the product)
 python scripts/test_learning.py   # weights inert below 10 choices, +/-10% cap, rights gate holds

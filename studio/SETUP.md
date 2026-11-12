@@ -17,13 +17,15 @@ B2 Pro X, APEX and Both modes are retired from the product; old jobs still load.
    address, and the studio is live.
 
 ```
-ClipBlitz Studio v5.3.0 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.4.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
 Optional overrides (environment variables): `CB_PORT` (default 4300), `CB_DATA` (data
 directory), `CB_FFMPEG_DIR`, `CB_TOP_N`, `CB_TAIL_PAD` (default 0.8s, clamped 0.4-1.5),
 `CB_EDITOR_WORKERS` (parallel editor chunks, default 2), `CB_AI_ORDER` (provider order),
+the Connect screen (Groq, Gemini, Cerebras, OpenRouter, Together, OpenAI, Pollinations,
+local server/model and routing),
 and the provider keys in `.env.example` (Groq, Gemini, OpenRouter, Cerebras, Together,
 OpenAI, a local OpenAI-compatible server such as Ollama, plus the no-key Pollinations fallback).
 

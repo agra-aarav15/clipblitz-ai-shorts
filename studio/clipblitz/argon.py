@@ -1548,41 +1548,82 @@ def score_candidate(c, j, content_type):
     # The story engines' 30..99 calibration is kept for comparability, but a gated
     # candidate is multiplied by the same non-compensatory gate the score is built on.
     passed, gate_reasons = _gate(c, j)
-    score = 30.0 + 69.0 * (blend ** 1.12)
+    base_score = 30.0 + 69.0 * (blend ** 1.12)
+    score = base_score
+    steps = []
+
+    def add(name, value):
+        nonlocal score
+        if abs(value) > 1e-9:
+            score += value
+            steps.append({"op": "add", "name": name, "value": round(value, 3)})
+
+    def mul(name, value):
+        nonlocal score
+        if abs(value - 1.0) > 1e-9:
+            score *= value
+            steps.append({"op": "mul", "name": name, "value": round(value, 3)})
+
+    def cap(name, value):
+        nonlocal score
+        if score > value:
+            score = value
+            steps.append({"op": "cap", "name": name, "value": round(value, 3)})
+
     if f.get("event", 0.0) >= 0.7:
-        score = min(99.0, score + 3.5)
+        add("measured peak event", 3.5)
     # A 55-second "funny" radio clip is usually three unrelated exchanges stitched
     # together. Keep comedy focused; the same material scores better at 15-35s.
     dur = max(0.0, c["end"] - c["start"])
     if c.get("emotion_label") == "funny" and dur > 42.0:
-        score -= min(9.0, 0.45 * (dur - 42.0))
+        add("long comedy window", -min(9.0, 0.45 * (dur - 42.0)))
     if (content_type or "").lower() == "sports":
         # A sports highlight without the measured event is an interview, not a
         # highlight. Reward the roar/cut-density coverage and push a quiet talking
         # segment out of the podium instead of letting it win on coherence alone.
-        score += 8.0 * f.get("event", 0.0) + 4.0 * f.get("visual", 0.0)
-        score += 10.0 * f.get("action", 0.0)
+        add("sports event coverage", 8.0 * f.get("event", 0.0))
+        add("sports visual coverage", 4.0 * f.get("visual", 0.0))
+        add("sports action language", 10.0 * f.get("action", 0.0))
         if f.get("event", 0.0) < 0.20 and f.get("visual", 0.0) < 0.20:
-            score -= 12.0
+            add("quiet sports window", -12.0)
         if f.get("action", 0.0) < 0.10:
-            score -= 6.0
+            add("no action language", -6.0)
     flags = set(c.get("flags") or [])
     fatal = flags & FATAL_FLAGS
     if fatal:
-        score -= min(17.0, 3.4 * len(fatal))
+        add("fatal flags", -min(17.0, 3.4 * len(fatal)))
     if flags & WARNING_FLAGS:
-        score -= min(7.0, 1.2 * len(flags & WARNING_FLAGS))
+        add("warning flags", -min(7.0, 1.2 * len(flags & WARNING_FLAGS)))
     if not passed:
-        score *= 0.72
+        mul("gate failed", 0.72)
     if j.get("ends_abrupt") or "ends_before_payoff" in flags:
-        score = min(score, 54.0)
+        cap("dead ending", 54.0)
     if not j.get("alone", True) or "not_standalone" in flags:
-        score = min(score, 47.0)
+        cap("not standalone", 47.0)
     if _num(j, "retention_3s", 5) <= 3.0:
-        score = min(score, 58.0)
+        cap("weak 3s retention", 58.0)
     if _num(j, "retention_end", 5) <= 3.0:
-        score = min(score, 52.0)
+        cap("weak end retention", 52.0)
     c["score"] = int(max(1.0, min(99.0, round(score))))
+    c["score_trace"] = {
+        "formula": "30 + 69 * blend^1.12, then the listed adjustments",
+        "blend": round(blend, 4),
+        "weights": {k: round(float(w.get(k, 0.0)), 3) for k in w},
+        "factors": {k: round(float(f.get(k, 0.0)), 4) for k in w},
+        "contributions": {k: round(float(w.get(k, 0.0) * f.get(k, 0.0)) / wsum, 4)
+                          for k in w},
+        "base": round(base_score, 3),
+        "steps": steps,
+        "gate": {"passed": passed, "reasons": gate_reasons},
+        "judge": {"offline": bool(j.get("_offline")),
+                  "emotion_label": c.get("emotion_label"),
+                  "coherence": _num(j, "coherence"),
+                  "payoff": _num(j, "payoff"),
+                  "retention_3s": _num(j, "retention_3s"),
+                  "retention_end": _num(j, "retention_end")},
+        "final": c["score"],
+    }
+    c["score_trace"]["reproducible"] = verify_score(c)
     c["tier"] = _tier(c["score"], passed, flags)
     c["gate"] = {"passed": passed, "reasons": gate_reasons}
     # The six learning factors + the Argon detail. The learning store intentionally
@@ -1619,6 +1660,46 @@ def _tier(score, passed, flags):
     if score >= 75:
         return "strong"
     return "usable"
+
+
+def verify_score(c):
+    """Recompute a clip's score from its own trace. This is the anti-fake check:
+    if the displayed number cannot be reproduced from the recorded factors, weights,
+    gate and adjustments, the trace is invalid."""
+    t = c.get("score_trace") or {}
+    try:
+        score = float(t["base"])
+        for step in t.get("steps") or []:
+            op, value = step.get("op"), float(step.get("value", 0.0))
+            if op == "add":
+                score += value
+            elif op == "mul":
+                score *= value
+            elif op == "cap":
+                score = min(score, value)
+            else:
+                return False
+        final = int(max(1.0, min(99.0, round(score))))
+        return final == int(c.get("score"))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def audit_clips(clips):
+    """Recompute every displayed score from its trace. Used by the API and tests."""
+    out = []
+    for i, c in enumerate(clips or []):
+        t = c.get("score_trace") or {}
+        out.append({
+            "index": i,
+            "score": c.get("score"),
+            "trace_final": t.get("final"),
+            "reproducible": verify_score(c),
+            "qc": c.get("qc"),
+            "emotion": c.get("emotion_label"),
+            "tier": c.get("tier"),
+        })
+    return out
 
 
 def _reason(c, j):
@@ -1955,7 +2036,8 @@ def rejudge_clips(clips, segments, content_type="other"):
         clip = clips[i]
         for key in ("score", "tier", "qc", "verdict", "reason", "factors",
                     "argon", "flags", "gate", "emotion_label",
-                    "secondary_emotion", "emotion_scores", "comedy_context"):
+                    "secondary_emotion", "emotion_scores", "comedy_context",
+                    "score_trace"):
             if key in c:
                 clip[key] = c[key]
         if clip.get("qc") == "verified":

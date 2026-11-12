@@ -521,3 +521,11 @@ textarea { resize: vertical; }
 .joberror .joberr-sum { margin-bottom: 6px; }
 .joberror pre { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 10px; }
 .joberror pre[hidden] { display: none !important; }
+
+.engbadge.emochip { color: var(--gold, #8a6a2f); border-color: currentColor; }
+
+.scoretrace { margin: 10px 0 2px; border-top: 1px solid var(--line); padding-top: 8px; }
+.scoretrace summary { cursor: pointer; font: 600 10px/1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.tracemeta { margin-top: 6px; font: 11px/1.5 var(--font-mono); color: var(--muted); }
+.tracegrid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.traceitem { font: 10px/1.4 var(--font-mono); color: var(--ink-2); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; }

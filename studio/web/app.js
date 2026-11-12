@@ -942,6 +942,23 @@ function xLine(c) {
   </div>`;
 }
 
+function scoreTraceHTML(c) {
+  const t = c.score_trace;
+  if (!t || !t.base) return '';
+  const contrib = Object.entries(t.contributions || {})
+    .sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([k, v]) => `<span class="traceitem">${esc(k)} ${(v * 100).toFixed(1)}</span>`).join('');
+  const steps = (t.steps || []).map(s =>
+    `<span class="traceitem">${esc(s.name)} ${s.op === 'mul' ? '×' : s.op === 'cap' ? 'cap' : ''}${esc(String(s.value))}</span>`).join('');
+  return `<details class="scoretrace">
+    <summary>Why this score${t.reproducible ? ' / reproducible' : ' / trace mismatch'}</summary>
+    <div class="tracemeta">${esc(t.formula)} / blend ${Number(t.blend).toFixed(3)} / base ${Number(t.base).toFixed(1)} / final ${esc(String(t.final))}</div>
+    <div class="tracegrid">${contrib}</div>
+    ${steps ? `<div class="tracegrid">${steps}</div>` : ''}
+    <div class="tracemeta">gate: ${t.gate && t.gate.passed ? 'passed' : 'failed'}${t.gate && t.gate.reasons && t.gate.reasons.length ? ' / ' + esc(t.gate.reasons.join(', ')) : ''} / judge: ${t.judge && t.judge.offline ? 'offline measurement' : 'verified judge'}</div>
+  </details>`;
+}
+
 function clipCardHTML(job, c, i) {
   const styleOpts = STYLES.map(s =>
     `<option value="${esc(s.id)}" ${s.id === (c.style || job.style) ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
@@ -960,6 +977,7 @@ function clipCardHTML(job, c, i) {
       </div>
     </div>
     <div class="factors">${factorRows(c.factors)}</div>
+    ${scoreTraceHTML(c)}
     ${c.verdict ? `<div class="judge">${IC('scales')} “${esc(c.verdict)}”</div>` : ''}
     ${c.reason ? `<div class="reason">${IC('bulb')} ${esc(c.reason)}</div>` : ''}
     <div class="clipmeta">
@@ -1962,11 +1980,33 @@ function keyState(id, v) {
   el.className = 'keystate' + (v.set ? ' ok' : '');
 }
 
+function renderProviderKeys(st) {
+  const box = $('provider-keys');
+  if (!box) return;
+  const providers = st.providers || [];
+  box.innerHTML = providers.map((p) => {
+    const cur = st[p.key] || {};
+    const value = p.secret ? '' : (cur.masked || '');
+    return `<div class="keyrow">
+      <div class="field"><label for="key-${esc(p.key)}">${esc(p.label)} <span class="dim">${esc(p.chip || '')}</span></label>
+        <div class="keyinput">
+          <input id="key-${esc(p.key)}" type="${p.secret ? 'password' : 'text'}"
+                 value="${esc(value)}" placeholder="${esc(p.placeholder || '')}"
+                 autocomplete="off" spellcheck="false" />
+          <button class="btn small" data-savekey="${esc(p.key)}" type="button">Test &amp; save</button>
+        </div>
+        <div class="dim">${esc(p.hint || '')}${cur.model ? ' / ' + esc(cur.model) : ''}</div>
+      </div>
+      <span class="keystate" id="state-${esc(p.key)}">—</span>
+    </div>`;
+  }).join('');
+}
+
 async function loadKeyStates() {
   try {
     const st = await (await fetch('/api/keys')).json();
-    keyState('state-groq', st.groq || {});
-    keyState('state-gemini', st.gemini || {});
+    renderProviderKeys(st);
+    (st.providers || []).forEach((p) => keyState(`state-${p.key}`, st[p.key] || {}));
     const ytOk = (st.yt_client_id || {}).set && (st.yt_client_secret || {}).set;
     const yel = $('state-youtube');
     if (yel) { yel.textContent = ytOk ? 'saved' : 'empty'; yel.className = 'keystate' + (ytOk ? ' ok' : ''); }
@@ -1980,19 +2020,23 @@ async function loadKeyStates() {
   } catch (e) { /* best effort */ }
 }
 
-document.querySelectorAll('[data-savekey]').forEach((b) => b.addEventListener('click', async () => {
+document.addEventListener('click', async (ev) => {
+  const b = ev.target.closest('[data-savekey]');
+  if (!b) return;
   const which = b.dataset.savekey;
   const body = {};
-  if (which === 'groq') body.groq = $('key-groq').value.trim();
-  if (which === 'gemini') body.gemini = $('key-gemini').value.trim();
   if (which === 'youtube') {
     body.yt_client_id = $('key-yt-id').value.trim();
     body.yt_client_secret = $('key-yt-secret').value.trim();
+  } else {
+    const input = $(`key-${which}`);
+    body[which] = input ? input.value.trim() : '';
+    if (which === 'pollinations' && !body[which]) body[which] = 'on';
   }
   if (Object.values(body).some((v) => !v)) return toast('Paste the value first.', true);
   b.disabled = true;
   const old = b.textContent;
-  b.textContent = 'Testing…';
+  b.textContent = 'Testing...';
   try {
     const resp = await fetch('/api/keys', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -2001,17 +2045,17 @@ document.querySelectorAll('[data-savekey]').forEach((b) => b.addEventListener('c
     if (!resp.ok) throw new Error(r.error || resp.statusText);
     const tests = r.tests || {};
     const fails = Object.entries(tests).filter(([, t]) => !t.ok).map(([k, t]) => `${k}: ${t.detail || 'failed'}`);
-    if (fails.length) toast('Saved, but check — ' + fails.join(' / '), true);
+    if (fails.length) toast('Saved, but check - ' + fails.join(' / '), true);
     else {
       const ok = Object.values(tests).map((t) => t.detail).filter(Boolean);
-      toast('Saved and tested live' + (ok.length ? ' — ' + ok.join(' / ') : '.'));
+      toast('Saved and tested live' + (ok.length ? ' - ' + ok.join(' / ') : '.'));
     }
     loadKeyStates();
     refreshSocial();
   } catch (e) { toast('Could not save: ' + String(e.message || e), true); }
   b.disabled = false;
   b.textContent = old;
-}));
+});
 
 /* ============================ recent jobs ============================ */
 async function loadRecent() {
@@ -2058,5 +2102,7 @@ if (wantedJob) {
   }
 }
 loadKeyStates();
+const hashScreen = (location.hash || '').replace('#', '');
+if (SCREENS.includes(hashScreen)) showScreen(hashScreen, true);
 loadLan();
 loadLearning();

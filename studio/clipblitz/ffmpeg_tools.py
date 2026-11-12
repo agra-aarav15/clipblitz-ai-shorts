@@ -138,12 +138,34 @@ def write_srt(path, entries):
 STYLE = "force_style='Fontsize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,MarginV=48'"
 
 
+def _focus_x_expr(path):
+    """Build a per-frame crop-x expression from [(t, centre_fraction), ...].
+
+    The expression is piecewise linear and clamped to the source. Commas inside the
+    expression are escaped because ffmpeg's filter parser uses commas as separators.
+    """
+    if not path:
+        return None
+
+    def x(frac):
+        return (f"max(0\\,min(iw-ih*9/16\\,"
+                f"iw*{float(frac):.4f}-ih*9/32))")
+
+    expr = x(path[-1][1])
+    for (t0, f0), (t1, f1) in reversed(list(zip(path, path[1:]))):
+        if t1 <= t0:
+            continue
+        seg = (f"({x(f0)}+({x(f1)}-{x(f0)})*"
+               f"(t-{float(t0):.3f})/{float(t1 - t0):.3f})")
+        expr = f"if(lt(t\\,{float(t1):.3f})\\,{seg}\\,{expr})"
+    return expr
+
+
 def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, ratio="9:16",
-                 crop_x=None, vignette=True, auto_zoom=False):
-    """Vertical reframing filter chains. 'blur' fits the WHOLE frame on a blurred
-    background (nothing cut off — default); crop variants cut to 9:16 with a focus.
-    'auto' is a centre crop unless vision.face_crop_x supplied a face offset.
-    Every chain ends with a short fade-in/out so cut edges never feel chopped."""
+                 crop_x=None, vignette=True, auto_zoom=False, focus_path=None):
+    """Vertical reframing filter chains. 'focus' is a full-height 9:16 crop that
+    follows the subject; 'blur' fits the whole frame on a blurred background; crop
+    variants cut to 9:16 with a fixed focus. Every chain ends with a short fade."""
     fv_in = "fade=t=in:st=0:d=0.18"
     # The tail pad is where the picture should breathe; a 0.12s fade is enough to
     # avoid a hard pop without turning the last beat black.
@@ -162,6 +184,12 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
         x = ("(iw-ih*9/16)/2" if crop_x is None
              else f"min({max(0, int(crop_x))}\\,iw-ih*9/16)")
         return None, f"crop=ih*9/16:ih:{x}:0,scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}"
+    if framing == "focus":
+        x = _focus_x_expr(focus_path) or "(iw-ih*9/16)/2"
+        # min() keeps a portrait source from asking for a crop wider than the frame.
+        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):"
+                      f"x={x}:y=(ih-oh)/2,scale={W}:{H},fps=30{zoom},"
+                      f"{fv_in},{fv_out}{grade}{sub}")
     # blur-pad: full frame visible, background = a low-resolution blurred copy.
     # Blurring at 1/4 size and scaling back is visually identical here and several
     # times cheaper than boxblur=20:5 on the full 1080x1920 canvas.
@@ -193,17 +221,17 @@ def thumbnail(src, at, out, width=540):
         return None
 
 
-def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
+def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
              grade=True, grain=False, ratio="9:16", audio_lead=0.0, crop_x=None,
-             vignette=True, auto_zoom=False):
-    """Cut [start,end], reframe vertical (default: blur-pad so nobody gets cut off),
-    burn subtitles (.ass) if given, polish edges with audio+video fades.
+             vignette=True, auto_zoom=False, focus_path=None):
+    """Cut [start,end], reframe vertical (default: focus crop that follows the
+    subject), burn subtitles (.ass) if given, polish edges with audio+video fades.
     sub_name is relative to cwd (pass the clips dir)."""
     duration = round(end - start, 2)
     complex_fg, simple_vf = _filtergraph(framing, sub_name, duration,
                                          grade_film=grade, grain=grain, ratio=ratio,
                                          crop_x=crop_x, vignette=vignette,
-                                         auto_zoom=auto_zoom)
+                                         auto_zoom=auto_zoom, focus_path=focus_path)
     lead = max(0.0, float(audio_lead or 0.0))
     af = ["-af", _audio_fade(duration)]
     if lead > 0.01:
@@ -217,7 +245,7 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
                        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
     else:
-        args = base + ["-vf", simple_vf, "-map", "0:a?", *af,
+        args = base + ["-vf", simple_vf, "-map", "0:v:0", "-map", "0:a?", *af,
                        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
     try:
@@ -227,13 +255,14 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="blur",
             complex_fg2, simple_vf2 = _filtergraph(framing, None, duration,
                                                    grade_film=grade, grain=grain, ratio=ratio,
                                                    crop_x=crop_x, vignette=vignette,
-                                         auto_zoom=auto_zoom)
+                                                   auto_zoom=auto_zoom,
+                                                   focus_path=focus_path)
             if complex_fg2 is not None:
                 args = base + ["-filter_complex", complex_fg2, "-map", "[v]", "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
             else:
-                args = base + ["-vf", simple_vf2, "-map", "0:a?", *af,
+                args = base + ["-vf", simple_vf2, "-map", "0:v:0", "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
                                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
             run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))

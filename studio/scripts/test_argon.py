@@ -599,6 +599,11 @@ def test_manual():
           {"start", "end", "score", "factors", "qc", "verdict"} <= set(c))
     check("argon: a manual cut is snapped to sentence edges",
           any(abs(c["start"] - s["start"]) <= 0.01 for s in SEGS), str(c["start"]))
+    check("argon: the displayed score reproduces from its trace",
+          argon.verify_score(c), str(c.get("score_trace", {}).get("final")))
+    check("argon: the score trace records weights and gate",
+          bool(c.get("score_trace", {}).get("weights"))
+          and "passed" in c.get("score_trace", {}).get("gate", {}))
 
 
 def main():

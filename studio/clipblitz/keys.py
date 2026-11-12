@@ -30,6 +30,7 @@ KEY_VARS = {
     "pollinations": "CB_POLLINATIONS",
     "local_base": "CB_LOCAL_BASE",
     "local_model": "CB_LOCAL_MODEL",
+    "local_key": "CB_LOCAL_KEY",
     "ai_order": "CB_AI_ORDER",
     "yt_client_id": "CB_YT_CLIENT_ID",
     "yt_client_secret": "CB_YT_CLIENT_SECRET",
@@ -65,6 +66,9 @@ PROVIDERS = [
     {"key": "local_model", "var": "CB_LOCAL_MODEL", "label": "Local model",
      "hint": "ollama pull qwen2.5:3b", "placeholder": "qwen2.5:3b",
      "chip": "PERMANENT", "secret": False},
+    {"key": "local_key", "var": "CB_LOCAL_KEY", "label": "Local key",
+     "hint": "only for a key-protected local server", "placeholder": "optional",
+     "chip": "PERMANENT", "secret": True},
     {"key": "ai_order", "var": "CB_AI_ORDER", "label": "Provider order",
      "hint": "comma order, e.g. groq,gemini,local,pollinations",
      "placeholder": "groq,gemini,local,pollinations", "chip": "ROUTING", "secret": False},
@@ -164,15 +168,19 @@ def save(updates):
         lines = ["# ClipBlitz - live configuration (gitignored, never commit)"]
 
     remaining = dict(updates)
+    written = set()
     out = []
     for line in lines:
         stripped = line.strip()
         m = re.match(r"^#?\s*([A-Z_0-9]+)\s*=", stripped)
         if m:
             var = m.group(1)
+            if var in written:
+                continue  # a later duplicate would win in _env(); drop it
             hit = next((lk for lk, vv in KEY_VARS.items() if vv == var and lk in remaining), None)
             if hit:
                 out.append(f"{var}={remaining.pop(hit)}")
+                written.add(var)
                 continue
         out.append(line)
     for lk, vv in remaining.items():  # var not present in the file yet
@@ -225,11 +233,14 @@ def test(which, value=None):
             return {"ok": True, "detail": "Pollinations online (no key)"}
         except Exception as e:
             return {"ok": False, "detail": f"Pollinations unavailable: {str(e)[:80]}"}
-    if which in ("local_base", "local_model"):
+    if which in ("local_base", "local_model", "local_key"):
         base = (value if which == "local_base" else _stored("local_base")) or             "http://127.0.0.1:11434/v1"
+        key = value if which == "local_key" else _stored("local_key")
+        headers = {"User-Agent": "ClipBlitz/5.3"}
+        if key:
+            headers["Authorization"] = "Bearer " + key
         try:
-            req = urllib.request.Request(base.rstrip("/") + "/models",
-                                         headers={"User-Agent": "ClipBlitz/5.3"})
+            req = urllib.request.Request(base.rstrip("/") + "/models", headers=headers)
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.load(r)
             n = len(data.get("data") or [])

@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.4.1 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.4.2 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 

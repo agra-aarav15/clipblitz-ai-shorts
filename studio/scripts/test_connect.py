@@ -29,7 +29,7 @@ def test_provider_list():
     st = keys.status()
     names = [p["key"] for p in st.get("providers", [])]
     want = {"groq", "gemini", "cerebras", "openrouter", "together", "openai",
-            "pollinations", "local_base", "local_model", "ai_order"}
+            "pollinations", "local_base", "local_model", "local_key", "ai_order"}
     check("connect: every supported provider is exposed", want <= set(names), str(names))
     check("connect: provider metadata has labels and hints",
           all(p.get("label") and p.get("hint") for p in st["providers"]))
@@ -62,6 +62,13 @@ def test_save_merge():
         bad = keys.save({"ai_order": "groq,not-a-provider"})
         check("connect: an invalid order is not written",
               not bad.get("saved") and "not-a-provider" not in open(path, encoding="utf-8").read())
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("CB_AI_KEY=stale-old-key\n")
+        keys.save({"groq": "gsk_NEW_live_key_1234567890"})
+        text2 = open(path, encoding="utf-8").read()
+        check("connect: a later duplicate cannot defeat a save",
+              text2.count("CB_AI_KEY=") == 1
+              and "gsk_NEW_live_key_1234567890" in text2, text2)
         cleared = keys.save({"groq": ""})
         check("connect: a saved key can be cleared",
               "groq" in (cleared.get("saved") or [])

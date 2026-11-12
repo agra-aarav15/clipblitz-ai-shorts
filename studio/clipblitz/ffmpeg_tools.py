@@ -218,7 +218,7 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
         return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
                       f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing == "focus":
-        x = _focus_x_expr(focus_path) or "(iw-ih*9/16)/2"
+        x = _focus_x_expr(focus_path) or "(iw-ow)/2"
         # min() keeps a portrait source from asking for a crop wider than the frame.
         return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):"
                       f"x={x}:y=(ih-oh)/2,scale={W}:{H},fps=30{zoom},"

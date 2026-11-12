@@ -438,6 +438,8 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "topic": m.get("topic", ""),
         "score": m.get("score"),
         "score_trace": m.get("score_trace") or {},
+        "raw_features": m.get("raw_features") or {},
+        "hook_speed": m.get("hook_speed", 0.0),
         "factors": m.get("factors", {}),
         "measured": m.get("measured", {}),
         "tier": m.get("tier"),

@@ -159,9 +159,9 @@ A short honest podium is preferred to three cuts of the same joke.
 | `web/index.html`, `web/app.js` | ARGON selector default; fallbacks; hero copy |
 | `scripts/test_emotion.py` | 26 offline checks: reaction vs laughter, ten emotions, Hindi/Urdu cues, mismatch correction, diversity |
 | `scripts/test_reframe.py` | 12 checks: focus path, 9:16 crop, real 1080x1920 render |
-| `scripts/test_connect.py` | 12 checks: every provider, .env merge, routing validation |
-| `scripts/test_argon.py` | 84 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
-| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.4.1; ARGON is the only product engine; legacy paths are frozen |
+| `scripts/test_connect.py` | 13 checks: every provider, .env merge, routing validation |
+| `scripts/test_argon.py` | 86 offline checks: windows, features, gate, judge, repair, diversity, determinism, pipeline contract |
+| `README.md`, `SETUP.md`, `plugin/`, manifests | Version 5.4.2; ARGON is the only product engine; legacy paths are frozen |
 
 The old ProX/B2/APEX paths are preserved only for byte-fidelity tests and old-job replay. Nothing in
 `rights.py` changed: the agent still cannot publish, judge for the owner, or clear rights.
@@ -203,8 +203,8 @@ Files that matter:
 - clipblitz/learning.py         (six-factor learning store and per-engine profile)
 - scripts/test_emotion.py        (26 offline checks: emotion taxonomy)
 - scripts/test_reframe.py       (12 checks: portrait focus)
-- scripts/test_connect.py       (12 checks: provider UI)
-- scripts/test_argon.py         (84 offline checks)
+- scripts/test_connect.py       (13 checks: provider UI)
+- scripts/test_argon.py         (86 offline checks)
 - scripts/test_engines.py       (frozen legacy reference; not a product engine)
 - README.md, SETUP.md           (docs may lag the code)
 
@@ -262,7 +262,7 @@ Return: findings, evidence, patch list, and unresolved questions.
 
 | Check | Result |
 |---|---|
-| `python scripts/test_argon.py` | 84 passed, 0 failed |
+| `python scripts/test_argon.py` | 86 passed, 0 failed |
 | `python scripts/test_engines.py` | 30 passed, 0 failed |
 | `python scripts/test_agent.py` | 82 passed, 0 failed |
 | `python scripts/test_learning.py` | 28 passed, 0 failed |

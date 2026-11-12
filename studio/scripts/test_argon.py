@@ -595,6 +595,25 @@ def test_rejudge_updates_tier():
         argon.has_brain, argon._judge_batch = saved_has, saved_judge
 
 
+def test_rejudge_is_stable():
+    """An unchanged judge must not change the score by folding the judge in twice."""
+    brains_off()
+    c = argon.rank_single(SEGS, DURATION, ENERGY, 8.0, 28.0, SCENES, LAUGHS, MOTION)
+    before = (c["score"], c["tier"], dict(c.get("raw_features") or {}))
+    saved_has, saved_judge = argon.has_brain, argon._judge_batch
+    try:
+        argon.has_brain = lambda: True
+        argon._judge_batch = lambda cands, segs, ct: {0: dict(c.get("judge") or {})}
+        argon.rejudge_clips([c], SEGS, "other")
+    finally:
+        argon.has_brain, argon._judge_batch = saved_has, saved_judge
+    check("argon: an unchanged re-judge keeps the score and tier",
+          (c["score"], c["tier"]) == before[:2],
+          f"{before[:2]} -> {(c['score'], c['tier'])}")
+    check("argon: re-judge keeps the raw pre-judge features",
+          c.get("raw_features") == before[2])
+
+
 def test_manual():
     brains_off()
     c = argon.rank_single(SEGS, DURATION, ENERGY, 8.0, 28.0, SCENES, LAUGHS, MOTION)
@@ -631,6 +650,7 @@ def main():
     test_tail_pad()
     test_boundary_and_opening()
     test_rejudge_updates_tier()
+    test_rejudge_is_stable()
     test_manual()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

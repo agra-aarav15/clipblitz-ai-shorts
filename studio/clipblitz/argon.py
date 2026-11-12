@@ -1372,8 +1372,8 @@ def _judge_batch(cands, segments, content_type):
             "verbatim": verbatim,
             "measured": {
                 "hook_speed": c.get("hook_speed", 0.0),
-                "energy": c["measured"]["energy"],
-                "laughter": c["measured"]["laughter"],
+                "energy": c["measured"].get("energy", 0.0),
+                "laughter": c["measured"].get("laughter", 0.0),
                 "tail_laugh": c["measured"].get("tail_laugh", 0.0),
                 "event": c["measured"].get("event", 0.0),
                 "words_per_second": c.get("text_stats", {}).get("wps", 0.0),
@@ -1536,6 +1536,11 @@ def _gate(c, j):
 
 def score_candidate(c, j, content_type):
     """Compute the calibrated score, the six learning factors, and the honest QC badge."""
+    # Keep the pre-judge measurements. A re-judge must start from these, not from the
+    # already judge-blended factors, or the judge is folded in again on every pass.
+    raw = c.get("raw_features") or dict(c.get("argo_features") or {})
+    c["raw_features"] = dict(raw)
+    c["argo_features"] = dict(raw)
     _apply_judge(c, j)
     # A funny sports clip is still a comedy cut. Without this, the sports profile
     # (event 2.4x, visual 1.9x) buries a team-radio punchline under engine noise.
@@ -2015,11 +2020,20 @@ def rejudge_clips(clips, segments, content_type="other"):
     for clip in clips:
         c = dict(clip)
         feats = {}
-        for source in (clip.get("factors") or {}, clip.get("argon") or {}):
-            for k, v in source.items():
+        raw = clip.get("raw_features") or {}
+        if raw:
+            for k, v in raw.items():
                 if k in FEATURES and isinstance(v, (int, float)):
-                    feats[k] = max(0.0, min(1.0, float(v) / 100.0))
-        c["argo_features"] = feats
+                    feats[k] = max(0.0, min(1.0, float(v)))
+        else:
+            for source in (clip.get("factors") or {}, clip.get("argon") or {}):
+                for k, v in source.items():
+                    if k in FEATURES and isinstance(v, (int, float)):
+                        feats[k] = max(0.0, min(1.0, float(v) / 100.0))
+        c["raw_features"] = dict(feats)
+        c["argo_features"] = dict(feats)
+        c["hook_speed"] = float(clip.get("hook_speed")
+                                or (clip.get("argon") or {}).get("hook_speed", 0) / 100.0)
         c["measured"] = dict(clip.get("measured") or {})
         c["emotion_label"] = clip.get("emotion_label") or ""
         c["emotion_scores"] = dict(clip.get("emotion_scores") or {})
@@ -2047,7 +2061,7 @@ def rejudge_clips(clips, segments, content_type="other"):
         for key in ("score", "tier", "qc", "verdict", "reason", "factors",
                     "argon", "flags", "gate", "emotion_label",
                     "secondary_emotion", "emotion_scores", "comedy_context",
-                    "score_trace"):
+                    "score_trace", "raw_features", "hook_speed"):
             if key in c:
                 clip[key] = c[key]
         if clip.get("qc") == "verified":

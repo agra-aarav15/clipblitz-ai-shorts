@@ -450,6 +450,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not check.get("ok"):
                     return self._json(400, {"error": check.get("detail") or "invalid provider order"})
             result = keys.save(updates)
+            if result.get("error"):
+                return self._json(400, result)
             result["tests"] = {k: keys.test(k) for k in result["saved"]}
             return self._json(200, result)
         if path == "/api/keys/test":

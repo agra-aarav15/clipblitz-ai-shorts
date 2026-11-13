@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.3"><b>Download v5.4.3 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4"><b>Download v5.4.4 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -42,6 +42,30 @@ spoken unit with a measured opening and ending:
    viral/strong cuts are published. Two strong clips beat three with filler.
 
 ---
+
+## What's new in v5.4.4
+
+Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.md`.
+
+- **A repaired clip is scored on the repaired window.** Re-measuring used to leave the
+  old window's saved factors in place, so the score described a cut that no longer existed.
+- **No rejected podium.** A gate-failed cut is no longer returned as the result when a
+  judge spoke. A measured-only run (no key) still returns its best window, labelled
+  unverified.
+- **An incomplete judge call is not a pass.** Rows returned without a judgement are marked
+  `unjudged`, fail the gate and are recorded as offline.
+- **`hook_speed` measures the real delay** to the first hook in the first ten seconds
+  instead of collapsing to 0/1.
+- **Repair reaches the defects it can fix.** Weak hooks, slow opens, too-long windows and
+  truncated lists enter the repair pool; a premature ending extends to the next sentence
+  end; an over-long window keeps its setup. Repairs run without a key too.
+- **No intro openers.** Machine-built windows cannot open on a greeting or sponsor read.
+- **Long videos rank in seconds.** Window lookups bisect a cached index; a synthetic
+  90-minute offline run fell from "did not finish in 300s" to 11.5s (10-minute: 31.3s to
+  3.2s) on this machine.
+- Every offline suite passes: 763 checks in the studio checkout, 779 in the repository
+  checkout (17 extra manifest checks there; the frozen-tree comparison skips because that
+  tree is not adjacent in the repository layout).
 
 ## What's new in v5.4.3
 
@@ -102,7 +126,7 @@ spoken unit with a measured opening and ending:
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.4.3)
+## ARGON, the unified engine (ClipBlitz Studio v5.4.4)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -219,7 +243,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.4.3-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.3).
+1. Download **`ClipBlitzStudio-5.4.4-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4).
 2. Unzip the folder anywhere.
 3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
 4. Open `http://localhost:4300` in your browser.

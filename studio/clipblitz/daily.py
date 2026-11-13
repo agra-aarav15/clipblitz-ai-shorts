@@ -283,7 +283,7 @@ def run(reason="manual", queries=None, cuts=None, searcher=None, starter=None,
         else:
             for prop in plan[:cuts]:
                 try:
-                    jid, err = (starter or _start_cut)(prop, CONFIG.get("engine_default", "b2"),
+                    jid, err = (starter or _start_cut)(prop, CONFIG.get("engine_default", "argon"),
                                                        int(CONFIG.get("top_n") or 3))
                 except Exception as e:
                     jid, err = None, str(e)[:200]
@@ -294,7 +294,7 @@ def run(reason="manual", queries=None, cuts=None, searcher=None, starter=None,
                                 "title": prop.get("title") or "",
                                 "url": prop.get("url") or "",
                                 "score": prop.get("rank_score"),
-                                "engine": CONFIG.get("engine_default", "b2")})
+                                "engine": CONFIG.get("engine_default", "argon")})
     elif cuts and plan and not capable:
         started.append({"skipped": "this machine cannot render right now",
                         "reason": why})

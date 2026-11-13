@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "5.4.3"
+APP_VERSION = "5.4.4"
 
 
 def _load_env(path):
@@ -69,7 +69,8 @@ CONFIG = {
     # 0.5-1.0s is the range OpusClip-style shorts use; 0.8 is the default.
     "tail_pad": _float_env("CB_TAIL_PAD", 0.8, 0.4, 1.5),
     "privacy": os.environ.get("CB_PRIVACY", "public"),
-    # per-job engine choice: prox | b2 | both (validated in server/pipeline)
+    # One product engine: argon. CB_ENGINE is accepted for old deployments but every
+    # new job is ARGON (pipeline.new_job maps legacy ids).
     "engine_default": os.environ.get("CB_ENGINE", "argon"),
     "yt_client_id": os.environ.get("CB_YT_CLIENT_ID", ""),
     "yt_client_secret": os.environ.get("CB_YT_CLIENT_SECRET", ""),

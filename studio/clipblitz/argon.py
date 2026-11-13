@@ -40,6 +40,7 @@ Pipeline
   GATED SCORE + MMR DIVERSITY -> podium + candidate lab
 """
 
+import bisect
 import json
 import math
 import os
@@ -232,6 +233,12 @@ FATAL_FLAGS = {"starts_mid_thought", "ends_before_payoff", "no_payoff",
 WARNING_FLAGS = {"weak_hook", "low_energy", "repetitive", "context_dependent",
                  "slow_open", "weak_ending", "too_long", "filler_open",
                  "screen_dependent", "list_incomplete", "emotion_mismatch"}
+# Warning flags that name a defect the deterministic repair pass can actually fix.
+# A candidate carrying one of these must reach the repair pool even when the gate
+# passes; otherwise repair steps 2 (slow hook) and 4 (too long) can never run.
+REPAIRABLE_FLAGS = {"weak_hook", "slow_open", "weak_ending", "too_long",
+                    "list_incomplete", "context_dependent", "filler_open",
+                    "starts_mid_thought"}
 
 # ARGON's own blend. The story engines weight payoff above all; ARGON keeps payoff
 # important but treats hook and story as first-class because retention is decided in
@@ -293,6 +300,46 @@ def _sentences(segments):
     return out
 
 
+# The same transcript is measured for dozens of candidate windows. Rebuilding the
+# sentence list, and every word in the episode, for each window made a long source
+# quadratic. These caches hold one transcript each (with a reference, so an id cannot
+# be reused) and are read-only; invalidate by handing in a different list.
+_SENT_CACHE = {}
+_WORD_CACHE = {}
+
+
+def _sentence_rows(segments):
+    entry = _SENT_CACHE.get(id(segments))
+    if entry and entry[0] is segments and entry[1] == len(segments):
+        return entry[2]
+    rows = _sentences(segments)
+    _SENT_CACHE.clear()
+    _SENT_CACHE[id(segments)] = (segments, len(segments), rows)
+    return rows
+
+
+def _word_rows(segments):
+    """(sorted words, their starts, sentences, sentence starts) for one transcript."""
+    entry = _WORD_CACHE.get(id(segments))
+    if entry and entry[0] is segments and entry[1] == len(segments):
+        return entry[2], entry[3], entry[4], entry[5]
+    sents = _sentence_rows(segments)
+    words = []
+    for s in sents:
+        for w in s.get("words") or []:
+            try:
+                ws, we = float(w.get("start")), float(w.get("end"))
+            except (TypeError, ValueError):
+                continue
+            words.append((ws, we, str(w.get("word") or "")))
+    words.sort()
+    starts = [w[0] for w in words]
+    sstarts = [s["start"] for s in sents]
+    _WORD_CACHE.clear()
+    _WORD_CACHE[id(segments)] = (segments, len(segments), words, starts, sents, sstarts)
+    return words, starts, sents, sstarts
+
+
 def _head(sent, n=14):
     if sent.get("words"):
         return " ".join(str(w.get("word") or "") for w in sent["words"][:n]).strip()
@@ -344,7 +391,7 @@ def _pull(text):
 def spark_scan(segments):
     """Every sentence that can open a scroll-stopping cut, ranked by its pull."""
     out = []
-    for s in _sentences(segments):
+    for s in _sentence_rows(segments):
         head = _head(s)
         pull, kind = _pull(head)
         if pull <= 0:
@@ -400,26 +447,28 @@ def _shareability(text):
     return min(1.0, score)
 
 
-def _cue_hits(low, cues):
+def _token_counts(low):
+    """Whole-token counts for one lowercase text. Devanagari/Urdu words do not get
+    reliable \b boundaries in Python's Unicode regex mode, and substring matching
+    turns "तुम्हारी" into "हार" (loss); one token map serves every cue list and keeps
+    the per-candidate emotion read cheap."""
+    counts = {}
+    for tok in re.findall(r"[^\s.,!?;:…\"'()\[\]]+", low):
+        counts[tok] = counts.get(tok, 0) + 1
+    return counts
+
+
+def _cue_hits(low, cues, counts=None):
     """Weighted cue count. Phrases are stronger evidence than single words, so a
     line saying 'out of nowhere' beats a line containing only 'wait'."""
+    if counts is None:
+        counts = _token_counts(low)
     n = 0.0
-    tokens = None
     for cue in cues:
-        # Devanagari/Urdu words do not get reliable \b boundaries in Python's Unicode
-        # regex mode, and substring matching turns "तुम्हारी" into "हार" (loss). Split
-        # on whitespace/punctuation and require the whole cue word instead.
-        if any(ord(ch) > 127 for ch in cue):
-            if " " in cue:
-                n += 1.5 * low.count(cue)
-            else:
-                if tokens is None:
-                    tokens = re.findall(r"[^\s.,!?;:…\"'()\[\]]+", low)
-                n += tokens.count(cue)
-        elif " " in cue:
+        if " " in cue:
             n += 1.5 * low.count(cue)
         else:
-            n += len(re.findall(r"\b" + re.escape(cue) + r"\b", low))
+            n += counts.get(cue, 0)
     return n
 
 
@@ -445,8 +494,9 @@ def _emotion_profile(text, measured=None, content_type=None):
     low = _norm(text)
     reaction = float((measured or {}).get("reaction", 0.0) or 0.0)
     raw = {}
+    counts = _token_counts(low)
     for label in EMOTION_LABELS:
-        raw[label] = _cue_hits(low, EMOTION_CUES[label])
+        raw[label] = _cue_hits(low, EMOTION_CUES[label], counts)
     raw["funny"] = raw.get("funny", 0.0)
     # Punctuation is weak evidence; never enough to choose an emotion by itself.
     if "?" in low:
@@ -579,7 +629,7 @@ def _opening_review(segments, a, b):
     A clip that opens on "But the main reason..." or on a two-word fragment makes
     the viewer supply context they do not have. This is a measurement, not an LLM
     opinion, and it is deliberately biased toward finding a defect."""
-    sents = _sentences(segments)
+    sents = _sentence_rows(segments)
     first = next((s for s in sents if s["end"] > a + 0.01 and s["start"] < b), None)
     if first is None:
         return 0.45, "no_sentence"
@@ -612,38 +662,35 @@ def _opening_review(segments, a, b):
 def _boundary_review(segments, b):
     """Measure how clean the ending is: sentence punctuation plus the pause that
     follows it. A word cut in half scores near zero; a finished sentence with room
-    after it scores near one. Returns (0..1, gap_seconds, ends_final)."""
-    sents = _sentences(segments)
-    last_sent = None
-    for sent in sents:
-        if sent["start"] < b - 0.01:
-            last_sent = sent
-    words = []
-    for sent in sents:
-        for w in sent.get("words") or []:
-            try:
-                ws, we = float(w.get("start")), float(w.get("end"))
-            except (TypeError, ValueError):
-                continue
-            words.append((ws, we, str(w.get("word") or "")))
+    after it scores near one. Returns (0..1, gap_seconds, ends_final).
+
+    Word and sentence rows are cached per transcript and searched with bisect; the
+    old per-candidate rebuild was the other half of the long-video slowdown.
+    """
+    words, starts, sents, sstarts = _word_rows(segments)
     if not words:
         return 0.45, 3.0, False
-    words.sort()
-    before = [w for w in words if w[0] < b + 0.01]
-    if not before:
+    hi = bisect.bisect_left(starts, b + 0.01)
+    if hi == 0:
         return 0.45, 3.0, False
-    last = max(before, key=lambda x: (x[1], x[0]))
+    # Words arrive in order, so the last word before the cut is the last start.
+    # Check the few words around the edge for one still running: skipping the whole
+    # transcript's max() must not hide a cut through a long/overlapping word.
+    for w in reversed(words[max(0, hi - 4):hi]):
+        if w[1] > b + 0.05:
+            return 0.15, 0.0, False
+    last = words[hi - 1]
     last_end, last_word = last[1], last[2]
     if last_end > b + 0.05:
         # The cut lands inside a word. No pause can make that a clean ending.
         return 0.15, 0.0, False
-    tail_text = (last_sent or {}).get("text") or ""
+    si = bisect.bisect_left(sstarts, b - 0.01)
+    tail_text = sents[si - 1]["text"] if si > 0 else ""
     final = bool(re.search(r"[.!?…][\"')\]}]*$", last_word.strip())) or bool(
         re.search(r"[.!?…][\"')\]}]*$", tail_text.strip()))
-    after = [ws for ws, _we, _word in words if ws > last[0] + 0.001]
-    if not after:
+    if hi >= len(words):
         return 1.0, 3.0, final
-    gap = max(0.0, min(after) - last_end)
+    gap = max(0.0, words[hi][0] - last_end)
     if gap >= 4.0:
         base = 0.92
     elif gap >= 1.2:
@@ -668,6 +715,10 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
     already consume; the extra ARGON factors are shown on the card and used by the
     score, but are not silently fed into models that expect a six-dimensional vector.
     """
+    # A fresh measurement invalidates the saved pre-judge features. Repair moves a
+    # window and measures it again; without this reset the new window would be scored
+    # with the old window's factors (raw_features wins in score_candidate).
+    c.pop("raw_features", None)
     a, b = c["start"], c["end"]
     text = V._text_in(segments, a, b, 2400)
     # Decide what kind of reaction this is BEFORE measuring: an acoustic burst is
@@ -757,13 +808,24 @@ def measure_candidate(c, segments, energy, laughs, moments, scenes=None, motion=
 
 def _hook_speed(c, segments):
     """0..1: how quickly the first high-pull line arrives inside the cut. A hook that
-    makes the viewer wait is a cost, not a virtue."""
-    sparks = spark_scan([{"start": c["start"], "end": c["end"],
-                          "text": V._text_in(segments, c["start"], c["start"] + 6, 220),
-                          "words": V._words_in(segments, c["start"], c["start"] + 6)}])
-    if not sparks:
+    makes the viewer wait is a cost, not a virtue.
+
+    Measure the real sentences inside the first ten seconds. Scanning one synthetic
+    sentence that begins at the cut start could only ever return 0 or 1: the delay
+    was always zero, so a question four seconds in scored as if there were none.
+    """
+    a, b = c["start"], c["end"]
+    limit = min(b, a + 10.0)
+    delay = None
+    for s in _sentence_rows(segments):
+        if s["end"] <= a + 0.01 or s["start"] >= limit:
+            continue
+        pull, _kind = _pull(_head(s))
+        if pull >= 0.45:
+            delay = max(0.0, s["start"] - a)
+            break
+    if delay is None:
         return 0.0
-    delay = max(0.0, sparks[0]["start"] - c["start"])
     return round(1.0 / (1.0 + delay / 1.2), 3)
 
 
@@ -801,7 +863,7 @@ def _payoff_anchors(segments, laughs, limit=10):
         out.append({"start": float(lstart), "end": float(lend),
                     "kind": "payoff", "priority": 0.75 + 0.25 * min(1.0, float(peak or 0)),
                     "label": "laughter payoff"})
-    for s in _sentences(segments):
+    for s in _sentence_rows(segments):
         res = _resolution(s["text"])
         low = _norm(s["text"])
         summary = any(cue in low[:180] for cue in SUMMARY_CUES)
@@ -829,7 +891,7 @@ def _emotion_anchors(segments, limit=12):
     a sad confession and a funny line should put all three into the candidate budget;
     picking only acoustic peaks is what made every source look like a comedy."""
     best = {}
-    for s in _sentences(segments):
+    for s in _sentence_rows(segments):
         p = _emotion_profile(s["text"])
         label = p["label"]
         if label == "informative" and p["intensity"] < 0.40:
@@ -854,12 +916,25 @@ def _cinema_anchors(scenes, motion, duration, limit=8):
     rows = []
     out = []
     if motion:
-        for t, v in (motion or []):
-            t = _scene_time(t)
+        for row in (motion or []):
+            # Live runs pass (time, value) tuples; a stored/newer producer may pass a
+            # dict. Normalise both instead of crashing on `for t, v in motion`.
+            if isinstance(row, dict):
+                t = _scene_time(row)
+                value = row.get("value", row.get("motion", row.get("v", 0.0)))
+            elif isinstance(row, (tuple, list)) and len(row) >= 2:
+                t = _scene_time(row[0])
+                value = row[1]
+            else:
+                continue
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
             if t is None:
                 continue
             if any(abs(t - s) <= 2.0 for s in shots):
-                rows.append((float(v), t))
+                rows.append((v, t))
         rows.sort(reverse=True)
         for v, t in rows[:limit]:
             out.append({"start": t, "end": min(duration, t + 20.0),
@@ -887,13 +962,19 @@ def _snap_to_scene(t, scenes, tol=1.8):
     return float(best)
 
 
-def _enforce_window(c, segments, duration):
+def _enforce_window(c, segments, duration, reject_hype=False):
     """Keep a window inside the duration, on sentence edges, out of filler, and in the
-    ARGON length band. Every candidate passes through this deterministic guard."""
-    sents = _sentences(segments)
+    ARGON length band. Every candidate passes through this deterministic guard.
+
+    ``reject_hype`` is used for machine-built and machine-repaired windows: opening on
+    an intro, greeting or sponsor read is the owner's most-rejected clip shape. A cut
+    the owner dragged by hand keeps the exact window they chose (rank_single leaves
+    this off).
+    """
+    sents = _sentence_rows(segments)
     if not sents:
         c["start"] = round(max(0.0, min(duration, c["start"])), 2)
-        c["end"] = round(max(c["start"] + 1.0, min(duration, c["end"])), 2)
+        c["end"] = round(min(duration, max(c["start"] + 1.0, c["end"])), 2)
         return c
     starts = [s["start"] for s in sents]
     ends = [s["end"] for s in sents]
@@ -905,6 +986,17 @@ def _enforce_window(c, segments, duration):
                       and not V._starts_on_filler(segments, s["start"])]
         if non_filler:
             c["start"] = non_filler[0]
+    if reject_hype and V._is_hype(V._text_in(segments, c["start"], c["start"] + 5.0, 200)):
+        clean = [s["start"] for s in sents
+                 if c["start"] + 0.2 <= s["start"] <= c["end"] - 4.0
+                 and not V._starts_on_filler(segments, s["start"])
+                 and not V._is_hype(V._text_in(segments, s["start"], s["start"] + 5.0, 200))]
+        if clean:
+            c["start"] = clean[0]
+        else:
+            # Every remaining opener is a greeting or an intro. Drop the window instead
+            # of shipping the exact clip the owner keeps rejecting.
+            c["_drop"] = True
     if c["end"] - c["start"] < MIN_S:
         later = [e for e in ends if c["start"] + MIN_S <= e <= c["start"] + MAX_S]
         if later:
@@ -925,7 +1017,7 @@ def _enforce_window(c, segments, duration):
         inside = [e for e in ends if c["start"] + MIN_S <= e <= c["start"] + MAX_S]
         c["end"] = inside[-1] if inside else min(duration, c["start"] + MAX_S)
     c["start"] = round(max(0.0, min(duration, c["start"])), 2)
-    c["end"] = round(max(c["start"] + 1.0, min(duration, c["end"])), 2)
+    c["end"] = round(min(duration, max(c["start"] + 1.0, c["end"])), 2)
     return c
 
 
@@ -933,7 +1025,7 @@ def _window_candidates(anchor, segments, duration, laughs, scenes):
     """Every plausible sentence-aligned window around one anchor, at several lengths.
     This is the part the old engines skipped: they drafted one window per story and
     never explored the length/edge alternatives that often contain the better cut."""
-    sents = _sentences(segments)
+    sents = _sentence_rows(segments)
     if not sents:
         return []
     starts = [s["start"] for s in sents]
@@ -980,7 +1072,7 @@ def _window_candidates(anchor, segments, duration, laughs, scenes):
                  "hook": (anchor.get("spark") or {}).get("head")
                          or (anchor.get("story") or {}).get("hook_line") or "",
                  "payoff": (anchor.get("story") or {}).get("payoff") or ""}
-            _enforce_window(c, segments, duration)
+            _enforce_window(c, segments, duration, reject_hype=True)
             if c.get("_drop") or V._starts_on_filler(segments, c["start"]):
                 continue
             # A cinematic anchor may pull an edge onto a shot boundary, but only if the
@@ -992,7 +1084,9 @@ def _window_candidates(anchor, segments, duration, laughs, scenes):
                     c["start"] = round(max(0.0, s0), 2)
                 if s1 is not None and abs(s1 - c["end"]) <= 1.8 and s1 - c["start"] >= MIN_S:
                     c["end"] = round(min(duration, s1), 2)
-                _enforce_window(c, segments, duration)
+                _enforce_window(c, segments, duration, reject_hype=True)
+                if c.get("_drop"):
+                    continue
                 c["cinema"] = "sentence edge + shot boundary"
             out.append(c)
     return out[:10]
@@ -1167,7 +1261,7 @@ def _context_variants(cands, segments, duration, energy, laughs, moments, scenes
     """For the strongest candidates, also test the window that starts at the previous
     sentence. The common failure is a clip that opens on a question after the action
     already happened; the judge can only choose the better start if it sees both."""
-    starts = [s["start"] for s in _sentences(segments)]
+    starts = [s["start"] for s in _sentence_rows(segments)]
     if not starts:
         return []
     out = []
@@ -1179,7 +1273,7 @@ def _context_variants(cands, segments, duration, energy, laughs, moments, scenes
         v["start"] = round(max(prev), 2)
         v["anchor_kind"] = "context"
         v["context_variant"] = True
-        _enforce_window(v, segments, duration)
+        _enforce_window(v, segments, duration, reject_hype=True)
         if v.get("_drop") or V._starts_on_filler(segments, v["start"]):
             continue
         measure_candidate(v, segments, energy, laughs, moments, scenes, motion)
@@ -1197,7 +1291,7 @@ def _build_candidates(segments, duration, energy, laughs, moments, scenes, motio
              "payoff": e.get("payoff") or "", "reason": e.get("reason") or "",
              "anchor_kind": "editor", "anchor_label": "editor proposal",
              "story": None, "_priority": 2.1}
-        _enforce_window(c, segments, duration)
+        _enforce_window(c, segments, duration, reject_hype=True)
         if c.get("_drop") or V._starts_on_filler(segments, c["start"]):
             continue
         out.append(c)
@@ -1404,7 +1498,17 @@ def _judge_batch(cands, segments, content_type):
             base = {}
         out = {}
         for i, c in enumerate(cands):
-            j = dict(base.get(i) or _offline_judgement(c))
+            base_j = base.get(i)
+            if not isinstance(base_j, dict):
+                j = _offline_judgement(c)
+            else:
+                j = dict(base_j)
+                if j.get("unjudged"):
+                    # The shipped six-field judge answered without any judgement rows.
+                    # That is a failed call, not an opinion: label it as measured-only
+                    # so it can never be counted as a judge pass or a verified badge.
+                    j = dict(_offline_judgement(c),
+                             verdict="judge call incomplete - measured factors only")
             j.setdefault("emotion", 5)
             j.setdefault("emotion_label", c.get("emotion_label") or "informative")
             j.setdefault("secondary_emotion", "")
@@ -1744,7 +1848,7 @@ def _repair(c, j, segments, duration, laughs, scenes):
     flags = set(c.get("flags") or [])
     if not flags and not j.get("ends_abrupt") and j.get("alone", True):
         return False
-    sents = _sentences(segments)
+    sents = _sentence_rows(segments)
     if not sents:
         return False
     moved = False
@@ -1768,7 +1872,7 @@ def _repair(c, j, segments, duration, laughs, scenes):
     # 1) Context / mid-thought opening: move back to the previous sentence start, but
     #    never more than 10s (a longer rerun is a different story, not a repair).
     if flags & {"starts_mid_thought", "confusing_context", "not_standalone",
-                "context_dependent", "filler_open", "weak_opening"} or j.get("starts_abrupt"):
+                "context_dependent", "filler_open"} or j.get("starts_abrupt"):
         prev = [s for s in starts if s < c["start"] and c["start"] - s <= 10.0]
         if prev:
             c["start"] = max(prev)
@@ -1784,19 +1888,20 @@ def _repair(c, j, segments, duration, laughs, scenes):
     #    if that keeps enough room for a payoff.
     if flags & {"weak_hook", "slow_open"}:
         sparks = [s for s in spark_scan(segments)
-                  if c["start"] + 1.0 <= s["start"] <= c["start"] + 7.0
+                  if c["start"] <= s["start"] <= c["start"] + 7.0
                   and s["pull"] >= 0.6]
         if sparks and c["end"] - sparks[0]["start"] >= MIN_S:
             c["start"] = sparks[0]["start"]
             moved = True
 
-    # 3) Dead ending: extend to the next sentence end, then to a near laugh if one is
-    #    there. The ending is the product; this is the most important repair.
+    # 3) Dead ending: extend to the NEXT sentence end, then to a near laugh if one
+    #    is there. Taking the furthest end inside 18s used to swallow three extra
+    #    sentences and overshoot the payoff; the nearest end is the smallest fix.
     if flags & {"ends_before_payoff", "no_payoff", "weak_ending", "list_incomplete"} \
             or j.get("ends_abrupt") or j.get("payoff", 5) < 5:
         later = [e for e in ends if e > c["end"] and e <= c["end"] + 18.0]
         if later:
-            c["end"] = min(duration, later[-1] if len(later) > 1 else later[0])
+            c["end"] = min(duration, later[0])
             moved = True
         for lstart, lend, _peak in (laughs or []):
             if c["end"] - 0.5 <= float(lstart) <= c["end"] + 8.0 \
@@ -1806,27 +1911,48 @@ def _repair(c, j, segments, duration, laughs, scenes):
                 moved = True
                 break
 
-    # 4) Too long: trim from the front while keeping the payoff and the minimum.
+    # 4) Too long: trim the front to the LONGEST window the band allows. Keeping the
+    #    payoff means keeping the end; the old code trimmed to the 10s minimum and
+    #    threw away the setup the payoff depends on.
     if flags & {"too_long"} or c["end"] - c["start"] > MAX_S:
-        inside = [s for s in starts if c["start"] + 4.0 < s <= c["end"] - MIN_S]
-        if inside:
-            c["start"] = inside[-1]
+        keep = [s for s in starts
+                if c["end"] - MAX_S <= s <= c["end"] - MIN_S]
+        if keep:
+            c["start"] = keep[0]
             moved = True
 
     if not moved:
         return False
-    _enforce_window(c, segments, duration)
+    _enforce_window(c, segments, duration, reject_hype=True)
+    if c.get("_drop"):
+        # The only legal version of this repair would open on a greeting. Keep the
+        # original (already validated) window instead of deleting a measured candidate.
+        c["start"], c["end"] = before
+        c.pop("_drop", None)
+        return False
     return (c["start"], c["end"]) != before
+
+
+def _needs_repair(c):
+    """A candidate earns a repair pass when it failed the gate, carries a fatal flag,
+    or names a defect the deterministic repairs can actually fix."""
+    if not (c.get("gate") or {}).get("passed", True):
+        return True
+    flags = set(c.get("flags") or [])
+    if flags & (FATAL_FLAGS | REPAIRABLE_FLAGS):
+        return True
+    j = c.get("judge") or {}
+    return bool(j.get("ends_abrupt") or not j.get("alone", True))
 
 
 def _repair_pool(pool, segments, duration, laughs, scenes, energy, moments,
                  content_type, motion):
-    """Repair up to MAX_REPAIR failing candidates, then re-measure and re-judge them."""
-    broken = [c for c in pool
-              if set(c.get("flags") or []) & FATAL_FLAGS
-              or c.get("judge", {}).get("ends_abrupt")
-              or not c.get("judge", {}).get("alone", True)]
-    if not broken or not has_brain():
+    """Repair up to MAX_REPAIR failing candidates, then re-measure and re-judge them.
+    The highest-potential failures are repaired first. Repairs are deterministic, so
+    they run without a brain too; the re-judge is then the honest offline one."""
+    broken = sorted([c for c in pool if _needs_repair(c)],
+                    key=lambda c: -(c.get("score") or 0))
+    if not broken:
         return 0
     touched = []
     for c in broken[:MAX_REPAIR]:
@@ -1893,45 +2019,53 @@ def _select(pool, count, duration, segments):
     # highlight; return fewer strong cuts rather than pad the podium with one.
     passing = [c for c in candidates
                if c.get("tier") in ("viral", "strong") and _ends_well(c)]
-    rest = []
-    spread = max(14.0, 0.08 * duration)
+    # Spread grows with the source, but not without bound. 8% of a three-hour podcast
+    # is eight minutes, which would refuse two honest beats a minute apart and leave a
+    # one-clip podium. Cap the floor at 60s of separation.
+    spread = min(120.0, max(14.0, 0.08 * duration))
+    min_gap = min(60.0, max(8.0, spread * 0.55))
     picked = []
-    for pool_round in (passing, rest):
-        for c in pool_round:
-            if len(picked) >= count:
-                break
-            if c in picked or c.get("tier") == "reject":
-                continue
-            if any(abs(c["start"] - p["start"]) < max(8.0, spread * 0.55) for p in picked):
-                continue
-            if any(abs(c["end"] - p["end"]) < 2.0 for p in picked):
-                continue
-            if any(_temporal_iou(c, p) > 0.45 for p in picked):
-                continue
-            if any(_contained(c, p) for p in picked):
-                continue
-            if any(_similarity(c, p, segments, spread) > 0.78 for p in picked):
-                continue
-            # MMR: a high score can still lose to a different beat. The penalty is
-            # bounded so quality remains the dominant term. A small emotion-diversity
-            # bonus keeps the podium from being three versions of the same laugh when
-            # a different emotional beat is nearly as strong.
-            same_emotion = sum(1 for p in picked
-                               if p.get("emotion_label") == c.get("emotion_label"))
-            new_emotion = bool(picked) and same_emotion == 0
-            val = (c["score"] / 100.0 - 0.16 * max(
-                [_similarity(c, p, segments, spread) for p in picked] or [0.0])
-                - 0.03 * same_emotion + (0.025 if new_emotion else 0.0))
-            c["_mmr"] = round(val, 4)
-            picked.append(c)
+    for c in passing:
         if len(picked) >= count:
             break
+        if c in picked or c.get("tier") == "reject":
+            continue
+        if any(abs(c["start"] - p["start"]) < min_gap for p in picked):
+            continue
+        if any(abs(c["end"] - p["end"]) < 2.0 for p in picked):
+            continue
+        if any(_temporal_iou(c, p) > 0.45 for p in picked):
+            continue
+        if any(_contained(c, p) for p in picked):
+            continue
+        if any(_similarity(c, p, segments, spread) > 0.78 for p in picked):
+            continue
+        # MMR: a high score can still lose to a different beat. The penalty is
+        # bounded so quality remains the dominant term. A small emotion-diversity
+        # bonus keeps the podium from being three versions of the same laugh when
+        # a different emotional beat is nearly as strong.
+        same_emotion = sum(1 for p in picked
+                           if p.get("emotion_label") == c.get("emotion_label"))
+        new_emotion = bool(picked) and same_emotion == 0
+        val = (c["score"] / 100.0 - 0.16 * max(
+            [_similarity(c, p, segments, spread) for p in picked] or [0.0])
+            - 0.03 * same_emotion + (0.025 if new_emotion else 0.0))
+        c["_mmr"] = round(val, 4)
+        picked.append(c)
     # If the strict spread leaves the podium short, keep it short. Filling the third
     # slot with a usable-but-flawed clip is how a "top 3" becomes a "top 2 plus filler".
-    if not picked and candidates:
-        # Never fail the whole job because every candidate was downgraded. Return
-        # the strongest one, honestly labelled; the gate still shows why.
-        picked = [candidates[0]]
+    if not picked:
+        # A usable cut (score 60-74, gate passed) is a real result even if it did not
+        # reach the "strong" band; keep the strongest one as a one-clip podium.
+        honest = [c for c in candidates if c.get("tier") != "reject"]
+        if honest:
+            picked = [honest[0]]
+        elif all((c.get("judge") or {}).get("_offline") for c in candidates):
+            # A measured-only run has no judge that could reject anything. Returning
+            # the strongest measured window (labelled reject/unverified) is honest and
+            # useful. With a real judge, a gate-rejected cut must never be presented
+            # as a highlight: the pipeline reports the empty podium instead.
+            picked = [candidates[0]]
     for c in picked:
         c["selected"] = True
     return picked
@@ -2081,10 +2215,17 @@ def rejudge_clips(clips, segments, content_type="other"):
             "ends_final": feats.get("boundary", 0.0) >= 0.5,
             "scenes": 0,
             "context_dependency": feats.get("context_dependency", 0.0),
-            "list_incomplete": feats.get("failure_risk", 0.0),
+            "list_incomplete": 0.0,
             "boundary": feats.get("boundary", 0.0),
             "opening": feats.get("opening", 0.0),
         }
+        # Prefer the measurements stored with the rendered clip. Older clips have none;
+        # for them list_incomplete is unknown (0.0), not the failure_risk value.
+        if isinstance(clip.get("text_stats"), dict):
+            c["text_stats"].update(
+                {k: v for k, v in clip["text_stats"].items()
+                 if k in c["text_stats"]
+                 and isinstance(v, (int, float, bool, str))})
         pool.append(c)
     judgments = _judge_batch(pool, segments, content_type)
     verified = 0
@@ -2094,7 +2235,7 @@ def rejudge_clips(clips, segments, content_type="other"):
         for key in ("score", "tier", "qc", "verdict", "reason", "factors",
                     "argon", "flags", "gate", "emotion_label",
                     "secondary_emotion", "emotion_scores", "comedy_context",
-                    "score_trace", "raw_features", "hook_speed"):
+                    "score_trace", "raw_features", "hook_speed", "text_stats"):
             if key in c:
                 clip[key] = c[key]
         if clip.get("qc") == "verified":

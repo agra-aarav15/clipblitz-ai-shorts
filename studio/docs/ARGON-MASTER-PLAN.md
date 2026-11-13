@@ -347,3 +347,36 @@ The demo job ran in a throwaway `CB_DATA` directory so no owner data was touched
   Those are the next real upgrades, not something to claim today.
 - REA can analyze a shipped artifact only when the user supplies it and owns the rights. It
   does not make copying another product's proprietary implementation acceptable.
+
+---
+
+## 9. Post-5.4.3 hardening (shipped in 5.4.4)
+
+An independent review of the engine found three ways a result could be dishonest
+and two ways the repair loop could not do its job. All are fixed and tested; the
+full evidence is in `VERIFICATION-v5.4.4.md`.
+
+- **Stale measurements after repair.** `measure_candidate` now clears
+  `raw_features`; a moved window is scored on its own factors, not the old window's.
+- **Rejected podium.** `_select` never returns a gate-failed cut when a judge spoke.
+  A measured-only run still returns its best window, labelled unverified.
+- **Incomplete judge.** Rows the six-field judge fills without an actual judgement
+  are marked `unjudged`, fail the gate, and are recorded as offline.
+- **`hook_speed`.** It now measures the delay to the first real hook in the first ten
+  seconds instead of returning 0/1 from a synthetic sentence at the cut start.
+- **Repair reach.** Warning defects (`weak_hook`, `slow_open`, `too_long`,
+  `list_incomplete`, `context_dependent`, `filler_open`) enter the repair pool, and
+  repairs run without a brain. A premature ending extends to the nearest next
+  sentence end, and a too-long window is trimmed to the 75s band, not to 10s.
+- **Intro openers.** Machine-built and repaired windows cannot open on a greeting,
+  intro or sponsor read. A manual cut keeps the window the owner chose.
+- **Spread.** The podium's minimum start gap is capped (60s), so a long episode does
+  not demand eight minutes between beats.
+- **Long-video speed.** Window queries bisect a cached segment index, sentence and
+  word rows are cached per transcript, and emotion cues are counted from one token
+  map. A synthetic 90-minute offline rank fell from "did not finish in 300s" to
+  11.5s; a 10-minute one from 31.3s to 3.2s.
+
+Open quality question, deliberately not papered over: the comedy cue table still
+contains some tokens taken from observed transcripts. Removing them without
+re-measuring the owner's benchmark sources would be a blind behavior change.

@@ -210,6 +210,8 @@ def test_features():
           argon._list_incomplete("three mistakes: first, second, third") == 0.0)
     check("argon: screen deictics are noticed",
           argon._context_dependency("look at this chart right here") > 0.0)
+    check("argon: a dangling pronoun is noticed",
+          argon._context_dependency("he was the one who said it") > 0.0)
     check("argon: a clean opener is not penalized",
           argon._context_dependency("why do startups fail") == 0.0)
 
@@ -230,6 +232,12 @@ def test_scene_shapes():
     c = dict(cands[0])
     argon.measure_candidate(c, SEGS, ENERGY, LAUGHS, [], tuple_scenes, MOTION)
     check("argon: a tuple scene list measures", "visual" in c["argo_features"])
+    dict_motion = [{"time": 12.0, "value": 0.9}, {"t": 27.0, "v": 0.4},
+                   {"start": 34.5, "motion": 0.2}]
+    anchors = argon._cinema_anchors(tuple_scenes, dict_motion, DURATION)
+    check("argon: stored dict motion points do not crash the cinema anchors",
+          len(anchors) == 3 and all(isinstance(a["start"], float) for a in anchors),
+          str(anchors))
 
 
 def test_editor_pass():
@@ -348,6 +356,13 @@ def test_rank_offline():
     keys = lambda r: [(c["start"], c["end"], c["score"]) for c in r[0]]
     check("argon: offline ranking is deterministic", keys(a) == keys(b),
           f"{keys(a)} vs {keys(b)}")
+    silent = argon.rank(SEGS, DURATION, count=2, energy=([], -30.0), laughs=[],
+                        scenes=[], motion=[])
+    check("argon: a silent source with no measured peaks still ranks",
+          bool(silent[0]) and all(c["score"] is not None for c in silent[0]),
+          str(len(silent[0])))
+    check("argon: a silent source never claims a verified judge",
+          all(c["qc"] != "verified" for c in silent[0]))
 
 
 # --------------------------------------------------------------------------- 7: LLM judge
@@ -402,6 +417,172 @@ def test_judge():
 
 
 # --------------------------------------------------------------------------- 8: manual
+
+def test_hook_speed_and_greetings():
+    """hook_speed must fall with the delay to the first real hook, not be a 0/1 flag.
+    A machine-built window must not open on the intro/greeting the owner rejects."""
+    slow = {"start": 0.0, "end": 24.0, "title": "starts on the greeting"}
+    argon.measure_candidate(slow, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    fast = {"start": 7.5, "end": 31.5, "title": "starts on the question"}
+    argon.measure_candidate(fast, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    check("argon: a delayed hook measures lower than an immediate hook",
+          0.0 < slow["hook_speed"] < fast["hook_speed"] <= 1.0,
+          f"{slow['hook_speed']} vs {fast['hook_speed']}")
+    check("argon: hook_speed is not a binary switch",
+          slow["hook_speed"] not in (0.0, 1.0),
+          str(slow["hook_speed"]))
+    cands, _ = argon._build_candidates(SEGS, DURATION, ENERGY, LAUGHS, [],
+                                      SCENES, MOTION, [])
+    hype_openers = [c["start"] for c in cands
+                    if argon.V._is_hype(argon.V._text_in(
+                        SEGS, c["start"], c["start"] + 5.0, 200))]
+    check("argon: no machine-built window opens on an intro or greeting",
+          not hype_openers, str(hype_openers))
+    check("argon: a greeting is not dropped when the owner cuts it by hand",
+          "start" in argon.rank_single(SEGS, DURATION, ENERGY, 0.0, 24.0,
+                                       SCENES, LAUGHS, MOTION))
+
+
+def test_repair_pass():
+    """The repair loop must reach warning defects, use the nearest sentence end, and
+    score the repaired window on its own measurements, not the old window's."""
+    c = {"start": 24.0, "end": 40.0, "title": "r"}
+    argon.measure_candidate(c, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    argon.score_candidate(c, argon._offline_judgement(c), "podcast")
+    check("argon: a scored candidate keeps its pre-judge features",
+          bool(c.get("raw_features")))
+    argon.measure_candidate(c, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    check("argon: re-measuring clears the stale pre-judge features",
+          "raw_features" not in c and "argo_features" in c)
+
+    moved = {"start": 7.5, "end": 18.0, "flags": ["ends_before_payoff"],
+             "measured": {"energy": 0.5, "pacing": 0.5, "tail_laugh": 0.0},
+             "argo_features": {}, "text_stats": {}}
+    argon._repair(moved, {"ends_abrupt": True, "payoff": 2}, SEGS, DURATION,
+                  [], SCENES)
+    next_ends = sorted(s["end"] for s in SEGS if 18.0 < s["end"] < 24.0)
+    check("argon: a premature ending extends to the NEXT sentence end",
+          moved["end"] == round(next_ends[0], 2),
+          f"{moved['end']} vs {next_ends[:2]}")
+
+    fresh = {"start": 24.0, "end": 40.0, "title": "fresh"}
+    argon.measure_candidate(fresh, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    argon.score_candidate(fresh, argon._offline_judgement(fresh), "podcast")
+    fresh["flags"] = ["ends_before_payoff"]
+    argon._repair(fresh, {"ends_abrupt": True, "payoff": 2}, SEGS, DURATION,
+                  [], SCENES)
+    after = argon.measure_candidate(dict(fresh), SEGS, ENERGY, LAUGHS, [],
+                                    SCENES, MOTION)
+    argon.score_candidate(fresh, argon._offline_judgement(fresh), "podcast")
+    check("argon: a repaired window is scored on its new measurements",
+          fresh["raw_features"]["payoff"] == after["argo_features"]["payoff"],
+          f"{fresh['raw_features'].get('payoff')} vs {after['argo_features']['payoff']}")
+
+    check("argon: a warning defect enters the repair pool",
+          argon._needs_repair({"gate": {"passed": True}, "flags": ["too_long"],
+                               "judge": {}}))
+    check("argon: a clean candidate is not repaired",
+          not argon._needs_repair({"gate": {"passed": True}, "flags": [],
+                                   "judge": {"alone": True}}))
+    listed = {"start": 7.5, "end": 18.0, "flags": ["list_incomplete"],
+              "measured": {"energy": 0.5, "pacing": 0.5, "tail_laugh": 0.0},
+              "argo_features": {}, "text_stats": {}}
+    moved_end = listed["end"]
+    argon._repair(listed, {}, SEGS, DURATION, [], SCENES)
+    check("argon: an incomplete list is extended before it is rejected",
+          listed["end"] > moved_end, f"{moved_end} -> {listed['end']}")
+    brains_off()
+    pool = {"start": 3.5, "end": 31.5, "title": "weak"}
+    argon.measure_candidate(pool, SEGS, ENERGY, LAUGHS, [], SCENES, MOTION)
+    argon.score_candidate(pool, dict(argon._offline_judgement(pool), flags=["weak_hook"]),
+                          "podcast")
+    n = argon._repair_pool([pool], SEGS, DURATION, LAUGHS, SCENES, ENERGY, [],
+                           "podcast", MOTION)
+    check("argon: a weak-hook candidate is repaired without a brain",
+          n == 1 and pool["start"] == 7.5 and "raw_features" in pool,
+          f"{n} {pool['start']}")
+
+
+def test_selection_guard():
+    """A gate-rejected cut may never fill the podium when a judge actually spoke, and
+    the spread floor must not scale to minutes on a long source."""
+    rejects = [{"start": float(i * 30), "end": float(i * 30 + 20), "score": 40 + i,
+                "tier": "reject", "qc": "unverified", "judge": {"_offline": False},
+                "measured": {"tail_laugh": 0.0},
+                "argo_features": {"boundary": 0.2},
+                "flags": ["ends_before_payoff"]} for i in range(3)]
+    check("argon: a judged pool of rejects returns no podium",
+          argon._select(rejects, 3, 200.0, SEGS) == [])
+    measured = [dict(c, judge={"_offline": True}) for c in rejects]
+    check("argon: a measured-only pool still returns its best window",
+          len(argon._select(measured, 3, 200.0, SEGS)) == 1)
+    usable = {"start": 0.0, "end": 20.0, "score": 70, "tier": "usable",
+              "qc": "unverified", "judge": {"_offline": False},
+              "measured": {"tail_laugh": 0.0},
+              "argo_features": {"boundary": 0.5}, "flags": [],
+              "emotion_label": "informative"}
+    check("argon: an all-usable pool keeps one honest clip",
+          len(argon._select([usable], 1, 100.0, SEGS)) == 1)
+    long_pool = [{"start": 1000.0 + i * 60, "end": 1020.0 + i * 60, "score": 90,
+                  "tier": "strong", "qc": "verified", "judge": {"_offline": False},
+                  "measured": {"tail_laugh": 0.5},
+                  "argo_features": {"boundary": 0.8}, "flags": [],
+                  "emotion_label": "hype" + str(i)} for i in range(2)]
+    picked = argon._select(long_pool, 2, 4000.0, SEGS)
+    check("argon: the spread floor stays bounded on a long source",
+          len(picked) == 2, str([c["start"] for c in picked]))
+
+
+def test_unjudged_judge():
+    """A judge call that returns no rows is a failed call, not a quiet pass."""
+    import clipblitz.virality as V
+    saved_chat, saved_has = argon.ai_chat, argon.has_brain
+    saved_vj = V.judge_cuts
+    try:
+        brains_on()
+        def _boom(payload, **kw):
+            raise RuntimeError("provider 429")
+        argon.ai_chat = _boom
+        V.judge_cuts = lambda cands, segments: {
+            i: {"alone": True, "starts_abrupt": False, "ends_abrupt": False,
+                "coherence": 5, "hook": 5, "payoff": 5, "unjudged": True,
+                "verdict": "unjudged (judge call incomplete)"}
+            for i in range(len(cands))}
+        picked, lab, _picker, _ct = argon.rank(SEGS, DURATION, count=2, energy=ENERGY,
+                                               laughs=LAUGHS, scenes=SCENES,
+                                               motion=MOTION)
+        judged = [c for c in (picked + lab) if c.get("score_trace")]
+        check("argon: an incomplete judge call is recorded as measured-only",
+              bool(judged) and all(c["score_trace"]["judge"]["offline"] for c in judged),
+              str([c["score_trace"]["judge"]["offline"] for c in judged[:3]]))
+        check("argon: an incomplete judge call never verifies a clip",
+              all(c["qc"] != "verified" for c in picked),
+              str([c["qc"] for c in picked]))
+        check("argon: judge_fail treats an unjudged row as a failure",
+              V.judge_fail({"unjudged": True}))
+    finally:
+        argon.ai_chat, argon.has_brain = saved_chat, saved_has
+        V.judge_cuts = saved_vj
+
+
+def test_window_index():
+    """The bisect fast path must return exactly what a full scan returns."""
+    def brute(a, b):
+        return [w for s in SEGS for w in s["words"] if w["end"] > a and w["start"] < b]
+    for a, b in ((0.0, 5.0), (7.5, 20.0), (30.0, 31.0), (63.0, 70.0)):
+        check(f"argon: window words are complete at {a:g}-{b:g}s",
+              argon.V._words_in(SEGS, a, b) == brute(a, b))
+    shuffled = [SEGS[2], SEGS[0], SEGS[1]] + SEGS[3:]
+    got = argon.V._words_in(shuffled, 10.0, 20.0)
+    want = [w for s in shuffled for w in s["words"]
+            if w["end"] > 10.0 and w["start"] < 20.0]
+    check("argon: an unordered transcript is still measured in full", got == want,
+          f"{len(got)} vs {len(want)}")
+    check("argon: window text is complete",
+          argon.V._text_in(SEGS, 7.5, 20.0, 10_000)
+          == " ".join(s["text"] for s in SEGS
+                      if s["text"] and s["end"] > 7.5 and s["start"] < 20.0).strip())
+
 
 def test_pipeline_contract():
     from clipblitz import pipeline
@@ -667,6 +848,11 @@ def main():
     test_rejudge_updates_tier()
     test_rejudge_is_stable()
     test_manual()
+    test_hook_speed_and_greetings()
+    test_repair_pass()
+    test_selection_guard()
+    test_unjudged_judge()
+    test_window_index()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")
     for name, _, detail in fails:

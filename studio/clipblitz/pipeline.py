@@ -449,6 +449,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
         "emotion_label": m.get("emotion_label"),
         "emotion_scores": m.get("emotion_scores") or {},
         "emotion": m.get("emotion") or {},
+        "text_stats": m.get("text_stats") or {},
         "comedy_context": bool(m.get("comedy_context")),
         "start": round(m["start"], 1), "end": round(m["end"], 1),
         "duration": round(m["end"] - m["start"], 1),
@@ -466,7 +467,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
 
 def process(job_id, src_path):
     job_ = JOBS[job_id]
-    eng = job_.get("engine_id", "b2")
+    eng = job_.get("engine_id", "argon")
     clips_dir = os.path.join(CONFIG["data_dir"], "clips")
     tmp_dir = os.path.join(CONFIG["data_dir"], "tmp")
     os.makedirs(clips_dir, exist_ok=True)

@@ -49,7 +49,13 @@ RESULTS = []
 
 def check(name, ok, detail=""):
     RESULTS.append((name, bool(ok), detail))
-    print(f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  - {detail}" if detail else ""))
+    line = f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  - {detail}" if detail else "")
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        # A Windows console can be cp1252; a provider message with an arrow must not
+        # turn a passing test run into a crash.
+        print(line.encode("ascii", "backslashreplace").decode("ascii"))
     return ok
 
 

@@ -19,6 +19,7 @@ Dual-brain: every call runs on the primary provider and fails over to the second
 or a judgement of the actual cut.
 """
 
+import bisect
 import json
 import math
 import os
@@ -275,9 +276,51 @@ def _transcript(segments):
     return "\n".join(f"[{s['start']:.0f}-{s['end']:.0f}] {s['text']}" for s in segments)
 
 
+# Segment times are monotonic in every transcript the studio produces, so a window
+# query can bisect instead of walking the whole episode. The previous full scan made
+# candidate building quadratic: a 10-minute source spent 21 of its 31 seconds inside
+# _starts_on_filler on a 90-minute one it never finished. The cache holds only the
+# list currently in use (one entry, with a reference so an id cannot be reused).
+_SEG_INDEX = {}
+
+
+def _segment_starts(segments):
+    """Sorted segment start times, or None when the list is not monotonic."""
+    entry = _SEG_INDEX.get(id(segments))
+    if entry and entry[0] is segments and entry[1] == len(segments):
+        return entry[2]
+    starts, prev, ordered = [], None, True
+    for s in segments:
+        try:
+            st = float(s.get("start") or 0.0)
+        except (TypeError, ValueError):
+            st = 0.0
+        if prev is not None and st < prev:
+            ordered = False
+        starts.append(st)
+        prev = st
+    starts = starts if ordered else None
+    _SEG_INDEX.clear()
+    _SEG_INDEX[id(segments)] = (segments, len(segments), starts)
+    return starts
+
+
+def _window_slice(segments, a, b):
+    """The segments that can overlap [a, b), from a bisect when possible.
+    Returns (slice, ordered). An unordered transcript is scanned in full."""
+    starts = _segment_starts(segments)
+    if starts is None:
+        return segments, False
+    lo = max(0, bisect.bisect_left(starts, a) - 1)
+    return segments[lo:], True
+
+
 def _words_in(segments, a, b):
     out = []
-    for s in segments:
+    window, ordered = _window_slice(segments, a, b)
+    for s in window:
+        if ordered and float(s.get("start") or 0.0) >= b:
+            break
         for w in s.get("words", []):
             if w["end"] > a and w["start"] < b:
                 out.append(w)
@@ -285,7 +328,17 @@ def _words_in(segments, a, b):
 
 
 def _text_in(segments, a, b, cap=450):
-    parts = [s["text"] for s in segments if s.get("text") and s["end"] > a and s["start"] < b]
+    parts, total = [], 0
+    window, ordered = _window_slice(segments, a, b)
+    for s in window:
+        if ordered and float(s.get("start") or 0.0) >= b:
+            break
+        text = s.get("text")
+        if text and s["end"] > a:
+            parts.append(text)
+            total += len(text) + 1
+            if total >= cap:
+                break
     return " ".join(parts).strip()[:cap]
 
 
@@ -711,14 +764,18 @@ def judge_cuts(cands, segments):
     for i in range(len(cands)):
         out.setdefault(i, {"alone": True, "starts_abrupt": False, "ends_abrupt": False,
                            "coherence": 5, "hook": 5, "payoff": 5,
+                           "unjudged": True,
                            "verdict": "unjudged (judge call incomplete)"})
     return out
 
 
 def judge_fail(j):
     """The gate. A cold open is fine (starts_abrupt alone never fails) — the owner's
-    taste. What fails: not standalone, coherence < 7, a dead ending, or no payoff."""
+    taste. What fails: not standalone, coherence < 7, a dead ending, no payoff, or a
+    call that returned no judgement at all (a missing opinion is not a pass)."""
     if not isinstance(j, dict):
+        return True
+    if j.get("unjudged"):
         return True
     payoff = j.get("payoff") if isinstance(j.get("payoff"), (int, float)) else 5
     coherence = j.get("coherence") if isinstance(j.get("coherence"), (int, float)) else 5

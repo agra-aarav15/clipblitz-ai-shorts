@@ -14,8 +14,30 @@ JSON there), which is why they are answered before the server banner is printed.
 
 import json
 import sys
+import threading
+import time
+import urllib.request
+import webbrowser
 
 ARG = sys.argv[1].strip().lower() if len(sys.argv) > 1 else ""
+OPEN = any(a.strip().lower() in ("--open", "open") for a in sys.argv[1:])
+
+
+def open_when_ready(port):
+    """Open the studio in the default browser once the server answers. A frozen EXE
+    launched from the Start Menu/installer passes --open; CLI and MCP modes never do."""
+    url = f"http://127.0.0.1:{port}"
+    for _ in range(60):
+        try:
+            urllib.request.urlopen(url + "/api/health", timeout=1).read(1)
+            break
+        except Exception:
+            time.sleep(0.5)
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
 AGENT_MODES = {"--tools": "tools", "tools": "tools", "--mcp": "mcp", "mcp": "mcp"}
 TRAIN_MODES = ("--train", "train")
 BENCH_MODES = ("--bench", "bench")
@@ -53,7 +75,11 @@ def main():
     utf8_console()
     from clipblitz.config import CONFIG
     from clipblitz.server import serve
-    serve(int(sys.argv[1]) if len(sys.argv) > 1 else CONFIG["port"])
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    port = int(args[0]) if args and args[0].isdigit() else CONFIG["port"]
+    if OPEN:
+        threading.Thread(target=open_when_ready, args=(port,), daemon=True).start()
+    serve(port)
     return 0
 
 

@@ -1,8 +1,9 @@
 name: build
 
 # Builds the two ready-to-run distributions and attaches them to the GitHub release:
-#   * ClipBlitzStudio-windows.zip  — a PyInstaller EXE folder (no Python needed on the PC)
-#   * ClipBlitzStudio.apk          — the Android companion app (thin WebView shell)
+#   * ClipBlitzStudio-<ver>-setup.exe — per-user Windows installer (EXE + bundled tools)
+#   * ClipBlitzStudio-<ver>-windows.zip — the same EXE folder, portable
+#   * ClipBlitzStudio.apk            — the Android companion app (thin WebView shell)
 # Runs on every push to main and on demand.
 
 on:
@@ -162,10 +163,68 @@ jobs:
           if (-not $reply.Contains('clipblitz-studio')) { throw 'the published EXE cannot serve MCP on stdio' }
           Write-Host "published bundle verified: digest matches, 9 plugin files, $($tools.Count) tools, MCP answers"
 
+      # A real installer, built on the runner. Per-user (no admin prompt), Start Menu
+      # and optional desktop shortcut, uninstaller, and the app opens in the browser.
+      - name: Build the Windows installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found" }
+          $src = Join-Path $PWD "studio\dist\ClipBlitzStudio"
+          $iss = Join-Path $PWD "studio\installer\ClipBlitzStudio.iss"
+          & $iscc "/DVersion=$env:VERSION" "/DSourceDir=$src" "/O$PWD" $iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with $LASTEXITCODE" }
+          $setup = "ClipBlitzStudio-$env:VERSION-setup.exe"
+          if (-not (Test-Path (Join-Path $PWD $setup))) { throw "installer was not produced" }
+          Add-Content -Path $env:GITHUB_ENV -Value "SETUP=$setup"
+          Write-Host ("installer: {0} ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
+
+      - name: Install it like a fresh PC would, and run it
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "cb-installed"
+          Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+          $setup = Join-Path $PWD $env:SETUP
+          $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=`"$dir`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
+          $exe = Join-Path $dir "ClipBlitzStudio.exe"
+          if (-not (Test-Path $exe)) { throw "installed EXE is missing" }
+          if (-not (Test-Path (Join-Path $dir "bin"))) { throw "bundled bin/ is missing after install" }
+          if (-not (Test-Path (Join-Path $dir "web\index.html"))) { throw "web UI is missing after install" }
+          $proc = Start-Process -FilePath $exe -ArgumentList "4312" -PassThru
+          Start-Sleep -Seconds 15
+          try {
+            $h = Invoke-RestMethod -Uri 'http://127.0.0.1:4312/api/health' -TimeoutSec 30
+            if (-not $h.hardware.render_capable) { throw 'bundled ffmpeg not found after install' }
+            Write-Host "installed health ok: $($h.name) $($h.version) ffmpeg=$($h.ffmpeg)"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+          $un = Join-Path $dir "unins000.exe"
+          if (-not (Test-Path $un)) { throw "uninstaller is missing" }
+          $u = Start-Process -FilePath $un -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exited $($u.ExitCode)" }
+          if (Test-Path $exe) { throw "uninstaller left the EXE behind" }
+          Write-Host "install, run, and uninstall verified from a clean folder"
+
+      - name: Upload the installer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v$env:VERSION" "$env:SETUP" --clobber -R $env:GITHUB_REPOSITORY
+
       - uses: actions/upload-artifact@v4
         with:
           name: ClipBlitzStudio-${{ env.VERSION }}-windows
-          path: ClipBlitzStudio-${{ env.VERSION }}-windows.zip
+          path: |
+            ClipBlitzStudio-${{ env.VERSION }}-windows.zip
+            ClipBlitzStudio-${{ env.VERSION }}-setup.exe
 
   apk:
     name: Android APK
@@ -330,6 +389,7 @@ jobs:
           cd assets && sha256sum * > ../checksums.txt && cd ..
           cat checksums.txt
           grep -q "ClipBlitzStudio-$VERSION-windows.zip" checksums.txt
+          grep -q "ClipBlitzStudio-$VERSION-setup.exe" checksums.txt
           grep -q "ClipBlitzStudio.apk" checksums.txt
 
       - name: Upload checksums.txt to the release

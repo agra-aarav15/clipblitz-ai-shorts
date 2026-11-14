@@ -63,6 +63,9 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 - **Long videos rank in seconds.** Window lookups bisect a cached index; a synthetic
   90-minute offline run fell from "did not finish in 300s" to 11.5s (10-minute: 31.3s to
   3.2s) on this machine.
+- **A real Windows installer.** `ClipBlitzStudio-5.4.4-setup.exe`: per-user install, no
+  admin prompt, Start Menu/desktop shortcuts, uninstaller, bundled ffmpeg/yt-dlp/web/plugin,
+  and the studio opens in the browser. Built and install-tested in GitHub Actions.
 - **Real media found real defects.** A TV episode is pillarboxed; the focus crop could
   include the black bar, and the active picture area is now measured and clamped. AV1
   scene detection decoded every frame for 15+ minutes; it now reads keyframe marks in
@@ -248,11 +251,18 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 
 ## Quickstart
 
-### Option A: Ready-to-run release (recommended)
-1. Download **`ClipBlitzStudio-5.4.4-windows.zip`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4).
-2. Unzip the folder anywhere.
-3. Double-click **`START.bat`** (Windows) or run `bash start.sh` (macOS / Linux / Termux).
-4. Open `http://localhost:4300` in your browser.
+### Option A: Windows installer (recommended)
+1. Download **`ClipBlitzStudio-5.4.4-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4).
+2. Run it. It installs for the current user (no admin prompt), bundles CPython, ffmpeg,
+   yt-dlp, the web UI and the agent plugin, and creates Start Menu + optional desktop
+   shortcuts.
+3. It opens the studio at `http://localhost:4300` when the install finishes.
+4. Uninstall from Windows Settings → Apps at any time. Your `data/` folder is left in
+   place so clips and jobs are not lost.
+
+Prefer a portable folder? Download **`ClipBlitzStudio-5.4.4-windows.zip`**, unzip it,
+and run `ClipBlitzStudio\ClipBlitzStudio.exe`. No Python or install is required either
+way.
 
 ### Option B: Clone from source
 ```bash

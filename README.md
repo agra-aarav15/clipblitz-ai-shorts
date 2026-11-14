@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4"><b>Download v5.4.4 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.0"><b>Download v5.5.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -42,6 +42,27 @@ spoken unit with a measured opening and ending:
    viral/strong cuts are published. Two strong clips beat three with filler.
 
 ---
+
+## What's new in v5.5.0
+
+- **One provider popup.** Connect is no longer a grid of vendor-specific keys. Press
+  **Add provider**, paste a base URL, key (optional), exact model id, and optionally
+  context/tokens/temperature/headers; **Find models** and **Test connection** are in
+  the same popup. Providers live in `data/providers.json`, keys are masked, and an
+  empty list means measured-only clips (no silent fallback).
+- **YouTube captions first.** `yt-dlp` now downloads the source's timed captions
+  (`json3` word offsets, VTT/SRT fallback). A YouTube link is transcribed without any
+  speech-to-text key; local uploads and caption-less videos still use STT.
+- **A real desktop window.** `ClipBlitzStudio.exe` is a native WebView2 window — no
+  console, no browser tab. The same bundle also ships `ClipBlitzStudio-server.exe`
+  for MCP and command-line use. If WebView2 is missing, the app says so and opens the
+  browser.
+- **Installer rebuilt in GitHub Actions.** Per-user, no admin prompt, Start Menu and
+  optional desktop shortcut, uninstaller, bundled CPython/ffmpeg/yt-dlp/web/plugin,
+  and it launches the window.
+- **Not done, on purpose:** no Gemini consumer-chat proxy (not an API, against
+  Google's terms) and no public one-click YouTube upload without a verified OAuth
+  client and quota. See `studio/VERIFICATION-v5.5.0.md`.
 
 ## What's new in v5.4.4
 
@@ -135,7 +156,7 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.4.4)
+## ARGON, the unified engine (ClipBlitz Studio v5.5.0)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -252,7 +273,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Windows installer (recommended)
-1. Download **`ClipBlitzStudio-5.4.4-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.4.4).
+1. Download **`ClipBlitzStudio-5.5.0-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.0).
 2. Run it. It installs for the current user (no admin prompt), bundles CPython, ffmpeg,
    yt-dlp, the web UI and the agent plugin, and creates Start Menu + optional desktop
    shortcuts.
@@ -260,7 +281,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 4. Uninstall from Windows Settings → Apps at any time. Your `data/` folder is left in
    place so clips and jobs are not lost.
 
-Prefer a portable folder? Download **`ClipBlitzStudio-5.4.4-windows.zip`**, unzip it,
+Prefer a portable folder? Download **`ClipBlitzStudio-5.5.0-windows.zip`**, unzip it,
 and run `ClipBlitzStudio\ClipBlitzStudio.exe`. No Python or install is required either
 way.
 

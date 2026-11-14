@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "5.4.4"
+APP_VERSION = "5.5.0"
 
 
 def _load_env(path):
@@ -180,7 +180,17 @@ def ytdlp_available():
 def stt_mode():
     mode = CONFIG["stt"]
     if mode == "auto":
-        if CONFIG["ai_key"]:
+        # The generic provider store wins once it exists: if the owner removed every
+        # provider, a leftover .env key must not silently keep transcribing.
+        try:
+            from . import providers
+            store = providers.load()
+        except Exception:
+            store = None
+        if store is not None:
+            if providers.stt_provider():
+                return "api"
+        elif CONFIG["ai_key"]:
             return "api"
         # Presence check only: importing faster_whisper pulls torch and can block
         # server startup and /api/health for tens of seconds on a cold machine.

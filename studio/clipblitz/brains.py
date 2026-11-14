@@ -93,7 +93,7 @@ def _entry(name, base, key, model, headers=None):
             "model": model or "", "headers": headers or {}}
 
 
-def _provider_pool(env):
+def _legacy_pool(env):
     pool = []
 
     groq_keys = _split_keys(env.get("CB_GROQ_KEYS", "")) or _split_keys(env.get("CB_AI_KEY", ""))
@@ -159,6 +159,32 @@ def _provider_pool(env):
     return pool
 
 
+def _apply_order(pool, env):
+    wanted = [x.strip().lower() for x in env.get("CB_AI_ORDER", "").split(",") if x.strip()]
+    if wanted:
+        rank = {name: i for i, name in enumerate(wanted)}
+        pool.sort(key=lambda b: rank.get(str(b.get("name", "")).lower(), len(wanted)))
+    elif env.get("CB_AI_PROVIDER", "").strip().lower() == "gemini":
+        pool.sort(key=lambda b: 0 if str(b.get("name", "")).lower().startswith("gemini") else 1)
+    return pool
+
+
+def legacy_pool():
+    """The pre-store .env pool. Used only before providers.json exists and for the
+    one-time migration when Connect is first opened."""
+    return _apply_order(_legacy_pool(_read_env_keys()), _read_env_keys())
+
+
+def _provider_pool(env):
+    """The providers.json store is the source of truth once it exists. An empty store
+    means the owner removed every provider: no AI, and the engine runs measured-only."""
+    from . import providers
+    stored = providers.pool()
+    if stored is not None:
+        return _apply_order(stored, env)
+    return _apply_order(_legacy_pool(env), env)
+
+
 def brains():
     """Ordered list of usable brains: [{name, base, key, model, headers}]."""
     return _provider_pool(_read_env_keys())
@@ -166,7 +192,8 @@ def brains():
 
 def brains_status():
     """Safe health payload: provider/model names only, never a key."""
-    return [{"name": b["name"], "model": b["model"]} for b in brains()]
+    return [{"id": b.get("id", ""), "name": b.get("label") or b["name"],
+             "model": b["model"], "stt": bool(b.get("stt"))} for b in brains()]
 
 
 def _retired_model_successor(e):
@@ -193,10 +220,18 @@ def _semaphore(name, capacity=1):
         return sem
 
 
+def _is_local(brain):
+    try:
+        host = urllib.parse.urlparse(str(brain.get("base") or "")).hostname or ""
+    except ValueError:
+        host = ""
+    return host in ("127.0.0.1", "localhost", "::1") or str(brain.get("name", "")).lower().startswith(("local", "ollama"))
+
+
 def _call_one(brain, payload, timeout=180, model_override=None):
     # Free tiers return 429 when two editor chunks and the judge all hit the same
     # key at once. Queue per provider instead of pretending the quota is larger.
-    if brain["name"] == "local":
+    if _is_local(brain):
         # A local server can be TCP-ready and still take minutes to answer (cold
         # load, a small model on CPU, a huge judge prompt). It is a fallback, not a
         # blocker: cap it and cool it down on failure instead of stalling the job.
@@ -205,7 +240,7 @@ def _call_one(brain, payload, timeout=180, model_override=None):
         except (TypeError, ValueError):
             local_cap = 45
         timeout = min(timeout, local_cap)
-    sem = _semaphore(brain["name"], 2 if brain["name"] in ("local", "openai") else 1)
+    sem = _semaphore(brain["name"], 2 if (_is_local(brain) or brain.get("name", "").lower().startswith("openai")) else 1)
     with sem:
         return _call_one_raw(brain, payload, timeout=timeout,
                              model_override=model_override)
@@ -215,8 +250,13 @@ def _call_one_raw(brain, payload, timeout=180, model_override=None):
     # Each brain serves ITS OWN model. Sending the primary's model name to a
     # failover provider 404s, so the caller's model is only a hint.
     model = model_override or brain["model"] or payload.get("model")
-    body = json.dumps({**payload, "model": model}).encode()
-    headers = {"Content-Type": "application/json", "User-Agent": "ClipBlitz/5.1"}
+    out = {**payload, "model": model}
+    if brain.get("max_tokens") and not out.get("max_tokens"):
+        out["max_tokens"] = brain["max_tokens"]
+    if brain.get("temperature") is not None and out.get("temperature") is None:
+        out["temperature"] = brain["temperature"]
+    body = json.dumps(out).encode()
+    headers = {"Content-Type": "application/json", "User-Agent": "ClipBlitz/5.5"}
     if brain.get("key"):
         headers["Authorization"] = f"Bearer {brain['key']}"
     headers.update(brain.get("headers") or {})
@@ -298,7 +338,7 @@ def ai_chat(payload, attempts_per_brain=2, timeout=None):
             except (EmptyAnswer, urllib.error.URLError, TimeoutError, OSError, KeyError,
                     ValueError) as e:
                 last = e
-                if brain["name"] == "local":
+                if _is_local(brain):
                     # A slow/hung local model must not be retried for every editor
                     # chunk and every judge batch; one failure cools it for 5 min.
                     _COOLDOWN[brain["name"]] = time.time() + 300

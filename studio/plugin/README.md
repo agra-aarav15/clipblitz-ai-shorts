@@ -46,14 +46,14 @@ If you copied this folder out of the checkout, set `CB_ROOT` to the studio folde
 
 Point a generic MCP client at `python <studio>\plugin\clipblitz-mcp.py`.
 
-**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-5.4.4-windows.zip`
-ships this folder next to `ClipBlitzStudio.exe`, and the EXE answers the same MCP server
+**The Windows bundle, on a machine with no Python.** `ClipBlitzStudio-5.5.0-windows.zip`
+ships this folder next to `ClipBlitzStudio-server.exe`, and the EXE answers the same MCP server
 itself, because the EXE is the same entry point:
 
-    "command": "<bundle>\\ClipBlitzStudio.exe", "args": ["--mcp"]
+    "command": "<bundle>\\ClipBlitzStudio-server.exe", "args": ["--mcp"]
 
 Copy `plugin\.mcp.windows.json` into your MCP client's config and replace `<bundle>` with the
-folder you unzipped; `ClipBlitzStudio.exe --tools` prints the schemas. Everything else - the
+folder you unzipped; `ClipBlitzStudio-server.exe --tools` prints the schemas. Everything else - the
 routing to a running studio, the learning store next to the app - behaves identically.
 
 ## Tools

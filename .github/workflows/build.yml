@@ -37,7 +37,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install the packager
-        run: pip install pyinstaller
+        run: pip install pyinstaller pywebview pythonnet
 
       - name: Fetch ffmpeg + yt-dlp into studio/bin
         working-directory: studio
@@ -64,13 +64,15 @@ jobs:
           python scripts/test_marketplace.py
           python scripts/test_social.py
           python scripts/test_quality.py
+          python scripts/test_captions.py
+          python scripts/test_providers.py
           # the podium board, on the built-in episode (the repo carries no data/):
           # if a change to the engine shrinks the podium or repeats a beat, this fails
           python scripts/bench_episode.py --synthetic --gate
 
-      - name: Build the EXE
+      - name: Build the EXE (window app + console server)
         working-directory: studio
-        run: pyinstaller --noconfirm --clean --name ClipBlitzStudio --onedir --icon assets/ClipBlitzStudio.ico run.py
+        run: pyinstaller --noconfirm --clean ClipBlitzStudio.spec
 
       - name: Assemble the distribution folder
         shell: pwsh
@@ -88,10 +90,10 @@ jobs:
           # Start menu entry can borrow the same icon the executable carries.
           Compress-Archive -Path $target -DestinationPath "ClipBlitzStudio-$env:VERSION-windows.zip"
 
-      - name: Smoke-test the EXE
+      - name: Smoke-test the bundled server
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath studio/dist/ClipBlitzStudio/ClipBlitzStudio.exe -ArgumentList '4311' -PassThru
+          $p = Start-Process -FilePath studio/dist/ClipBlitzStudio/ClipBlitzStudio-server.exe -ArgumentList '4311' -PassThru
           Start-Sleep -Seconds 12
           $h = Invoke-RestMethod -Uri 'http://127.0.0.1:4311/api/health' -TimeoutSec 30
           if (-not $h.hardware.render_capable) { throw 'bundled ffmpeg not found' }
@@ -101,7 +103,7 @@ jobs:
       - name: Smoke-test the agent front door in the EXE
         shell: pwsh
         run: |
-          $exe = "studio/dist/ClipBlitzStudio/ClipBlitzStudio.exe"
+          $exe = "studio/dist/ClipBlitzStudio/ClipBlitzStudio-server.exe"
           $tools = (& $exe --tools | Out-String) | ConvertFrom-Json
           if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) {
             throw 'the packaged EXE does not list its agent tools'
@@ -117,7 +119,11 @@ jobs:
           if (-not (Test-Path 'studio/dist/ClipBlitzStudio/plugin/.claude-plugin/plugin.json')) {
             throw 'the agent plugin folder is missing from the distribution'
           }
-          Write-Host "agent front door ok: $($tools.Count) tools, MCP answers, plugin folder present"
+          # The window app must start its bundled server and serve the UI without a
+          # GUI session; this is the CI half of the desktop smoke test.
+          $app = Start-Process -FilePath "studio/dist/ClipBlitzStudio/ClipBlitzStudio.exe" -ArgumentList '--self-test','4313' -Wait -PassThru
+          if ($app.ExitCode -ne 0) { throw "the window app self-test exited $($app.ExitCode)" }
+          Write-Host "agent front door ok: $($tools.Count) tools, MCP answers, window app self-test ok"
 
       # Uploading needs the tag to exist. One idempotent step, so a version bump cannot
       # fail late on a release nobody created yet.
@@ -155,13 +161,15 @@ jobs:
           if (-not (Test-Path "$root/plugin/.mcp.windows.json")) { throw 'the published zip lost the Windows MCP config' }
           $plugin = @(Get-ChildItem -Recurse -File -Force "$root/plugin").Count
           if ($plugin -ne 9) { throw "the published zip carries $plugin plugin files, not 9" }
-          $tools = (& "$root/ClipBlitzStudio.exe" --tools | Out-String) | ConvertFrom-Json
+          $tools = (& "$root/ClipBlitzStudio-server.exe" --tools | Out-String) | ConvertFrom-Json
           if (-not ($tools | Where-Object { $_.name -eq 'cut_clips' })) { throw 'the published EXE cannot list its agent tools' }
           if ($tools.Count -ne 11) { throw "the published EXE lists $($tools.Count) tools, not 11" }
           $ask = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
-          $reply = ($ask | & "$root/ClipBlitzStudio.exe" --mcp) -join "`n"
+          $reply = ($ask | & "$root/ClipBlitzStudio-server.exe" --mcp) -join "`n"
           if (-not $reply.Contains('clipblitz-studio')) { throw 'the published EXE cannot serve MCP on stdio' }
-          Write-Host "published bundle verified: digest matches, 9 plugin files, $($tools.Count) tools, MCP answers"
+          $app = Start-Process -FilePath "$root/ClipBlitzStudio.exe" -ArgumentList '--self-test','4314' -Wait -PassThru
+          if ($app.ExitCode -ne 0) { throw "the published window app self-test exited $($app.ExitCode)" }
+          Write-Host "published bundle verified: digest matches, 9 plugin files, $($tools.Count) tools, MCP answers, window self-test"
 
       # A real installer, built on the runner. Per-user (no admin prompt), Start Menu
       # and optional desktop shortcut, uninstaller, and the app opens in the browser.
@@ -198,7 +206,7 @@ jobs:
           if (-not (Test-Path $exe)) { throw "installed EXE is missing" }
           if (-not (Test-Path (Join-Path $dir "bin"))) { throw "bundled bin/ is missing after install" }
           if (-not (Test-Path (Join-Path $dir "web\index.html"))) { throw "web UI is missing after install" }
-          $proc = Start-Process -FilePath $exe -ArgumentList "4312" -PassThru
+          $proc = Start-Process -FilePath (Join-Path $dir "ClipBlitzStudio-server.exe") -ArgumentList "4312" -PassThru
           Start-Sleep -Seconds 15
           try {
             $h = Invoke-RestMethod -Uri 'http://127.0.0.1:4312/api/health' -TimeoutSec 30
@@ -207,6 +215,8 @@ jobs:
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
+          $app = Start-Process -FilePath $exe -ArgumentList '--self-test','4315' -Wait -PassThru
+          if ($app.ExitCode -ne 0) { throw "installed window app self-test exited $($app.ExitCode)" }
           $un = Join-Path $dir "unins000.exe"
           if (-not (Test-Path $un)) { throw "uninstaller is missing" }
           $u = Start-Process -FilePath $un -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru

@@ -78,7 +78,7 @@ function showScreen(name, fromClick) {
   });
   $('jobtitle').textContent = TITLES[name] || 'ClipBlitz';
   revealCards(name);
-  if (name === 'connect') { refreshSocial(); renderQueue(); loadLearning(); }
+  if (name === 'connect') { loadProviders(); loadYouTubeKeys(); refreshSocial(); renderQueue(); loadLearning(); }
   if (name === 'studio') loadRecent();
   if (name === 'scout') loadScout();
 }
@@ -1829,7 +1829,7 @@ async function refreshSocial() {
     } else {
       status.innerHTML = IC('warn') + ' OAuth not set up yet';
       status.className = 'chip err';
-      $('yt-detail').innerHTML = `<span class="chip err">CB_YT_CLIENT_ID / SECRET are empty — do the four steps above, then paste them in the API keys card</span>`;
+      $('yt-detail').innerHTML = `<span class="chip err">CB_YT_CLIENT_ID / SECRET are empty — do the four steps above, then paste them in the Publishing card</span>`;
     }
     $('tt-detail').innerHTML = `<span class="chip">${IC('check')} assisted — the caption package is copied to your clipboard when a render finishes</span>`;
   } catch (e) { /* status is best-effort; never block the screen */ }
@@ -1972,117 +1972,383 @@ $('yt-disconnect').addEventListener('click', async () => {
   catch (e) { toast(String(e.message || e), true); }
 });
 
-/* ---------- API keys ---------- */
-function keyState(id, v) {
-  const el = $(id);
-  if (!el) return;
-  el.textContent = v.set ? (v.masked || 'saved') : 'empty';
-  el.className = 'keystate' + (v.set ? ' ok' : '');
+/* ---------- providers ----------
+   One generic OpenAI-compatible endpoint per entry. The list is the source of truth;
+   the old fixed provider grid and /api/keys AI fields are gone. Keys are masked here
+   and never leave the server in clear. */
+let PROVIDERS_CACHE = { providers: [] };
+let PROVIDER_EDITING = null;
+let PROVIDER_HAS_KEY = false;
+
+function providerHost(base) {
+  try { return new URL(base).host || base; } catch (e) { return base || 'no base URL'; }
 }
 
-function renderProviderStatus(st) {
-  const box = $('provider-status');
+function renderProviders(data) {
+  const box = $('provider-list');
   if (!box) return;
-  box.innerHTML = (st.providers || []).map((p) => {
-    const cur = st[p.key] || {};
-    return `<span class="pstat${cur.set ? ' ok' : ''}">${esc(p.label)} <b>${cur.set ? 'ready' : 'empty'}</b></span>`;
-  }).join('');
-}
-
-function renderProviderKeys(st) {
-  const box = $('provider-keys');
-  if (!box) return;
-  const providers = st.providers || [];
-  box.innerHTML = providers.map((p) => {
-    const cur = st[p.key] || {};
-    const value = p.secret ? '' : (cur.masked || '');
-    return `<div class="keyrow">
-      <div class="field"><label for="key-${esc(p.key)}">${esc(p.label)} <span class="dim">${esc(p.chip || '')}</span></label>
-        <div class="keyinput">
-          <input id="key-${esc(p.key)}" type="${p.secret ? 'password' : 'text'}"
-                 value="${esc(value)}" placeholder="${esc(p.placeholder || '')}"
-                 autocomplete="off" spellcheck="false" />
-          <button class="btn small" data-savekey="${esc(p.key)}" type="button">Test &amp; save</button>
-          ${p.secret ? `<button class="btn ghost small" data-clearkey="${esc(p.key)}" type="button">Clear</button>` : ''}
+  const rows = data.providers || [];
+  box.innerHTML = rows.length ? rows.map((p, i) => `
+    <div class="pv-card${p.enabled ? '' : ' off'}" data-id="${esc(p.id)}">
+      <div class="pv-main">
+        <div class="pv-top">
+          <b>${esc(p.name)}</b>
+          ${p.stt ? `<span class="chip ok">STT</span>` : ''}
+          ${p.has_key ? `<span class="chip">key ····${esc(p.key_hint || '')}</span>` : `<span class="chip">no key</span>`}
+          ${p.enabled ? '' : `<span class="chip">off</span>`}
         </div>
-        <div class="dim">${esc(p.hint || '')}${cur.model ? ' / ' + esc(cur.model) : ''}</div>
+        <div class="pv-model">${esc(p.model || p.stt_model || 'no model')}</div>
+        <div class="pv-base dim">${esc(providerHost(p.base))}${p.context ? ` / ${p.context} ctx` : ''}${p.temperature != null ? ` / temp ${p.temperature}` : ''}${p.stt_model ? ` / stt ${esc(p.stt_model)}` : ''}</div>
       </div>
-      <span class="keystate" id="state-${esc(p.key)}">—</span>
+      <div class="pv-actions">
+        <button class="iconbtn" data-pv-up="${i}" title="Move up" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="iconbtn" data-pv-down="${i}" title="Move down" ${i === rows.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn ghost small" data-pv-test="${esc(p.id)}" type="button">Test</button>
+        <button class="btn ghost small" data-pv-edit="${esc(p.id)}" type="button">Edit</button>
+        <label class="switch" title="Enabled">
+          <input type="checkbox" data-pv-toggle="${esc(p.id)}" ${p.enabled ? 'checked' : ''} />
+          <span></span>
+        </label>
+      </div>
+    </div>`).join('') : `
+    <div class="pv-empty">
+      <b>No providers yet.</b> The measured engine still finds clips offline; add a provider to
+      enable the editor, judge and generated titles. Any OpenAI-compatible endpoint works.
     </div>`;
-  }).join('');
+  const chip = $('keys-chip');
+  const active = rows.filter((p) => p.enabled);
+  if (chip) {
+    chip.textContent = active.length ? `${active.length} provider${active.length === 1 ? '' : 's'}` : 'offline mode';
+    chip.className = 'chip' + (active.length ? ' ok' : '');
+  }
+  const note = $('provider-note');
+  if (note) note.textContent = data.stt_provider ? `speech-to-text: ${data.stt_provider}` : 'no API transcription provider';
 }
 
-async function loadKeyStates() {
+async function loadProviders() {
   try {
-    const st = await (await fetch('/api/keys')).json();
-    renderProviderStatus(st);
-    renderProviderKeys(st);
-    (st.providers || []).forEach((p) => keyState(`state-${p.key}`, st[p.key] || {}));
-    const ytOk = (st.yt_client_id || {}).set && (st.yt_client_secret || {}).set;
-    const yel = $('state-youtube');
-    if (yel) { yel.textContent = ytOk ? 'saved' : 'empty'; yel.className = 'keystate' + (ytOk ? ' ok' : ''); }
-    if ((st.yt_client_id || {}).masked) $('key-yt-id').placeholder = st.yt_client_id.masked;
-    const chip = $('keys-chip');
-    if (chip) {
-      const brains = st.brains || [];
-      chip.textContent = brains.length ? brains.join(' + ') + ' online' : 'paste a key to start';
-      chip.className = 'chip' + (brains.length ? ' ok' : '');
-    }
-  } catch (e) { /* best effort */ }
+    const data = await (await fetch('/api/providers')).json();
+    PROVIDERS_CACHE = data;
+    renderProviders(data);
+  } catch (e) {
+    const box = $('provider-list');
+    if (box) box.innerHTML = `<div class="pv-empty">Could not read providers: ${esc(String(e.message || e))}</div>`;
+  }
 }
 
-document.addEventListener('click', async (ev) => {
-  const clear = ev.target.closest('[data-clearkey]');
-  if (clear) {
-    const which = clear.dataset.clearkey;
-    clear.disabled = true;
-    try {
-      const resp = await fetch('/api/keys', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [which]: '' }),
-      });
-      const r = await resp.json();
-      if (!resp.ok) throw new Error(r.error || resp.statusText);
-      toast('Cleared ' + which);
-      loadKeyStates();
-    } catch (e) { toast('Could not clear: ' + String(e.message || e), true); }
-    clear.disabled = false;
-    return;
+function providerById(id) {
+  return (PROVIDERS_CACHE.providers || []).find((p) => p.id === id);
+}
+
+function toggleSttRow() {
+  const on = $('pv-stt') && $('pv-stt').checked;
+  if ($('pv-stt-row')) $('pv-stt-row').hidden = !on;
+}
+
+function openProviderModal(p) {
+  const dlg = $('provider-modal');
+  if (!dlg) return;
+  PROVIDER_EDITING = p ? p.id : null;
+  PROVIDER_HAS_KEY = !!(p && p.has_key);
+  $('provider-modal-title').textContent = p ? `Edit ${p.name}` : 'Add provider';
+  $('pv-name').value = p ? p.name : '';
+  $('pv-base').value = p ? p.base : '';
+  $('pv-model').value = p ? p.model : '';
+  $('pv-context').value = p && p.context ? p.context : '';
+  $('pv-maxtok').value = p && p.max_tokens ? p.max_tokens : '';
+  $('pv-temp').value = p && p.temperature != null ? p.temperature : '';
+  // Public provider data never includes stored header values. Show the names in the
+  // placeholder and keep the field blank, so saving without retyping preserves them.
+  $('pv-headers').value = '';
+  $('pv-headers').placeholder = p && (p.header_names || []).length
+    ? `stored: ${p.header_names.join(', ')} (leave blank to keep)`
+    : '{"X-Title": "ClipBlitz"}';
+  $('pv-key').value = '';
+  $('pv-key').placeholder = p && p.has_key ? `saved key ····${p.key_hint || ''} (leave blank to keep)` : 'optional for a local server';
+  $('pv-stt').checked = !!(p && p.stt);
+  $('pv-sttmodel').value = p ? (p.stt_model || '') : '';
+  $('pv-delete').hidden = !p;
+  $('pv-clearkey').hidden = !(p && p.has_key);
+  $('pv-models').hidden = true;
+  $('pv-models').innerHTML = '';
+  $('pv-teststate').textContent = '';
+  toggleSttRow();
+  dlg.showModal();
+}
+
+function closeProviderModal() {
+  const dlg = $('provider-modal');
+  if (dlg && dlg.open) dlg.close();
+  PROVIDER_EDITING = null;
+  PROVIDER_HAS_KEY = false;
+}
+
+function providerPayload() {
+  const headersRaw = ($('pv-headers').value || '').trim();
+  let headers = {};
+  if (headersRaw) {
+    try { headers = JSON.parse(headersRaw); } catch (e) { throw new Error('Custom headers must be valid JSON.'); }
+    if (!headers || typeof headers !== 'object' || Array.isArray(headers)) throw new Error('Custom headers must be a JSON object.');
   }
-  const b = ev.target.closest('[data-savekey]');
-  if (!b) return;
-  const which = b.dataset.savekey;
-  const body = {};
-  if (which === 'youtube') {
-    body.yt_client_id = $('key-yt-id').value.trim();
-    body.yt_client_secret = $('key-yt-secret').value.trim();
-  } else {
-    const input = $(`key-${which}`);
-    body[which] = input ? input.value.trim() : '';
-    if (which === 'pollinations' && !body[which]) body[which] = 'on';
+  const num = (id) => {
+    const v = $(id).value;
+    return v === '' ? null : Number(v);
+  };
+  const body = {
+    name: $('pv-name').value.trim(),
+    base: $('pv-base').value.trim(),
+    model: $('pv-model').value.trim(),
+    context: num('pv-context') || 0,
+    max_tokens: num('pv-maxtok') || 0,
+    temperature: num('pv-temp'),
+    stt: $('pv-stt').checked,
+    stt_model: $('pv-stt').checked ? $('pv-sttmodel').value.trim() : '',
+  };
+  // Blank on an existing provider keeps whatever headers are stored; blank on a new
+  // one means none. The API never sends stored header values back to the page.
+  if (headersRaw || !PROVIDER_EDITING) body.headers = headers;
+  if (PROVIDER_EDITING) body.id = PROVIDER_EDITING;
+  const key = $('pv-key').value.trim();
+  if (key) body.api_key = key;
+  return body;
+}
+
+async function saveProvider(ev) {
+  if (ev) ev.preventDefault();
+  const btn = $('pv-save');
+  let body;
+  try { body = providerPayload(); } catch (e) { return toast(e.message, true); }
+  if (!body.name) return toast('Give the provider a name.', true);
+  if (!body.base && !body.model) return toast('Enter the base URL and model id.', true);
+  if (!body.model && !(body.stt && body.stt_model)) return toast('Enter the exact model id.', true);
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = 'Saving…';
+  try {
+    const resp = await fetch('/api/providers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    PROVIDERS_CACHE = data;
+    renderProviders(data);
+    closeProviderModal();
+    toast(PROVIDER_EDITING ? 'Provider saved.' : 'Provider added.');
+  } catch (e) {
+    toast('Could not save: ' + String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
   }
-  if (Object.values(body).some((v) => !v)) return toast('Paste the value first.', true);
-  b.disabled = true;
-  const old = b.textContent;
-  b.textContent = 'Testing...';
+}
+
+async function testProvider() {
+  const out = $('pv-teststate');
+  let body;
+  try { body = providerPayload(); } catch (e) { return toast(e.message, true); }
+  out.textContent = 'testing…';
+  const btn = $('pv-test');
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/providers/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || 'the provider did not answer');
+    out.textContent = `${data.latency_ms} ms · ${data.model}${data.answer ? ' · ' + data.answer.slice(0, 60) : ''}`;
+    toast('Connection works.');
+  } catch (e) {
+    out.textContent = 'failed';
+    toast('Test failed: ' + String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function findModels() {
+  const box = $('pv-models');
+  let headers = {};
+  try {
+    const raw = ($('pv-headers').value || '').trim();
+    if (raw) headers = JSON.parse(raw);
+  } catch (e) { return toast('Custom headers must be valid JSON.', true); }
+  const body = {
+    base: $('pv-base').value.trim(),
+    api_key: $('pv-key').value.trim(),
+    headers,
+  };
+  if (PROVIDER_EDITING) body.id = PROVIDER_EDITING;
+  box.hidden = false;
+  box.innerHTML = '<span class="dim">asking the provider for its model list…</span>';
+  try {
+    const resp = await fetch('/api/providers/find-models', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    const models = data.models || [];
+    box.innerHTML = models.length
+      ? `<div class="dim">${models.length} models — click one to use it</div>` +
+        models.slice(0, 300).map((m) => `<button class="modelchip" type="button" data-model="${esc(m)}">${esc(m)}</button>`).join('')
+      : '<span class="dim">The provider returned no models. Type the id manually.</span>';
+  } catch (e) {
+    box.innerHTML = `<span class="dim">Could not list models: ${esc(String(e.message || e))}. Type the id manually.</span>`;
+  }
+}
+
+async function saveYouTubeKeys(btn) {
+  const body = {
+    yt_client_id: $('key-yt-id').value.trim(),
+    yt_client_secret: $('key-yt-secret').value.trim(),
+  };
+  if (Object.values(body).some((v) => !v)) return toast('Paste the client ID and secret first.', true);
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = 'Testing…';
   try {
     const resp = await fetch('/api/keys', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     const r = await resp.json();
     if (!resp.ok) throw new Error(r.error || resp.statusText);
-    const tests = r.tests || {};
-    const fails = Object.entries(tests).filter(([, t]) => !t.ok).map(([k, t]) => `${k}: ${t.detail || 'failed'}`);
-    if (fails.length) toast('Saved, but check - ' + fails.join(' / '), true);
-    else {
-      const ok = Object.values(tests).map((t) => t.detail).filter(Boolean);
-      toast('Saved and tested live' + (ok.length ? ' - ' + ok.join(' / ') : '.'));
-    }
-    loadKeyStates();
+    toast('YouTube OAuth client saved.');
+    loadYouTubeKeys();
     refreshSocial();
-  } catch (e) { toast('Could not save: ' + String(e.message || e), true); }
-  b.disabled = false;
-  b.textContent = old;
+  } catch (e) {
+    toast('Could not save: ' + String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+async function loadYouTubeKeys() {
+  try {
+    const st = await (await fetch('/api/keys')).json();
+    const ytOk = (st.yt_client_id || {}).set && (st.yt_client_secret || {}).set;
+    const yel = $('state-youtube');
+    if (yel) { yel.textContent = ytOk ? 'saved' : 'empty'; yel.className = 'keystate' + (ytOk ? ' ok' : ''); }
+    if ((st.yt_client_id || {}).masked && $('key-yt-id')) $('key-yt-id').placeholder = st.yt_client_id.masked;
+  } catch (e) { /* best effort */ }
+}
+
+/* Provider list actions (delegated so re-rendering cannot lose a listener). */
+document.addEventListener('click', async (ev) => {
+  const edit = ev.target.closest('[data-pv-edit]');
+  if (edit) return openProviderModal(providerById(edit.dataset.pvEdit));
+  const del = ev.target.closest('[data-pv-delete]');
+  const test = ev.target.closest('[data-pv-test]');
+  if (test) {
+    const p = providerById(test.dataset.pvTest);
+    if (!p) return;
+    test.disabled = true;
+    const old = test.textContent;
+    test.textContent = '…';
+    try {
+      const resp = await fetch('/api/providers/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: p.id, name: p.name, base: p.base, model: p.model }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.error || 'no answer');
+      toast(`${p.name}: ${data.latency_ms} ms · ${data.model}`);
+    } catch (e) {
+      toast(`${p.name}: ${String(e.message || e)}`, true);
+    } finally { test.disabled = false; test.textContent = old; }
+    return;
+  }
+  const up = ev.target.closest('[data-pv-up]');
+  const down = ev.target.closest('[data-pv-down]');
+  if (up || down) {
+    const rows = PROVIDERS_CACHE.providers || [];
+    const i = Number((up || down).dataset.pvUp || (up || down).dataset.pvDown);
+    const j = up ? i - 1 : i + 1;
+    if (j < 0 || j >= rows.length) return;
+    const ids = rows.map((p) => p.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    try {
+      const resp = await fetch('/api/providers/reorder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      PROVIDERS_CACHE = data; renderProviders(data);
+    } catch (e) { toast(String(e.message || e), true); }
+    return;
+  }
+  const ytSave = ev.target.closest('[data-savekey="youtube"]');
+  if (ytSave) { await saveYouTubeKeys(ytSave); }
+});
+
+document.addEventListener('change', async (ev) => {
+  const input = ev.target.closest('[data-pv-toggle]');
+  if (!input) return;
+  const p = providerById(input.dataset.pvToggle);
+  if (!p) return;
+  input.disabled = true;
+  try {
+    const resp = await fetch('/api/providers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: p.id, name: p.name, base: p.base, model: p.model,
+        context: p.context, max_tokens: p.max_tokens, temperature: p.temperature,
+        stt: p.stt, stt_model: p.stt_model, enabled: input.checked }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    PROVIDERS_CACHE = data; renderProviders(data);
+  } catch (e) {
+    input.checked = !input.checked;
+    toast(String(e.message || e), true);
+  } finally { input.disabled = false; }
+});
+
+/* Modal wiring (the elements exist only once in the page). */
+if ($('provider-add')) $('provider-add').addEventListener('click', () => openProviderModal(null));
+if ($('provider-form')) $('provider-form').addEventListener('submit', saveProvider);
+if ($('pv-cancel')) $('pv-cancel').addEventListener('click', closeProviderModal);
+if ($('pv-test')) $('pv-test').addEventListener('click', testProvider);
+if ($('pv-find')) $('pv-find').addEventListener('click', findModels);
+if ($('pv-stt')) $('pv-stt').addEventListener('change', toggleSttRow);
+if ($('pv-models')) $('pv-models').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-model]');
+  if (!b) return;
+  $('pv-model').value = b.dataset.model;
+  $('pv-models').hidden = true;
+});
+if ($('pv-delete')) $('pv-delete').addEventListener('click', async () => {
+  if (!PROVIDER_EDITING) return;
+  if (!confirm('Remove this provider? Its saved key is deleted from this machine.')) return;
+  try {
+    const resp = await fetch('/api/providers/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: PROVIDER_EDITING }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    PROVIDERS_CACHE = data; renderProviders(data); closeProviderModal();
+    toast('Provider removed.');
+  } catch (e) { toast(String(e.message || e), true); }
+});
+if ($('pv-clearkey')) $('pv-clearkey').addEventListener('click', async () => {
+  if (!PROVIDER_EDITING) return;
+  try {
+    const resp = await fetch('/api/providers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: PROVIDER_EDITING, name: $('pv-name').value.trim(),
+        base: $('pv-base').value.trim(), model: $('pv-model').value.trim(),
+        context: Number($('pv-context').value) || 0,
+        max_tokens: Number($('pv-maxtok').value) || 0,
+        temperature: $('pv-temp').value === '' ? null : Number($('pv-temp').value),
+        stt: $('pv-stt').checked,
+        stt_model: $('pv-stt').checked ? $('pv-sttmodel').value.trim() : '',
+        clear_key: true }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    PROVIDERS_CACHE = data; renderProviders(data); closeProviderModal();
+    toast('Saved key removed.');
+  } catch (e) { toast(String(e.message || e), true); }
 });
 
 /* ============================ recent jobs ============================ */
@@ -2129,7 +2395,8 @@ if (wantedJob) {
     setTimeout(() => showScreen(wantedScreen, true), 40);
   }
 }
-loadKeyStates();
+loadProviders();
+loadYouTubeKeys();
 const hashScreen = (location.hash || '').replace('#', '');
 if (SCREENS.includes(hashScreen)) showScreen(hashScreen, true);
 loadLan();

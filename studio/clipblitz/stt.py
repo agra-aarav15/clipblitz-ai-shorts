@@ -43,11 +43,29 @@ def _multipart(wav, model, word_granularity):
     return body, boundary
 
 
-def _post(url, body, boundary):
+def _target():
+    """Where transcription goes: the provider marked 'Use for speech-to-text' in the
+    generic Connect store, or the legacy .env endpoint when no store exists yet.
+    Returns {base, key, model, headers}."""
+    try:
+        from . import providers
+        p = providers.stt_provider()
+    except Exception:
+        p = None
+    if p:
+        return {"base": p["base"].rstrip("/"), "key": p.get("key") or "",
+                "model": p.get("stt_model") or "whisper-1",
+                "headers": p.get("headers") or {}}
+    return {"base": CONFIG["ai_base"].rstrip("/"), "key": CONFIG["ai_key"],
+            "model": CONFIG["stt_model"], "headers": {}}
+
+
+def _post(url, body, boundary, key="", headers=None):
     req = urllib.request.Request(url, data=body, method="POST", headers={
         "Content-Type": f"multipart/form-data; boundary={boundary}",
         "User-Agent": "ClipBlitz/0.2",
-        **({"Authorization": f"Bearer {CONFIG['ai_key']}"} if CONFIG["ai_key"] else {}),
+        **({"Authorization": f"Bearer {key}"} if key else {}),
+        **(headers or {}),
     })
     last = None
     for attempt in range(3):  # 429/5xx/network → backoff retries, then give up cleanly
@@ -109,11 +127,12 @@ def _segments_from_words(words, max_gap=1.2, max_len=9.0):
 
 def _api_one(wav):
     """One provider call for one (already size-safe) wav file."""
-    url = f"{CONFIG['ai_base'].rstrip('/')}/audio/transcriptions"
+    target = _target()
+    url = f"{target['base']}/audio/transcriptions"
 
     def call(word_granularity, model=None):
-        body, boundary = _multipart(wav, model or CONFIG["stt_model"], word_granularity)
-        return _post(url, body, boundary)
+        body, boundary = _multipart(wav, model or target["model"], word_granularity)
+        return _post(url, body, boundary, target["key"], target["headers"])
 
     try:
         data = call(True)          # word timings if the provider supports them
@@ -253,7 +272,10 @@ def transcribe_cached(wav, mode, source=None):
     try:
         key_path = source or wav
         stat = os.stat(key_path)
-        raw = f"{os.path.abspath(key_path)}|{stat.st_size}|{int(stat.st_mtime)}|{mode}|{CONFIG.get('stt_model')}"
+        tgt = _target() if mode == "api" else None
+        stamp = (tgt["base"] + "|" + tgt["model"]) if tgt else str(CONFIG.get("whisper_model"))
+        raw = (f"{os.path.abspath(key_path)}|{stat.st_size}|{int(stat.st_mtime)}|"
+               f"{mode}|{stamp}")
         key = hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:20]
     except OSError:
         return transcribe(wav, mode)

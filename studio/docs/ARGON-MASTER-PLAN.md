@@ -412,3 +412,38 @@ The model cross-check is part of the harness (`--crosscheck groq,gemini`). It sh
 material disagreement on the same window (Groq 2/10 vs Gemini 7/10) and is recorded as
 a finding, not averaged away. Free-tier exhaustion is reported honestly: clips judged
 without a working provider stay `unverified`.
+
+---
+
+## 11. Setup, ingest and desktop (5.5.0)
+
+The engine is unchanged. 5.5.0 fixes the path around it.
+
+- **One provider popup.** The fixed vendor grid is gone. Providers live in
+  `data/providers.json`; the Connect screen has one **Add provider** button with base
+  URL, optional key, exact model id, context/tokens/temperature, custom headers,
+  Find Models, Test and an optional speech-to-text model. No provider means
+  measured-only clips, not a silent fallback.
+- **Transcript first.** `yt-dlp` downloads manual and automatic captions; `json3`
+  word offsets feed the same caption renderer, with VTT/SRT as fallback. A YouTube
+  link therefore needs no speech-to-text key. Thin/missing captions fall back to STT.
+- **Native window.** The release bundle has `ClipBlitzStudio.exe` (WebView2 window,
+  no console) and `ClipBlitzStudio-server.exe` (server/MCP/CLI). `--self-test` is the
+  CI proof that the window app's bundled server and page work; the window itself is a
+  manual check. The installer launches the window app.
+- **PeakCut (MIT) review.** `haziqahmedqasmi/PeakCut` was read as a source reference.
+  We adopted the transcript-first ingest, model discovery, prompt-injection defenses,
+  token accounting and the case for a cheaper one-pass proposal path; we did not adopt
+  its AI-score-only selection. The MIT notice applies to any code reused; the current
+  implementation re-writes the ideas in our own modules.
+
+### What is deliberately not done
+
+- **No Gemini consumer-chat proxy.** It is not an API, it violates Google's terms,
+  and one account cannot serve every user. Use an API key, a local model, or no AI.
+- **No public one-click YouTube upload.** "Continue with Google" needs an OAuth
+  client owned and verified by the app publisher, and the shared project quota
+  (~6 uploads/day at 10k units) limits it. Per-user OAuth and assisted upload remain;
+  a verified shared client is an owner decision, not a code trick.
+- **No claim that a fresh link→clips run on a long video has been re-measured for
+  5.5.0.** The parser and sidecar path are tested; the long-video benchmark is next.

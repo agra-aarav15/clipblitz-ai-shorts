@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.4.4 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.5.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -360,8 +360,8 @@ The ready-to-run Windows release carries `plugin/` next to the EXE, and the EXE 
 entry point, so no Python is needed for the agent path either:
 
 ```
-ClipBlitzStudio.exe --mcp      # the MCP server on stdio, exactly like the python one
-ClipBlitzStudio.exe --tools    # the tool schemas as JSON
+ClipBlitzStudio-server.exe --mcp      # the MCP server on stdio, exactly like the python one
+ClipBlitzStudio-server.exe --tools    # the tool schemas as JSON
 ```
 
 ## License

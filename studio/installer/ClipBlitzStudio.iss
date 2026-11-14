@@ -52,9 +52,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\ClipBlitz Studio"; Filename: "{app}\ClipBlitzStudio.exe"; Parameters: "--open"
+Name: "{group}\ClipBlitz Studio"; Filename: "{app}\ClipBlitzStudio.exe"
 Name: "{group}\Uninstall ClipBlitz Studio"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\ClipBlitz Studio"; Filename: "{app}\ClipBlitzStudio.exe"; Parameters: "--open"; Tasks: desktopicon
+Name: "{autodesktop}\ClipBlitz Studio"; Filename: "{app}\ClipBlitzStudio.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ClipBlitzStudio.exe"; Parameters: "--open"; Description: "{cm:LaunchProgram,ClipBlitz Studio}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ClipBlitzStudio.exe"; Description: "{cm:LaunchProgram,ClipBlitz Studio}"; Flags: nowait postinstall skipifsilent

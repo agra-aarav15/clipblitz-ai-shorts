@@ -191,6 +191,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/keys":
             from . import keys
             return self._json(200, keys.status())
+        if path == "/api/providers":
+            from . import providers
+            return self._json(200, providers.public())
         if path == "/api/clipbench":
             return self._json(200, clipbench.state())
         if path == "/api/daily":
@@ -439,6 +442,47 @@ class Handler(BaseHTTPRequestHandler):
             if not social.youtube_configured():
                 return self._json(400, {"error": "CB_YT_CLIENT_ID / CB_YT_CLIENT_SECRET missing in .env — see SETUP-YOUTUBE.md"})
             return self._json(200, {"url": social.youtube_auth_url()})
+        if path == "/api/providers":
+            from . import providers
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                return self._json(200, providers.upsert(body))
+            except ValueError as e:
+                return self._json(400, {"error": str(e)})
+        if path == "/api/providers/delete":
+            from . import providers
+            body = json_body()
+            if body is None or not body.get("id"):
+                return self._json(400, {"error": "provider id required"})
+            return self._json(200, providers.delete(body["id"]))
+        if path == "/api/providers/reorder":
+            from . import providers
+            body = json_body()
+            if body is None or not isinstance(body.get("ids"), list):
+                return self._json(400, {"error": "ids required"})
+            return self._json(200, providers.reorder(body["ids"]))
+        if path == "/api/providers/test":
+            from . import providers
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                return self._json(200, providers.test(body))
+            except ValueError as e:
+                return self._json(400, {"ok": False, "error": str(e)})
+        if path == "/api/providers/find-models":
+            from . import providers
+            body = json_body()
+            if body is None or not body.get("base"):
+                return self._json(400, {"error": "base URL required"})
+            try:
+                models = providers.find_models(body.get("base"), body.get("api_key") or "",
+                                               body.get("headers"), body.get("id"))
+                return self._json(200, {"models": models, "count": len(models)})
+            except ValueError as e:
+                return self._json(400, {"error": str(e), "models": []})
         if path == "/api/keys":
             from . import keys
             body = json_body()

@@ -17,8 +17,8 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=5.4.4" />
-<link rel="stylesheet" href="/cutdesk.css?v=5.4.4" id="desk-theme" disabled />
+<link rel="stylesheet" href="/styles.css?v=5.5.0" />
+<link rel="stylesheet" href="/cutdesk.css?v=5.5.0" id="desk-theme" disabled />
 </head>
 <body>
 
@@ -441,26 +441,18 @@
 
         <div class="glass platcard">
           <div class="picon"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg></div>
-          <h3>API keys <span class="chip" id="keys-chip">checking…</span></h3>
-          <p class="pdesc">Paste once — <b>hot-reloaded</b> from the UI, no restart. Each key is
-          <b>tested live</b> against its provider before it is stored.</p>
+          <h3>Providers <span class="chip" id="keys-chip">checking…</span></h3>
+          <p class="pdesc">Add any service that speaks the <b>OpenAI chat format</b> — local or cloud.
+          Use the exact model id, and mark a provider for speech-to-text if it transcribes audio.</p>
 
-          <div id="provider-status" class="providergrid"></div>
-          <div id="provider-keys"></div>
-
-          <div class="keyrow">
-            <div class="field"><label for="key-yt-id">YouTube Data API — auto-post (OAuth client)</label>
-              <div class="keyinput">
-                <input id="key-yt-id" type="password" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
-                <input id="key-yt-secret" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false" />
-                <button class="btn small" data-savekey="youtube" type="button">Test &amp; save</button>
-              </div>
-            </div>
-            <span class="keystate" id="state-youtube">—</span>
+          <div id="provider-list" class="provider-list"></div>
+          <div class="row provider-actions">
+            <button class="btn small" id="provider-add" type="button">+ Add provider</button>
+            <span class="dim" id="provider-note"></span>
           </div>
-
-          <p class="note">Keys live only in this machine's <b>.env</b>. They are never printed, never
-          committed and never leave the machine except to their own provider during the test call.</p>
+          <p class="note">Keys live in <b>data/providers.json</b> on this machine, owner-only, and are
+          never returned in clear. No provider is required: the measured engine still runs and clips
+          are labelled unverified.</p>
         </div>
 
         <div class="glass platcard">
@@ -471,9 +463,19 @@
           <ol class="steps">
             <li>Create a free Google Cloud project, then enable <b>YouTube Data API v3</b>.</li>
             <li>Create an <b>OAuth client ID</b> (Desktop app, or Web application — both work).</li>
-            <li>Paste the client ID + secret into the <b>API keys</b> card on this screen.</li>
+            <li>Paste the client ID + secret below.</li>
             <li>Add the redirect URI below in Google Cloud, then press <b>Connect</b>.</li>
           </ol>
+          <div class="keyrow">
+            <div class="field"><label for="key-yt-id">OAuth client ID and secret (posting only)</label>
+              <div class="keyinput">
+                <input id="key-yt-id" type="password" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
+                <input id="key-yt-secret" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false" />
+                <button class="btn small" data-savekey="youtube" type="button">Test &amp; save</button>
+              </div>
+            </div>
+            <span class="keystate" id="state-youtube">—</span>
+          </div>
           <div class="redirectbox"><code id="yt-redirect">checking…</code>
             <button class="btn ghost small" id="yt-copy" type="button">Copy</button>
           </div>
@@ -569,6 +571,70 @@
 </div>
 
 <div id="toasts" aria-live="polite"></div>
-<script src="/app.js?v=5.4.4"></script>
+
+<dialog id="provider-modal" class="modal">
+  <form id="provider-form" method="dialog">
+    <div class="modalhead">
+      <h3 id="provider-modal-title">Add provider</h3>
+      <button class="modalx" type="button" id="pv-cancel" aria-label="Close">×</button>
+    </div>
+    <p class="pdesc">One OpenAI-compatible endpoint. Base URL, key (optional for a local server),
+    and the exact model id. Advanced fields are optional.</p>
+
+    <div class="modalgrid">
+      <label>Name
+        <input id="pv-name" type="text" placeholder="NVIDIA, Groq, my server…" maxlength="60" autocomplete="off" />
+      </label>
+      <label>Base URL
+        <input id="pv-base" type="text" placeholder="https://integrate.api.nvidia.com/v1" spellcheck="false" autocomplete="off" />
+      </label>
+      <label>API key <span class="dim">optional</span>
+        <input id="pv-key" type="password" placeholder="leave blank to keep the saved key" autocomplete="off" spellcheck="false" />
+      </label>
+      <label>Model ID
+        <div class="keyinput">
+          <input id="pv-model" type="text" placeholder="deepseek-ai/deepseek-v4.1-flash" spellcheck="false" autocomplete="off" />
+          <button class="btn ghost small" id="pv-find" type="button">Find models</button>
+        </div>
+      </label>
+    </div>
+
+    <div id="pv-models" class="modelpick" hidden></div>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="modalgrid">
+        <label>Context window
+          <input id="pv-context" type="number" min="0" step="1024" placeholder="128000" />
+        </label>
+        <label>Max output tokens
+          <input id="pv-maxtok" type="number" min="0" step="256" placeholder="provider default" />
+        </label>
+        <label>Temperature
+          <input id="pv-temp" type="number" min="0" max="2" step="0.05" placeholder="provider default" />
+        </label>
+        <label>Custom headers (JSON)
+          <textarea id="pv-headers" rows="2" placeholder='{"X-Title": "ClipBlitz"}' spellcheck="false"></textarea>
+        </label>
+      </div>
+      <label class="checkrow"><input id="pv-stt" type="checkbox" /> Use this provider for speech-to-text</label>
+      <div class="modalgrid" id="pv-stt-row" hidden>
+        <label>Transcription model ID
+          <input id="pv-sttmodel" type="text" placeholder="whisper-large-v3-turbo" spellcheck="false" autocomplete="off" />
+        </label>
+      </div>
+    </details>
+
+    <div class="modalactions">
+      <button class="btn ghost small" id="pv-test" type="button">Test connection</button>
+      <span class="dim" id="pv-teststate"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" id="pv-clearkey" type="button" hidden>Clear saved key</button>
+      <button class="btn ghost small" id="pv-delete" type="button" hidden>Delete</button>
+      <button class="btn small" id="pv-save" type="submit">Save provider</button>
+    </div>
+  </form>
+</dialog>
+<script src="/app.js?v=5.5.0"></script>
 </body>
 </html>

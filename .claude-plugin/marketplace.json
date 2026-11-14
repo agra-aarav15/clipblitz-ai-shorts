@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "ClipBlitz Studio's agent plugin: hand an agent a video, get measured vertical clips back, on your own machine.",
-    "version": "5.4.4"
+    "version": "5.5.0"
   },
   "plugins": [
     {

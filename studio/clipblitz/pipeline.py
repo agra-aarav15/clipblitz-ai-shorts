@@ -13,8 +13,8 @@ import threading
 import time
 import uuid
 
-from . import (apex, argon, captions, cinema, ffmpeg_tools, hardware, learning, rights,
-               social, stt, virality)
+from . import (apex, argon, captions, cinema, ffmpeg_tools, hardware, ingest, learning,
+               rights, social, stt, virality)
 
 
 def _vision():
@@ -588,11 +588,22 @@ def process(job_id, src_path):
             cinema_marks = [(round(float(t), 2), 1.0) for t in scenes]
             _set(job_, shots=len(cinema_marks), motion_points=0)
 
-        _set(job_, stage="transcribing", progress=20)
-        mode = stt_mode()
-        segments = stt.transcribe_cached(wav, mode, source=src_path)
-        _set(job_, segments=segments,
-             stage=f"transcribed via {mode} ({len(segments)} blocks)", progress=40)
+        # YouTube links already carry a timed transcript. Reading it first means the
+        # link -> clips path needs no speech-to-text key at all; local uploads (and
+        # videos without captions) still go through STT.
+        _set(job_, stage="reading the source transcript", progress=20)
+        segments = ingest.captions_for(src_path)
+        if segments:
+            mode = "captions"
+            _set(job_, stage=f"using the source captions ({len(segments)} blocks)",
+                 progress=40)
+        else:
+            mode = stt_mode()
+            _set(job_, stage="transcribing", progress=20)
+            segments = stt.transcribe_cached(wav, mode, source=src_path)
+            _set(job_, stage=f"transcribed via {mode} ({len(segments)} blocks)",
+                 progress=40)
+        _set(job_, segments=segments)
 
         _set(job_, stage=f"{ENGINES[eng]['name']}: mining + measuring candidates", progress=52)
         # engine selects which selection pass runs. "both" passes None to the story engine

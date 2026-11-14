@@ -134,8 +134,8 @@ def test_mcp_configs():
     win = loads(os.path.join(PLUGIN, ".mcp.windows.json"))
     if win is not None:
         server = win.get("mcpServers", {}).get("clipblitz", {})
-        check(".mcp.windows.json: the bundle EXE answers MCP itself",
-              str(server.get("command", "")).endswith("ClipBlitzStudio.exe")
+        check(".mcp.windows.json: the console bundle EXE answers MCP itself",
+              str(server.get("command", "")).endswith("ClipBlitzStudio-server.exe")
               and server.get("args") == ["--mcp"],
               f"{server.get('command')} {server.get('args')}")
     launcher = os.path.join(PLUGIN, "clipblitz-mcp.py")

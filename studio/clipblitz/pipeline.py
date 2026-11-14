@@ -5,6 +5,7 @@ Jobs are persisted to data/jobs.json so a refresh (or server restart) never
 orphans clips. Every candidate and clip carries its factor breakdown.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,64 @@ from .config import CONFIG
 
 JOBS = {}  # id -> job dict (persisted to jobs.json)
 JOBS_FILE = os.path.join(CONFIG["data_dir"], "jobs.json")
+
+
+def _source_cache_path(src_path, kind):
+    try:
+        st = os.stat(src_path)
+        raw = f"{os.path.abspath(src_path)}|{st.st_size}|{int(st.st_mtime)}|{kind}"
+    except OSError:
+        return None
+    key = hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:20]
+    return os.path.join(CONFIG["data_dir"], "cache", f"{key}-{kind}.json")
+
+
+def _scene_cuts_cached(src_path):
+    """Scene detection is the most expensive deterministic measurement on a long
+    source. Cache it per unchanged file so a re-run, a re-judge or a verification
+    repeat does not pay for the decode twice. An empty result is not cached, so a
+    transient failure can be retried."""
+    path = _source_cache_path(src_path, "scenes")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return sorted(float(t) for t in data)
+        except (OSError, ValueError, TypeError):
+            pass
+    marks = ffmpeg_tools.scene_cuts(src_path)
+    if path and marks:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(marks, f)
+        except OSError:
+            pass
+    return marks
+
+
+def _active_area_cached(src_path):
+    """The real picture rectangle inside a pillarboxed/letterboxed source, cached
+    per unchanged file. None means the source uses the full frame."""
+    path = _source_cache_path(src_path, "active")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) == 4:
+                return tuple(float(v) for v in data)
+        except (OSError, ValueError, TypeError):
+            pass
+    area = ffmpeg_tools.detect_active_area(src_path)
+    if path and area:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(list(area), f)
+        except OSError:
+            pass
+    return area
 
 DEMO_WORDS = ["watch", "clipblitz", "turn", "this", "test", "video", "into", "vertical",
               "clips", "with", "animated", "captions", "in", "every", "style"]
@@ -371,6 +430,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
     if ass_name:
         layers.append("captions burned into the picture")
     framing = job.get("framing", "focus")
+    active = job.get("active_area")
     layers.append("vertical reframing")
     if framing == "blur":
         layers.append("blur pad")
@@ -411,7 +471,7 @@ def _render_clip(job, src_path, m, base, clips_dir, engine=None):
                                  ratio="9:16" if eng == "prox" else (job.get("ratio") or "9:16"),
                                  audio_lead=fields["audio_lead"], crop_x=crop_x,
                                  vignette=(eng != "argon"), auto_zoom=job.get("auto_zoom", False),
-                                 focus_path=focus_path)
+                                 focus_path=focus_path, active=active)
     thumb = None
     try:
         thumb_path = os.path.join(clips_dir, base + ".jpg")
@@ -481,6 +541,10 @@ def process(job_id, src_path):
         duration = ffmpeg_tools.duration_of(src_path)  # fails with a clear message if unreadable
         _set(job_, duration=duration)
 
+        _set(job_, stage="measuring the active picture area", progress=6)
+        active_area = _active_area_cached(src_path)
+        _set(job_, active_area=list(active_area) if active_area else None)
+
         _set(job_, stage="extracting audio", progress=8)
         wav = os.path.join(tmp_dir, f"{job_id}.wav")
         ffmpeg_tools.extract_audio(src_path, wav)
@@ -491,7 +555,7 @@ def process(job_id, src_path):
         laughs = ffmpeg_tools.laughter_regions(wav)
         _set(job_, laughs=len(laughs))
         _set(job_, stage="finding the peak moments (audio + camera cuts)", progress=17)
-        scenes = ffmpeg_tools.scene_cuts(src_path)
+        scenes = _scene_cuts_cached(src_path)
         _set(job_, scenes=len(scenes))
 
         source_caption_band = None

@@ -5,6 +5,7 @@ import math
 import os
 import re
 import subprocess
+from collections import Counter
 
 from .config import ffmpeg, ffprobe
 from . import cinema
@@ -82,19 +83,137 @@ def speech_segments(wav):
     return segments or [{"start": 0.0, "end": round(total, 2)}]
 
 
+def _video_codec(video):
+    try:
+        proc = subprocess.run(
+            [ffprobe(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "stream=codec_name", "-of", "csv=p=0", video],
+            capture_output=True, text=True, timeout=20)
+        return proc.stdout.strip().splitlines()[0].lower()
+    except (OSError, IndexError, subprocess.SubprocessError):
+        return ""
+
+
+def _keyframe_marks(video):
+    """Real decoder keyframe timestamps, read from the container in milliseconds.
+
+    Encoders put keyframes on scene changes, so they are a usable edit-point proxy.
+    This is the only fast path on codecs whose decoder ignores -skip_frame nokey:
+    a 50 fps AV1 source decoded every frame for 16 minutes before this existed."""
+    try:
+        proc = subprocess.run(
+            [ffprobe(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "packet=pts_time,flags", "-of", "csv=p=0", video],
+            capture_output=True, text=True, errors="replace", timeout=90)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    marks = []
+    for line in proc.stdout.splitlines():
+        parts = line.strip().split(",")
+        if len(parts) < 2 or "K" not in parts[1].upper():
+            continue
+        try:
+            t = float(parts[0])
+        except ValueError:
+            continue
+        if t > 0.5:
+            marks.append(round(t, 3))
+    return sorted(set(marks))
+
+
 def scene_cuts(video, threshold=0.30):
     """Camera/scene change timestamps — the visual second pair of eyes. Peaks in
     cut-rate coincide with action (battles, goals, reveals) even when the transcript
-    is sparse commentary. Returns sorted [t, ...]."""
+    is sparse commentary. Returns sorted [t, ...].
+
+    AV1/VP9 decoding ignores -skip_frame nokey in the bundled build, so those codecs
+    use the container's real keyframe marks instead of a full decode. Other codecs
+    keep the scene-diff scan, capped so one slow file cannot stall a job for 15
+    minutes; on timeout the keyframes are the fallback, not an empty list."""
+    if _video_codec(video) in ("av1", "vp9"):
+        marks = _keyframe_marks(video)
+        if marks:
+            return marks
     try:
         proc = subprocess.run(
             [ffmpeg(), "-skip_frame", "nokey", "-i", video, "-vf",
              f"select='gt(scene,{max(0.10, float(threshold) * 0.4)})',metadata=print:file=-",
              "-an", "-sn", "-f", "null", "-"],
-            capture_output=True, text=True, errors="replace", timeout=900)
+            capture_output=True, text=True, errors="replace", timeout=240)
         return sorted(float(m) for m in re.findall(r"pts_time:([\d.]+)", proc.stdout))
     except Exception:
-        return []
+        return _keyframe_marks(video)
+
+
+def _video_size(path):
+    try:
+        proc = subprocess.run(
+            [ffprobe(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "stream=width,height", "-of", "csv=p=0:s=x", path],
+            capture_output=True, text=True, timeout=20)
+        w, h = (int(v) for v in proc.stdout.strip().split("x")[:2])
+        return w, h
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0, 0
+
+
+def detect_active_area(video, samples=4, seconds=2.0):
+    """Measure the real picture rectangle inside a pillarboxed/letterboxed source.
+
+    Returns (left, top, right, bottom) as fractions of the frame, or None when the
+    source already uses the full frame. cropdetect on a few short samples; the most
+    common rectangle wins because a single dark shot can report a false border.
+    A crop is only trusted when it is plausible (>=50% of the frame).
+    """
+    sw, sh = _video_size(video)
+    if not sw or not sh:
+        return None
+    try:
+        dur = duration_of(video)
+    except Exception:
+        dur = 0.0
+    if dur <= 0:
+        return None
+    found = []
+    for frac in (0.08, 0.30, 0.55, 0.80):
+        off = max(0.0, dur * frac - seconds / 2)
+        try:
+            proc = subprocess.run(
+                [ffmpeg(), "-hide_banner", "-nostats", "-ss", f"{off:.2f}",
+                 "-t", f"{seconds:.1f}", "-i", video,
+                 "-vf", "cropdetect=24:2:0", "-an", "-sn", "-f", "null", "-"],
+                capture_output=True, text=True, errors="replace", timeout=90)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        hits = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", proc.stderr)
+        if hits:
+            found.append(tuple(int(v) for v in hits[-1]))
+    if not found:
+        return None
+    w, h, x, y = Counter(found).most_common(1)[0][0]
+    if w <= 0 or h <= 0 or w < sw * 0.5 or h < sh * 0.5:
+        return None
+    if x < 0 or y < 0 or x + w > sw + 1 or y + h > sh + 1:
+        return None
+    if w >= sw * 0.995 and h >= sh * 0.995:
+        return None
+    left, top = x / float(sw), y / float(sh)
+    right, bottom = (x + w) / float(sw), (y + h) / float(sh)
+    hbar = left >= 0.015 or right <= 0.985
+    vbar = top >= 0.015 or bottom <= 0.985
+    # Only a centred pillarbox or letterbox may be treated as a bar. A dark studio
+    # background is also "black" to cropdetect (the Raj Shamani set reports a 36%
+    # left band and a 20% top band); cropping that away would delete the subject.
+    # Require one axis only and near-symmetry, otherwise keep the full frame.
+    if hbar and not vbar:
+        if abs(left - (1.0 - right)) > 0.02:
+            return None
+    elif vbar and not hbar:
+        if abs(top - (1.0 - bottom)) > 0.02:
+            return None
+    else:
+        return None
+    return (round(left, 4), round(top, 4), round(right, 4), round(bottom, 4))
 
 
 def loudness_profile(wav, bucket=0.5):
@@ -164,18 +283,30 @@ def _video_stream_index(src):
         return 0
 
 
-def _focus_x_expr(path):
+def _focus_x_expr(path, active=None):
     """Build a per-frame crop-x expression from [(t, centre_fraction), ...].
 
-    The expression is piecewise linear and clamped to the source. Commas inside the
-    expression are escaped because ffmpeg's filter parser uses commas as separators.
+    The expression is piecewise linear and clamped to the source. When ``active`` is
+    the detected picture rectangle (left, top, right, bottom as fractions), the crop
+    is also clamped inside it so a pillarboxed source never contributes black bars.
+    Commas inside the expression are escaped because ffmpeg's filter parser uses
+    commas as separators.
     """
     if not path:
         return None
+    lo, hi = (0.0, 1.0)
+    if active:
+        lo, hi = max(0.0, min(1.0, float(active[0]))), min(1.0, float(active[2]))
 
     def x(frac):
-        return (f"max(0\\,min(iw-ih*9/16\\,"
-                f"iw*{float(frac):.4f}-ih*9/32))")
+        desired = f"iw*{float(frac):.4f}-ih*9/32"
+        if active and hi > lo:
+            left, right = f"iw*{lo:.4f}", f"iw*{hi:.4f}-ih*9/16"
+            inside = (f"if(gt({left}\\,{right})\\,"
+                      f"max(0\\,min(iw-ih*9/16\\,iw*{(lo + hi) / 2:.4f}-ih*9/32))\\,"
+                      f"max({left}\\,min({right}\\,{desired})))")
+            return inside
+        return f"max(0\\,min(iw-ih*9/16\\,{desired}))"
 
     expr = x(path[-1][1])
     for (t0, f0), (t1, f1) in reversed(list(zip(path, path[1:]))):
@@ -189,10 +320,27 @@ def _focus_x_expr(path):
 
 def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, ratio="9:16",
                  crop_x=None, vignette=True, auto_zoom=False, focus_path=None,
-                 vsrc="0:v"):
+                 vsrc="0:v", active=None):
     """Vertical reframing filter chains. 'focus' is a full-height 9:16 crop that
     follows the subject; 'blur' fits the whole frame on a blurred background; crop
-    variants cut to 9:16 with a fixed focus. Every chain ends with a short fade."""
+    variants cut to 9:16 with a fixed focus. Every chain ends with a short fade.
+
+    ``active`` is the measured picture rectangle inside a pillarboxed/letterboxed
+    source. Crops are clamped inside it; the current shot's subject is never
+    replaced by the source's black bar."""
+    lo, hi = (0.0, 1.0)
+    if active:
+        lo, hi = max(0.0, min(1.0, float(active[0]))), min(1.0, float(active[2]))
+    safe_frac = max(0.01, hi - lo)
+
+    def fixed_x(value):
+        value = max(0, int(value))
+        if not active:
+            return f"min({value}\\,iw-ow)"
+        left, right = f"iw*{lo:.4f}", f"iw*{hi:.4f}-ow"
+        return (f"if(gt({left}\\,{right})\\,"
+                f"max(0\\,min(iw-ow\\,iw*{(lo + hi) / 2:.4f}-ow/2))\\,"
+                f"max({left}\\,min({right}\\,{value})))")
     fv_in = "fade=t=in:st=0:d=0.18"
     # The tail pad is where the picture should breathe; a 0.12s fade is enough to
     # avoid a hard pop without turning the last beat black.
@@ -203,24 +351,29 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     W, H = cinema.ratio_size(ratio)
     zoom = (f",zoompan=z='min(zoom+0.0004,1.05)':x='iw/2-(iw/zoom/2)':"
             f"y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30" if auto_zoom else "")
+    active_w = f"min(iw*{safe_frac:.4f}\\,ih*9/16)" if active else "min(iw\\,ih*9/16)"
     if framing == "crop-left":
-        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x=0:y=(ih-oh)/2,"
+        x = f"iw*{lo:.4f}" if active else "0"
+        return None, (f"crop=w={active_w}:h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
                       f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing == "crop-right":
-        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x=iw-ow:y=(ih-oh)/2,"
+        x = f"iw*{hi:.4f}-ow" if active else "iw-ow"
+        return None, (f"crop=w={active_w}:h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
                       f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing in ("crop", "auto"):
         if framing == "auto" and focus_path:
-            x = _focus_x_expr(focus_path)
+            x = _focus_x_expr(focus_path, active)
         else:
-            x = ("(iw-ow)/2" if crop_x is None
-                 else f"min({max(0, int(crop_x))}\\,iw-ow)")
-        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
+            x = ("(iw-ow)/2" if crop_x is None else fixed_x(crop_x))
+            if active and crop_x is None:
+                x = f"iw*{(lo + hi) / 2:.4f}-ow/2"
+        return None, (f"crop=w={active_w}:h=min(ih\\,iw*16/9):x={x}:y=(ih-oh)/2,"
                       f"scale={W}:{H},fps=30{zoom},{fv_in},{fv_out}{grade}{sub}")
     if framing == "focus":
-        x = _focus_x_expr(focus_path) or "(iw-ow)/2"
+        x = _focus_x_expr(focus_path, active) or (
+            f"iw*{(lo + hi) / 2:.4f}-ow/2" if active else "(iw-ow)/2")
         # min() keeps a portrait source from asking for a crop wider than the frame.
-        return None, (f"crop=w=min(iw\\,ih*9/16):h=min(ih\\,iw*16/9):"
+        return None, (f"crop=w={active_w}:h=min(ih\\,iw*16/9):"
                       f"x={x}:y=(ih-oh)/2,scale={W}:{H},fps=30{zoom},"
                       f"{fv_in},{fv_out}{grade}{sub}")
     # blur-pad: full frame visible, background = a low-resolution blurred copy.
@@ -256,7 +409,7 @@ def thumbnail(src, at, out, width=540):
 
 def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
              grade=True, grain=False, ratio="9:16", audio_lead=0.0, crop_x=None,
-             vignette=True, auto_zoom=False, focus_path=None):
+             vignette=True, auto_zoom=False, focus_path=None, active=None):
     """Cut [start,end], reframe vertical (default: focus crop that follows the
     subject), burn subtitles (.ass) if given, polish edges with audio+video fades.
     sub_name is relative to cwd (pass the clips dir)."""
@@ -266,7 +419,7 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
                                          grade_film=grade, grain=grain, ratio=ratio,
                                          crop_x=crop_x, vignette=vignette,
                                          auto_zoom=auto_zoom, focus_path=focus_path,
-                                         vsrc=vsrc)
+                                         vsrc=vsrc, active=active)
     # The old J-cut delayed audio without delaying picture, which put sound 350 ms
     # late. It is disabled until a real audio-lead graph (with caption shift) exists.
     lead = 0.0
@@ -293,7 +446,8 @@ def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
                                                    grade_film=grade, grain=grain, ratio=ratio,
                                                    crop_x=crop_x, vignette=vignette,
                                                    auto_zoom=auto_zoom,
-                                                   focus_path=focus_path, vsrc=vsrc)
+                                                   focus_path=focus_path, vsrc=vsrc,
+                                                   active=active)
             if complex_fg2 is not None:
                 args = base + ["-filter_complex", complex_fg2, "-map", "[v]", "-map", "0:a?", *af,
                                "-c:v", "libx264", "-preset", "superfast", "-crf", "25",

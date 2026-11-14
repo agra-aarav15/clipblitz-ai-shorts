@@ -87,6 +87,35 @@ test, and no test touches the network or a real provider.
   These are synthetic transcripts, not a claim about every source; ffmpeg and the
   judge calls are not part of that number.
 
+### P1 - real-media defects (TV / podcast / F1)
+
+A full run on four owner videos found five defects that only appear on real footage.
+The evidence, frames, timings and model comparisons are in
+`VERIFICATION-REAL-MEDIA-v5.4.4.md`.
+
+- **Pillarboxed sources.** The TV episode is a 972x720 picture inside a 1280x720
+  frame. The 9:16 focus crop could include the 150px black side bar. The active
+  picture rectangle is now measured once per source (cached) and the focus crop is
+  clamped inside it. Only a centred pillarbox/letterbox is clamped; a dark studio
+  set (the Raj Shamani source reports a false 36% left band) is left alone.
+- **AV1 scene detection decoded every frame.** A 50fps AV1 source ignored
+  `-skip_frame nokey` and consumed 892 CPU-seconds. AV1/VP9 now use the container's
+  real keyframe marks: 133 marks in 1.87s. Other codecs keep the scene scan, capped
+  at 240s with the keyframe fallback.
+- **A slow local model could stall a job.** A TCP-ready local server took ~30s per
+  call; one Raj job took 697s. Local calls are capped at 45s and cooled down for
+  5 minutes on failure; the same job fell to 332s.
+- **Clips ended on outros/end cards.** Raj ended on "subscribe to the channel"; TV
+  ended on the show's "The End" card. Both are now trimmed deterministically from
+  machine-built windows; a hand cut keeps its chosen outro.
+- **A suspense scene was labelled hype because of "yes".** Generic cues were removed
+  and thriller vocabulary added; a judge that says hype/wholesome on a transcript
+  with real suspense evidence is overruled with `emotion_mismatch`.
+- `CB_DATA` is always absolute (a relative value broke every render because ffmpeg
+  runs with `cwd=<clips dir>`).
+- Pollinations 400/402 is cooled down for 30 minutes instead of retried.
+- `score_trace.judge` records the provider and model that judged the clip.
+
 ### P2
 
 - `_cinema_anchors` accepts dict motion points as well as `(time, value)` tuples.
@@ -101,7 +130,7 @@ test, and no test touches the network or a real provider.
 
 ## New checks
 
-`scripts/test_argon.py` grew from 89 to 118 checks. The new ones cover exactly the
+`scripts/test_argon.py` grew from 89 to 123 checks. The new ones cover exactly the
 defects above: stale pre-judge features, nearest-sentence repair, warning-flag
 repairs without a brain, hype openers, bounded spread, unjudged judge rows, a
 silent source with no measured peaks, an unordered transcript, and the bisect window
@@ -113,7 +142,7 @@ token-counting change.
 Run from `clipstudio/` on Windows, Python 3.12.7, no network, no provider keys used:
 
 ```
-test_argon           118 passed, 0 failed
+test_argon           123 passed, 0 failed
 test_engines          30 passed, 0 failed, 0 skipped
 test_agent            82 passed, 0 failed
 test_learning         28 passed, 0 failed
@@ -126,11 +155,11 @@ test_social           45 passed, 0 failed
 test_quality          35 passed, 0 failed
 test_marketplace      77 passed, 0 failed
 test_emotion          26 passed, 0 failed
-test_reframe          13 passed, 0 failed
+test_reframe          17 passed, 0 failed
 test_connect          13 passed, 0 failed
 ```
 
-**763 passed, 0 failed.**
+**772 passed, 0 failed.**
 
 `test_marketplace` reports 77 in the `clipstudio/` checkout and 94 in the
 `repo-clipblitz/studio` checkout, because the repository checkout sits next to a
@@ -138,18 +167,25 @@ test_connect          13 passed, 0 failed
 were run; both pass. `test_engines` reports 30 passed / 0 skipped in `clipstudio/`
 and 29 passed / 1 skipped in `repo-clipblitz/studio/`: the frozen ProX tree it
 compares against only sits next to the first checkout (the skip is explicit, not a
-pass). The full repository-checkout run is 779 passed, 0 failed, 1 skipped.
+pass). The full repository-checkout run is 788 passed, 0 failed, 1 skipped.
 
-## Not run in 5.4.4
+## Live runs
 
-- No live provider, judge or render job was run for this verification. The changes
-  are all deterministic and covered offline; a render/LLM benchmark would need the
-  owner's keys and is not claimed here.
+Four real videos were run end to end through the pipeline (TV suspense, Raj Shamani
+habits and spy, F1 radio) with real STT, the editor, the ARGON judge and 1080x1920
+renders. That run found the P1 real-media defects above. Full evidence and the
+provider/model comparison: `VERIFICATION-REAL-MEDIA-v5.4.4.md`.
+
+The free tiers were exhausted during that benchmark (Groq 403/429, Gemini 429,
+Pollinations 402). Clips produced without a working judge are labelled `unverified`
+and no verified badge is claimed for them. F1 produced no clips; that is the same
+honest negative result as 5.4.3.
+
 - No blind A/B against a commercial clipper. No "beats X" claim is made.
-- The emotion cue list still contains some tokens that came from observed test
-  transcripts. It was left unchanged because removing them without a re-run of the
-  owner's benchmark would change quality on sources that were not measured here.
-  This is an open quality question, not a hidden fix.
+- The emotion cue table was corrected during the real-media run: the generic
+  "yes"/"kind"/"thank"/"care"/"support"/"together"/"come on" cues were removed and
+  thriller vocabulary was added. Some benchmark-derived tokens remain; a broader
+  re-measurement is still an open quality task, not a hidden fix.
 
 ## Release
 

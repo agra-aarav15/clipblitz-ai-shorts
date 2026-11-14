@@ -380,3 +380,35 @@ full evidence is in `VERIFICATION-v5.4.4.md`.
 Open quality question, deliberately not papered over: the comedy cue table still
 contains some tokens taken from observed transcripts. Removing them without
 re-measuring the owner's benchmark sources would be a blind behavior change.
+
+---
+
+## 10. Real-media findings (5.4.4)
+
+Four owner videos (Hitchcock TV episode, two Raj Shamani interviews, F1 team radio)
+were run end to end with real STT, editor, judge and 1080x1920 renders. Full evidence
+in `VERIFICATION-REAL-MEDIA-v5.4.4.md`. The code changes that came out of it:
+
+- **Active picture area.** A pillarboxed source (TV: 972x720 inside 1280x720) could
+  put a black bar inside the vertical crop. The active rectangle is measured once,
+  cached, and the focus path is clamped inside it. Only a centred pillarbox/letterbox
+  is clamped; a dark studio set is not cropped.
+- **AV1 scene marks.** The AV1 decoder ignores `-skip_frame nokey`; one 50 fps source
+  decoded every frame for 15+ minutes. AV1/VP9 now use container keyframe timestamps
+  (133 marks in 1.87s); other codecs keep the scene scan with a 240s cap and the
+  keyframe fallback.
+- **Outro trim.** Machine-built windows cannot end on "subscribe", "thanks for
+  watching" or a "The End" card. The Raj benchmark clip lost 17.5s of channel plug and
+  still kept a 39.8s self-rescue payoff.
+- **Emotion calibration.** Generic cues ("yes", "kind", "thank", "care", "support",
+  "together", "come on") caused a suspense scene to be labelled "hype" 11:1. They were
+  removed, thriller vocabulary was added, and a judge's hype/wholesome label is
+  overruled when the transcript has real suspense evidence.
+- **Provider hygiene.** Local calls are capped at 45s and cooled for five minutes;
+  Pollinations 400/402 is cooled for 30 minutes; `score_trace.judge` records the
+  provider/model that judged.
+
+The model cross-check is part of the harness (`--crosscheck groq,gemini`). It showed
+material disagreement on the same window (Groq 2/10 vs Gemini 7/10) and is recorded as
+a finding, not averaged away. Free-tier exhaustion is reported honestly: clips judged
+without a working provider stay `unverified`.

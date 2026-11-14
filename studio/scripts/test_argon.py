@@ -443,6 +443,41 @@ def test_hook_speed_and_greetings():
                                        SCENES, LAUGHS, MOTION))
 
 
+def test_hype_tail():
+    """A clip cannot end on an outro/CTA: the payoff sentence is the end, not the plug."""
+    segs = [
+        {"start": 0.0, "end": 4.0, "text": "Why do most startups fail?",
+         "words": [{"word": w, "start": 0.0 + i * 0.4, "end": 0.4 + i * 0.4}
+                   for i, w in enumerate("Why do most startups fail".split())]},
+        {"start": 4.2, "end": 10.0, "text": "They build what nobody wants.",
+         "words": [{"word": w, "start": 4.2 + i * 0.6, "end": 4.8 + i * 0.6}
+                   for i, w in enumerate("They build what nobody wants".split())]},
+        {"start": 10.4, "end": 14.0, "text": "Thank you so much for watching this clip.",
+         "words": []},
+        {"start": 14.2, "end": 18.0, "text": "For more such clips, subscribe to the channel.",
+         "words": []},
+    ]
+    auto = {"start": 0.0, "end": 18.0}
+    argon._enforce_window(auto, segs, 20.0, reject_hype=True)
+    check("argon: a trailing outro is trimmed from the end", auto["end"] <= 10.01,
+          str(auto["end"]))
+    manual = {"start": 0.0, "end": 18.0}
+    argon._enforce_window(manual, segs, 20.0)
+    check("argon: a hand-cut window keeps its chosen outro", manual["end"] == 18.0,
+          str(manual["end"]))
+    check("argon: the CTA is detected as hype",
+          argon.V._is_hype("For more such clips, subscribe to the channel."))
+    check("argon: an end card is detected inside a multi-sentence segment",
+          argon._is_outro("That's him. That's him. The End"))
+    card_segs = segs[:2] + [
+        {"start": 10.4, "end": 14.0, "text": "That's him. The End", "words": []},
+    ]
+    card = {"start": 0.0, "end": 14.0}
+    argon._enforce_window(card, card_segs, 20.0, reject_hype=True)
+    check("argon: a clip cannot end on the show's end card", card["end"] <= 10.01,
+          str(card["end"]))
+
+
 def test_repair_pass():
     """The repair loop must reach warning defects, use the nearest sentence end, and
     score the repaired window on its own measurements, not the old window's."""
@@ -849,6 +884,7 @@ def main():
     test_rejudge_is_stable()
     test_manual()
     test_hook_speed_and_greetings()
+    test_hype_tail()
     test_repair_pass()
     test_selection_guard()
     test_unjudged_judge()

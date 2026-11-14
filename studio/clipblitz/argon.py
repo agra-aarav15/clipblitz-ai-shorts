@@ -48,7 +48,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from . import virality as V
-from .brains import ai_chat
+from .brains import ai_chat, last_call
 from .config import CONFIG
 
 ENGINE_ID = "argon"
@@ -137,6 +137,9 @@ EMOTION_CUES = {
                  "afraid", "threat", "warning", "nervous", "tension", "tense",
                  "hidden", "behind", "trap", "suddenly", "wait", "reveal",
                  "the truth", "no idea", "someone", "door", "phone call", "vanished",
+                 "killed", "murder", "beaten", "blood", "gun", "knife", "scream",
+                 "police", "detective", "lieutenant", "suspect", "investigate",
+                 "attacked", "stalker", "choked",
                  "राज", "रहस्य", "सच", "क्या हुआ", "कौन", "डर", "खतरा", "पुलिस",
                  "जासूस", "जांच", "सबूत", "मामला", "छुपा", "दरवाजा", "फोन", "गायब",
                  "शक", "पीछे", "راز", "کیا ہوا", "کون", "خوف", "خطرہ", "پولیس",
@@ -165,14 +168,14 @@ EMOTION_CUES = {
               "hell", "wronged", "screaming", "yelling", "गुस्सा", "नाराज",
               "बेइज्जती", "झगड़ा", "धोखा", "चिल्ला", "غصہ", "ناراض", "جھگڑا",
               "دھوکہ", "چیخ"),
-    "wholesome": ("kind", "kindness", "helped", "helping", "thank", "grateful",
-                  "sweet", "wholesome", "care", "generous", "support", "together",
+    "wholesome": ("kindness", "helped", "helping", "grateful",
+                  "sweet", "wholesome", "generous",
                   "community", "good person", "made his day", "made her day",
                   "मदद", "शुक्रिया", "दया", "भलाई", "अच्छा", "مدد", "شکریہ",
                   "نیکی", "اچھا"),
-    "hype": ("let's go", "come on", "huge", "massive", "fast", "overtake",
+    "hype": ("let's go", "huge", "massive", "overtake",
              "winner", "wins", "goal", "touchdown", "slam", "incredible",
-             "unreal", "best ever", "championship", "record", "yes", "wow",
+             "unreal", "best ever", "championship", "record", "wow",
              "शानदार", "जबरदस्त", "तेज", "जीत", "गोल", "धमाल", "زبردست",
              "تیز", "جیت", "گول"),
     "informative": ("because", "reason", "means", "explain", "how to", "the way",
@@ -199,6 +202,12 @@ SUMMARY_CUES = ("the point is", "the lesson is", "what i learned", "in the end",
                 "the result was", "that's why", "that is why", "the truth is",
                 "what matters", "here's the thing", "so the key", "the takeaway",
                 "looking back", "if i had to")
+
+# A trailing production card / outro line is not a payoff. These are checked only as
+# the LAST sentence of a machine-built window, so a story that says "the end" in the
+# middle is untouched.
+OUTRO_EXACT = ("the end", "the end of the video", "hitchcock presents",
+               "hitchcock presents the end", "end of episode")
 
 DANGLING_OPENERS = ("but", "and", "so", "because", "cause", "plus", "also", "or",
                     "nor", "which", "that's", "then", "however", "still")
@@ -1016,6 +1025,19 @@ def _enforce_window(c, segments, duration, reject_hype=False):
     if c["end"] - c["start"] > MAX_S:
         inside = [e for e in ends if c["start"] + MIN_S <= e <= c["start"] + MAX_S]
         c["end"] = inside[-1] if inside else min(duration, c["start"] + MAX_S)
+    if reject_hype:
+        # A trailing outro/CTA ("thanks for watching", "subscribe to the channel") is
+        # not a payoff. Trim it when the cut can still stand without it. The old
+        # behavior only filtered hype at the opening, so the Raj Shamani benchmark's
+        # final clip ended on a subscription plug and still passed.
+        inside = [s for s in sents
+                  if s["start"] >= c["start"] - 0.05 and s["end"] <= c["end"] + 0.05]
+        while len(inside) > 1 and _is_outro(inside[-1].get("text") or ""):
+            new_end = inside[-2]["end"]
+            if new_end - c["start"] < MIN_S:
+                break
+            c["end"] = round(min(duration, new_end), 2)
+            inside.pop()
     c["start"] = round(max(0.0, min(duration, c["start"])), 2)
     c["end"] = round(min(duration, max(c["start"] + 1.0, c["end"])), 2)
     return c
@@ -1489,13 +1511,16 @@ def _judge_batch(cands, segments, content_type):
             "messages": [{"role": "user", "content": prompt + V._owner_guidance()}],
             "temperature": 0.15,
         }))
+        source = last_call() or {}
     except Exception:
         # A judge failure must not silently become a pass. Fall back to the shipped
         # six-field judge, then to the honest offline judgement.
         try:
             base = V.judge_cuts(cands, segments)
+            fallback_source = last_call() or {}
         except Exception:
             base = {}
+            fallback_source = {}
         out = {}
         for i, c in enumerate(cands):
             base_j = base.get(i)
@@ -1503,6 +1528,9 @@ def _judge_batch(cands, segments, content_type):
                 j = _offline_judgement(c)
             else:
                 j = dict(base_j)
+                if not j.get("unjudged") and fallback_source:
+                    j["provider"] = fallback_source.get("provider", "")
+                    j["model"] = fallback_source.get("model", "")
                 if j.get("unjudged"):
                     # The shipped six-field judge answered without any judgement rows.
                     # That is a failed call, not an opinion: label it as measured-only
@@ -1544,6 +1572,8 @@ def _judge_batch(cands, segments, content_type):
             "retention_end": _num(raw, "retention_end"),
             "flags": _clean_flags(raw.get("flags")),
             "verdict": str(raw.get("verdict") or "")[:180],
+            "provider": (source or {}).get("provider", ""),
+            "model": (source or {}).get("model", ""),
             "_offline": False,
         }
         # The judge's own boolean fields are authoritative: derive flags when the model
@@ -1593,6 +1623,16 @@ def _apply_judge(c, j):
     if (judge_label in ("awkward", "informative") and deterministic
             and deterministic not in ("awkward", "informative")
             and det_intensity >= 0.55):
+        mismatch = True
+    # A quiet thriller scene is not "hype" just because the judge reached for the
+    # word. When the transcript has real suspense/shock/emotional evidence and no
+    # hype vocabulary, the transcript's label wins.
+    measured = c.get("emotion_scores") or {}
+    if (judge_label in ("hype", "wholesome")
+            and deterministic in ("suspense", "shock", "emotional", "angry")
+            and measured.get("hype", 0.0) < 0.25
+            and measured.get("wholesome", 0.0) < 0.25
+            and measured.get(deterministic, 0.0) >= 0.40):
         mismatch = True
     if mismatch:
         label = deterministic
@@ -1725,6 +1765,8 @@ def score_candidate(c, j, content_type):
         "steps": steps,
         "gate": {"passed": passed, "reasons": gate_reasons},
         "judge": {"offline": bool(j.get("_offline")),
+                  "provider": j.get("provider", ""),
+                  "model": j.get("model", ""),
                   "emotion_label": c.get("emotion_label"),
                   "coherence": _num(j, "coherence"),
                   "payoff": _num(j, "payoff"),
@@ -1840,6 +1882,19 @@ def _reason(c, j):
 
 
 # ---------------------------------------------------------------- repair
+
+def _is_outro(text):
+    """A final card line ("The End", "Hitchcock Presents") is not a payoff.
+
+    STT segments can contain several sentences, so check the final clause as well as
+    the whole segment: "That's him. That's him. The End" must be caught.
+    """
+    t = _norm(text).strip(" .!?…:\"'")
+    if t in OUTRO_EXACT or V._is_hype(t):
+        return True
+    clauses = [p.strip(" .!?…:\"'") for p in re.split(r"[.!?…]+", t) if p.strip()]
+    return bool(clauses) and clauses[-1] in OUTRO_EXACT
+
 
 def _repair(c, j, segments, duration, laughs, scenes):
     """Deterministic repair of a concrete defect. The LLM never redraws blindly; it

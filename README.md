@@ -63,7 +63,13 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 - **Long videos rank in seconds.** Window lookups bisect a cached index; a synthetic
   90-minute offline run fell from "did not finish in 300s" to 11.5s (10-minute: 31.3s to
   3.2s) on this machine.
-- Every offline suite passes: 763 checks in the studio checkout, 779 in the repository
+- **Real media found real defects.** A TV episode is pillarboxed; the focus crop could
+  include the black bar, and the active picture area is now measured and clamped. AV1
+  scene detection decoded every frame for 15+ minutes; it now reads keyframe marks in
+  1.8s. Clips can no longer end on "subscribe" or "The End" cards. A slow local model is
+  capped instead of stalling a job. A suspense scene is no longer labelled "hype" because
+  of the word "yes". Evidence: `studio/VERIFICATION-REAL-MEDIA-v5.4.4.md`.
+- Every offline suite passes: 772 checks in the studio checkout, 788 in the repository
   checkout (17 extra manifest checks there; the frozen-tree comparison skips because that
   tree is not adjacent in the repository layout).
 

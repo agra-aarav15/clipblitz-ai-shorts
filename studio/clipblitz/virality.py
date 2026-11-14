@@ -54,6 +54,8 @@ HYPE_MARKERS = [
     "intro", "today's guest", "our guest today", "let's get started", "let's get into it",
     "before we start", "before we begin", "check the description", "link in the description",
     "patreon", "merch", "code at checkout", "thank you for watching", "see you in the next",
+    "thank you so much for watching", "thanks for watching", "for more such",
+    "subscribe to", "follow the channel", "hit subscribe",
 ]
 
 MIN_CLIP_S = 18.0   # nothing shorter than a real beat (snippets feel random)

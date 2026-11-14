@@ -42,6 +42,14 @@ LOCAL_MODEL = os.environ.get("CB_LOCAL_MODEL", "").strip() or "qwen2.5:3b"
 
 _LOCAL_CACHE = {"at": 0.0, "ready": False, "base": ""}
 _COOLDOWN = {}  # provider name -> monotonic time it may be tried again
+_LAST = threading.local()  # per-thread record of the provider that answered last
+
+
+def last_call():
+    """{provider, model} for the most recent successful call in THIS thread.
+    The editor runs chunks in parallel, so a plain global would race; the judge
+    reads this immediately after its own call to record who judged the clip."""
+    return getattr(_LAST, "info", None)
 _CALL_ORDER = ("groq", "gemini", "cerebras", "openrouter", "together", "openai", "pollinations", "local")
 
 
@@ -188,6 +196,15 @@ def _semaphore(name, capacity=1):
 def _call_one(brain, payload, timeout=180, model_override=None):
     # Free tiers return 429 when two editor chunks and the judge all hit the same
     # key at once. Queue per provider instead of pretending the quota is larger.
+    if brain["name"] == "local":
+        # A local server can be TCP-ready and still take minutes to answer (cold
+        # load, a small model on CPU, a huge judge prompt). It is a fallback, not a
+        # blocker: cap it and cool it down on failure instead of stalling the job.
+        try:
+            local_cap = max(5, int(os.environ.get("CB_LOCAL_TIMEOUT", "45")))
+        except (TypeError, ValueError):
+            local_cap = 45
+        timeout = min(timeout, local_cap)
     sem = _semaphore(brain["name"], 2 if brain["name"] in ("local", "openai") else 1)
     with sem:
         return _call_one_raw(brain, payload, timeout=timeout,
@@ -211,6 +228,7 @@ def _call_one_raw(brain, payload, timeout=180, model_override=None):
     content = out["choices"][0]["message"].get("content")
     if not content or not content.strip():
         raise EmptyAnswer(f"{brain['name']} returned an empty answer")
+    _LAST.info = {"provider": brain["name"], "model": model}
     return content
 
 
@@ -261,7 +279,11 @@ def ai_chat(payload, attempts_per_brain=2, timeout=None):
                         except urllib.error.HTTPError:
                             pass
                     break
-                if e.code in (400, 401, 403):
+                if e.code in (400, 401, 402, 403):
+                    if brain["name"] == "pollinations" and e.code in (400, 402):
+                        # The shared no-key fallback is rate-limited/paid now. Stop
+                        # asking it on every chunk for the rest of the job.
+                        _COOLDOWN[brain["name"]] = time.time() + 1800
                     break
                 if e.code == 429:
                     # Do not burn the request budget waiting on an exhausted key:
@@ -276,6 +298,11 @@ def ai_chat(payload, attempts_per_brain=2, timeout=None):
             except (EmptyAnswer, urllib.error.URLError, TimeoutError, OSError, KeyError,
                     ValueError) as e:
                 last = e
+                if brain["name"] == "local":
+                    # A slow/hung local model must not be retried for every editor
+                    # chunk and every judge batch; one failure cools it for 5 min.
+                    _COOLDOWN[brain["name"]] = time.time() + 300
+                    break
                 _COOLDOWN[brain["name"]] = time.time() + 15
                 time.sleep(2 + attempt * 3)
     raise last or RuntimeError("all AI brains failed")

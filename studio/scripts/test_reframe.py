@@ -8,6 +8,7 @@ file that is 1080x1920 rather than a landscape frame with bars.
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,55 @@ def test_filtergraph():
     tall = F._filtergraph("crop", None, 10.0)[1]
     check("reframe: fixed crop is guarded for tall sources",
           "min(iw" in tall and "min(ih" in tall, tall[:90])
+
+
+def test_active_area():
+    """A source with black side bars must report the real picture rectangle; a
+    full-frame source must not. The focus crop is clamped inside that rectangle so
+    the rendered portrait never contains the source's bar."""
+    padded = os.path.join(tempfile.gettempdir(), "cb_reframe_padded.mp4")
+    plain = os.path.join(tempfile.gettempdir(), "cb_reframe_plain.mp4")
+    out = os.path.join(tempfile.gettempdir(), "cb_reframe_padded_out.mp4")
+    try:
+        F.run([F.ffmpeg(), "-y", "-v", "error",
+               "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=2:r=30",
+               "-f", "lavfi", "-i", "testsrc2=size=960x720:rate=30:duration=2",
+               "-filter_complex", "[0][1]overlay=160:0", "-shortest",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", padded], timeout=60)
+        area = F.detect_active_area(padded)
+        check("reframe: a pillarboxed source reports its active picture area",
+              bool(area) and abs(area[0] - 0.125) < 0.01
+              and abs(area[2] - 0.875) < 0.01, str(area))
+        F.run([F.ffmpeg(), "-y", "-v", "error", "-f", "lavfi",
+               "-i", "testsrc2=size=1280x720:rate=30:duration=2",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", plain], timeout=60)
+        check("reframe: a full-frame source reports no bars",
+              F.detect_active_area(plain) is None)
+        expr = F._filtergraph("focus", None, 2.0, focus_path=[(0.0, 0.02)],
+                              active=area)[1]
+        check("reframe: the focus expression is clamped inside the active area",
+              "iw*0.1250" in expr and "iw*0.8750" in expr, expr[:100])
+        # Render with the subject pushed to the left edge: the clamp must keep the
+        # output out of the black bar, so the leftmost 8px column is picture, not bar.
+        F.cut_clip(padded, 0.0, 1.0, out, framing="focus",
+                   focus_path=[(0.0, 0.02), (1.0, 0.02)], active=area,
+                   grade=False, vignette=False)
+        stat = subprocess.run(
+            [F.ffmpeg(), "-v", "error", "-i", out, "-frames:v", "1",
+             "-vf", "crop=8:1920:0:0,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-",
+             "-f", "null", "-"], capture_output=True, text=True, timeout=60)
+        yavg = [float(m) for m in re.findall(
+            r"lavfi\.signalstats\.YAVG=([\d.]+)", stat.stdout + stat.stderr)]
+        check("reframe: a clamped crop does not include the source's black bar",
+              bool(yavg) and max(yavg) > 20.0, str(yavg[:3]))
+    except Exception as e:
+        check("reframe: a pillarboxed source is measured and clamped", False, str(e))
+    finally:
+        for p in (padded, plain, out):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 def test_subject_centre():
@@ -148,6 +198,7 @@ def test_real_render():
 def main():
     test_expression()
     test_filtergraph()
+    test_active_area()
     test_subject_centre()
     test_focus_path_fallback()
     test_tall_render()

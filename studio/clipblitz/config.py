@@ -52,7 +52,10 @@ def _int_env(name, default, lo, hi):
 
 CONFIG = {
     "port": int(os.environ.get("CB_PORT", "4300")),
-    "data_dir": os.environ.get("CB_DATA", os.path.join(ROOT, "data")),
+    # Always absolute: ffmpeg runs each render with cwd=<clips dir>, so a relative
+    # CB_DATA turned the output path into clips/<relative>/clips/x.mp4 and the render
+    # failed with "No such file or directory".
+    "data_dir": os.path.abspath(os.environ.get("CB_DATA", os.path.join(ROOT, "data"))),
     # AI (OpenAI-compatible) used for virality scoring + captions timing;
     # without a key ClipBlitz falls back to fully-offline heuristics.
     "ai_base": os.environ.get("CB_AI_BASE", "https://api.openai.com/v1"),

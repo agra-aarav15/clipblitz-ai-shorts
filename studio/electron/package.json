@@ -89,5 +89,13 @@
       "artifactName": "ClipBlitzStudio-${version}-linux-${arch}.${ext}",
       "maintainer": "ClipBlitz <hello@clipblitz.local>"
     }
+  },
+  "homepage": "https://github.com/agra-aarav15/clipblitz-ai-shorts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agra-aarav15/clipblitz-ai-shorts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agra-aarav15/clipblitz-ai-shorts/issues"
   }
 }

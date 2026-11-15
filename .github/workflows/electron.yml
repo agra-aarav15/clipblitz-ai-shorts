@@ -103,11 +103,12 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            xvfb-run -a npx electron . --self-test --no-sandbox
+            xvfb-run -a npx electron . --no-sandbox
           else
-            npx electron . --self-test
+            npx electron .
           fi
         env:
+          CB_SELF_TEST: '1'
           CB_BACKEND: ${{ github.workspace }}/studio/electron/backend/ClipBlitzStudio-server${{ matrix.platform == 'win' && '.exe' || '' }}
 
       - name: Package the installer

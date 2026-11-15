@@ -26,7 +26,7 @@ const path = require('path');
 const APP_NAME = 'ClipBlitz Studio';
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
-const SELF_TEST = process.argv.includes('--self-test');
+const SELF_TEST = process.env.CB_SELF_TEST === '1' || process.argv.includes('--self-test');
 const DEV_TOOLS = process.argv.includes('--devtools') || process.env.CB_DEVTOOLS === '1';
 
 // A product name must be set before asking Electron for userData, otherwise the

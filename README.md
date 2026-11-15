@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.2"><b>Download v5.5.2 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.0"><b>Download v5.6.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -43,7 +43,7 @@ spoken unit with a measured opening and ending:
 
 ---
 
-## What's new in v5.5.2
+## What's new in v5.6.0
 
 - **The first local provider now works.** The `.env` import assumed `qwen2.5:3b`; if
   your Ollama has `clipblitz-local:latest` instead, the imported provider 404'd. Import
@@ -54,7 +54,7 @@ spoken unit with a measured opening and ending:
 - **Raj Shamani, real 505 s link:** no provider → 1 measured window; Groq+Gemini →
   1 verified 71.5 s clip ("How to Stop Constant Worrying", 11 calls, 265.9 s, Groq
   429s covered by Gemini); local Ollama timed out → 0. Details in
-  `studio/VERIFICATION-v5.5.2.md`.
+  `studio/VERIFICATION-v5.6.0.md`.
 
 ## What's new in v5.5.1
 
@@ -179,7 +179,7 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.5.2)
+## ARGON, the unified engine (ClipBlitz Studio v5.6.0)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -296,7 +296,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Windows installer (recommended)
-1. Download **`ClipBlitzStudio-5.5.2-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.2).
+1. Download **`ClipBlitzStudio-5.6.0-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.0).
 2. Run it. It installs for the current user (no admin prompt), bundles CPython, ffmpeg,
    yt-dlp, the web UI and the agent plugin, and creates Start Menu + optional desktop
    shortcuts.
@@ -304,7 +304,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 4. Uninstall from Windows Settings → Apps at any time. Your `data/` folder is left in
    place so clips and jobs are not lost.
 
-Prefer a portable folder? Download **`ClipBlitzStudio-5.5.2-windows.zip`**, unzip it,
+Prefer a portable folder? Download **`ClipBlitzStudio-5.6.0-windows.zip`**, unzip it,
 and run `ClipBlitzStudio\ClipBlitzStudio.exe`. No Python or install is required either
 way.
 

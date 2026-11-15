@@ -457,3 +457,12 @@ are an optimization, not a prerequisite. The download now runs with
 still raises when no video exists. `scripts/test_captions.py` locks this down. The
 same 275 s link then completed captions → ARGON → render in 71 s with an empty
 provider store (zero calls).
+
+### 5.5.2: the local model and the measured label
+
+The first Connect import assumed `qwen2.5:3b` for a local runtime; the machine had
+`clipblitz-local:latest`, so the imported local provider 404'd. Import now discovers
+the installed model from `/models` once. A measured-only window whose gate failed is
+shown as **measured** (with the gate reasons), not **reject** next to **unverified**.
+The Raj 505 s link produced 1 verified clip through Groq+Gemini, 1 measured window
+with no provider, and 0 through a too-slow local model. The app did not pad to three.

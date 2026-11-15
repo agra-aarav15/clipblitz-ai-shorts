@@ -236,10 +236,24 @@ def load_or_import():
             continue
         if not entry.get("key") and not str(name).startswith(("local", "ollama")):
             continue
+        model = entry.get("model")
+        if str(name).lower().startswith(("local", "ollama")):
+            # A local runtime's model names are personal: qwen2.5:3b may not exist,
+            # while the machine actually has clipblitz-local:latest. Ask /models once
+            # at migration time so the imported provider works instead of 404ing.
+            try:
+                found = find_models(entry.get("base"), entry.get("key") or "local",
+                                    entry.get("headers") or {})
+            except Exception:
+                found = []
+            if found:
+                lower = {m.lower(): m for m in found}
+                model = (next((m for m in found if "clipblitz" in m.lower()), None)
+                         or lower.get(str(model or "").lower()) or found[0])
         rows.append(_normalise({
             "id": "p_" + uuid.uuid4().hex[:10],
             "name": name, "base": entry.get("base"), "key": entry.get("key"),
-            "model": entry.get("model"), "headers": entry.get("headers") or {},
+            "model": model, "headers": entry.get("headers") or {},
             "stt": str(name) in ("groq", "openai") or "whisper" in str(entry.get("model", "")).lower(),
             "stt_model": (os.environ.get("CB_STT_MODEL") or
                           ("whisper-large-v3-turbo" if "groq" in (entry.get("base") or "") else "")),

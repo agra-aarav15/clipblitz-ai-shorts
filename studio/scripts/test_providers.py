@@ -188,6 +188,19 @@ def test_live_stub():
         models = providers.find_models(base, Stub.key)
         check("providers: Find models reads the provider's own list",
               models == ["model-a", "model-b"], str(models))
+        reset()
+        old_legacy = brains.legacy_pool
+        brains.legacy_pool = lambda: [{
+            "name": "local", "base": base, "key": Stub.key,
+            "model": "qwen2.5:3b", "headers": {}}]
+        try:
+            imported = providers.load_or_import()
+        finally:
+            brains.legacy_pool = old_legacy
+        local = imported["providers"][0]
+        check("providers: importing a local runtime picks an installed model",
+              local["model"] in ("model-a", "model-b"), local["model"])
+        reset()
         try:
             providers.find_models(base, "wrong-key-000000")
             ok = False

@@ -1,0 +1,120 @@
+name: electron
+
+# Cross-platform native desktop builds. The Python engine is built on each OS with
+# PyInstaller, then Electron packs it with ffmpeg/ffprobe/yt-dlp for that CPU.
+# Nothing here runs on the owner's machine: no local builds, no C: pressure.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'studio/electron/**'
+      - 'studio/ClipBlitzServer.spec'
+      - 'studio/server_entry.py'
+      - 'studio/clipblitz/**'
+      - '.github/workflows/electron.yml'
+
+concurrency:
+  group: electron-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, label: Windows-x64, platform: win, arch: x64, builder: '--win --x64' }
+          - { os: ubuntu-22.04, label: Linux-x64, platform: linux, arch: x64, builder: '--linux --x64' }
+          - { os: macos-13, label: macOS-x64, platform: mac, arch: x64, builder: '--mac --x64' }
+          - { os: macos-14, label: macOS-arm64, platform: mac, arch: arm64, builder: '--mac --arm64' }
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libarchive-tools
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Fast engine checks
+        working-directory: studio
+        run: |
+          python scripts/test_captions.py
+          python scripts/test_providers.py
+          python scripts/test_argon.py
+
+      - name: Build the headless backend
+        working-directory: studio
+        run: pyinstaller --noconfirm --clean ClipBlitzServer.spec
+
+      - name: Stage the backend next to Electron
+        shell: bash
+        run: |
+          rm -rf studio/electron/backend
+          mkdir -p studio/electron/backend
+          cp -R studio/dist/ClipBlitzStudio-server/. studio/electron/backend/
+          cp -R studio/web studio/electron/backend/web
+          cp -R studio/assets studio/electron/backend/assets
+          cp -R studio/plugin studio/electron/backend/plugin
+          cp studio/README.md studio/SETUP.md studio/electron/backend/
+          cp SETUP-YOUTUBE.md studio/electron/backend/
+          ls -lh studio/electron/backend/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Electron dependencies
+        working-directory: studio/electron
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the OS icons
+        working-directory: studio/electron
+        run: npm run icons
+
+      - name: Add ffmpeg, ffprobe and yt-dlp for this platform
+        working-directory: studio/electron
+        run: npm run prepare-backend
+
+      - name: Electron self-test (real bundled backend)
+        working-directory: studio/electron
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a npx electron . --self-test --no-sandbox
+          else
+            npx electron . --self-test
+          fi
+        env:
+          CB_BACKEND: ${{ github.workspace }}/studio/electron/backend/ClipBlitzStudio-server${{ matrix.platform == 'win' && '.exe' || '' }}
+
+      - name: Package the installer
+        working-directory: studio/electron
+        run: npx electron-builder ${{ matrix.builder }} --publish never
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipBlitzStudio-${{ matrix.label }}
+          if-no-files-found: error
+          path: |
+            studio/electron/release/*.exe
+            studio/electron/release/*.dmg
+            studio/electron/release/*.zip
+            studio/electron/release/*.AppImage
+            studio/electron/release/*.deb
+            studio/electron/release/*.blockmap

@@ -32,6 +32,11 @@ def _load_env(path):
 
 
 _load_env(os.path.join(ROOT, ".env"))
+# The Electron shell points CB_DATA at the writable user-data folder. Settings saved
+# there (provider keys, YouTube client) must survive a restart; on macOS the app
+# bundle is read-only, so ROOT/.env cannot be the writable location.
+if os.environ.get("CB_DATA"):
+    _load_env(os.path.join(os.environ["CB_DATA"], ".env"))
 
 def _float_env(name, default, lo, hi):
     """A float knob with the same never-crash guarantee as _int_env."""

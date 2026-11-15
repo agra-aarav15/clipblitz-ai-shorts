@@ -908,6 +908,9 @@ def _daily_heartbeat():
 
 def serve(port=None):
     port = port or CONFIG["port"]
+    # The OAuth redirect and the LAN URLs must describe the port this process really
+    # bound, not the default 4300. Electron can fall back to 4301 if 4300 is busy.
+    CONFIG["port"] = port
     try:
         srv = QuietServer(("0.0.0.0", port), Handler)
     except OSError:

@@ -1,0 +1,93 @@
+{
+  "name": "clipblitz-studio",
+  "productName": "ClipBlitz Studio",
+  "version": "5.6.0",
+  "description": "The cutting desk for the internet's best 30 seconds. Native Electron desktop app with a bundled ClipBlitz backend.",
+  "main": "main.js",
+  "author": "ClipBlitz",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "self-test": "electron . --self-test",
+    "icons": "node scripts/make-icons.js",
+    "prepare-backend": "node scripts/prepare-backend.js",
+    "dist": "npm run icons && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "png2icons": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.clipblitz.studio",
+    "productName": "ClipBlitz Studio",
+    "copyright": "Copyright \u00a9 2026 ClipBlitz",
+    "asar": true,
+    "compression": "normal",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "splash.html",
+      "package.json",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "ClipBlitzStudio",
+      "artifactName": "ClipBlitzStudio-${version}-win-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ClipBlitz Studio",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.video",
+      "artifactName": "ClipBlitzStudio-${version}-mac-${arch}.${ext}",
+      "identity": null,
+      "gatekeeperAssess": false,
+      "hardenedRuntime": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "AudioVideo",
+      "synopsis": "ClipBlitz Studio \u2014 find, cut and post the best moments",
+      "description": "A native desktop cutting desk. Drop a link, get the strongest vertical clips, and post when you are ready.",
+      "artifactName": "ClipBlitzStudio-${version}-linux-${arch}.${ext}",
+      "maintainer": "ClipBlitz <hello@clipblitz.local>"
+    }
+  }
+}

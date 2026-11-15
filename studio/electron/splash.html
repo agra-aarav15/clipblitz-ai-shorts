@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClipBlitz Studio</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid; place-items: center;
+    background:
+      radial-gradient(120% 90% at 50% -20%, #1b120b 0%, transparent 55%),
+      #050505;
+    color: #f5f2ea; font-family: ui-sans-serif, "Segoe UI", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  .wrap { width: 100%; padding: 30px 38px; text-align: center; }
+  .mark { width: 74px; height: 74px; color: #ff5a1f; filter: drop-shadow(0 10px 30px #ff5a1f33); }
+  .word { margin-top: 12px; font-weight: 800; font-size: 25px; letter-spacing: -0.03em; }
+  .word span { color: #ff5a1f; }
+  .sub { margin-top: 6px; font: 500 11px/1.4 ui-monospace, SFMono-Regular, monospace;
+         letter-spacing: .18em; text-transform: uppercase; color: #8b8b86; }
+  .track { margin: 26px auto 0; width: 210px; height: 3px; border-radius: 99px;
+           background: #1b1b19; overflow: hidden; }
+  .bar { width: 42%; height: 100%; border-radius: inherit;
+         background: linear-gradient(90deg, #ff5a1f, #ffb38a);
+         animation: slide 1.15s cubic-bezier(.5,0,.2,1) infinite; }
+  @keyframes slide { 0% { transform: translateX(-120%); } 100% { transform: translateX(340%); } }
+  .foot { margin-top: 18px; font-size: 10.5px; color: #5f5f5a; letter-spacing: .08em; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="41" height="41" rx="13" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/>
+      <path d="M27.2 9.5 L14.5 27.4 h8.1 L20.2 38.5 L33.5 20.6 h-8.2 z" fill="currentColor"/>
+    </svg>
+    <div class="word">Clip<span>Blitz</span> Studio</div>
+    <div class="sub">warming the cutting desk</div>
+    <div class="track"><div class="bar"></div></div>
+    <div class="foot">local engine · your machine · your clips</div>
+  </div>
+</body>
+</html>

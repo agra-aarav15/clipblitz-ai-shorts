@@ -17,7 +17,10 @@ import urllib.request
 from .config import app_root
 
 _ROOT = app_root()
-ENV_PATH = os.path.join(_ROOT, ".env")
+# Electron sets CB_DATA to Electron's userData folder. Writing there keeps the app
+# bundle read-only (macOS) and preserves settings across updates. The normal
+# portable/server build has no CB_DATA and keeps the historical ROOT/.env.
+ENV_PATH = os.path.join(os.environ.get("CB_DATA") or _ROOT, ".env")
 
 # logical name -> .env variable
 KEY_VARS = {
@@ -189,6 +192,23 @@ def save(updates):
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:  # keep LF stable on Windows
         f.write("\n".join(out).rstrip("\n") + "\n")
     os.replace(tmp, ENV_PATH)
+    # social.youtube_auth_url() and brains() read CONFIG; make a just-saved key live
+    # without restarting the backend (important on the desktop Connect screen).
+    try:
+        from .config import CONFIG
+        live = {"yt_client_id": "CB_YT_CLIENT_ID", "yt_client_secret": "CB_YT_CLIENT_SECRET",
+                "groq": "CB_AI_KEY", "gemini": "CB_GEMINI_KEY",
+                "cerebras": "CB_CEREBRAS_KEY", "openrouter": "CB_OPENROUTER_KEY",
+                "together": "CB_TOGETHER_KEY", "openai": "CB_OPENAI_KEY"}
+        env = _env()
+        if "yt_client_id" in updates:
+            CONFIG["yt_client_id"] = env.get("CB_YT_CLIENT_ID", "")
+        if "yt_client_secret" in updates:
+            CONFIG["yt_client_secret"] = env.get("CB_YT_CLIENT_SECRET", "")
+        if "groq" in updates and env.get("CB_AI_KEY"):
+            CONFIG["ai_key"] = env["CB_AI_KEY"]
+    except Exception:
+        pass
     return {"saved": list(updates.keys()), "status": status()}
 
 

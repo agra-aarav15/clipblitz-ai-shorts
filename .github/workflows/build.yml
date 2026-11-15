@@ -65,6 +65,7 @@ jobs:
           python scripts/test_social.py
           python scripts/test_quality.py
           python scripts/test_captions.py
+          python scripts/test_titles.py
           python scripts/test_providers.py
           # the podium board, on the built-in episode (the repo carries no data/):
           # if a change to the engine shrinks the podium or repeats a beat, this fails

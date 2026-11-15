@@ -1184,6 +1184,46 @@ def rank_single(segments, duration, energy, start, end):
 
 # ---------------------------------------------------------------- metadata
 
+_SPEAKER_PREFIX = re.compile(r"^\s*(?:>>+|[-–—:]+)\s*")
+_BRACKET_NOISE = re.compile(r"\[(?:music|applause|laughter|cheering|inaudible|silence)\]", re.I)
+_TRAILING_GLUE = re.compile(
+    r"(?<![A-Za-z])(?:and|but|or|the|a|an|of|to|in|on|for|with|that|this|"
+    r"you|your|our|is|are|was|were|it|we|they|he|she|i|still|got)\s*$", re.I)
+
+
+def clean_title(text, limit=90):
+    """Turn a raw transcript line into something you would actually publish.
+
+    The AI editor normally writes the title. When every provider is rate-limited we
+    fall back to the strongest line of the transcript, and raw caption text arrives
+    with speaker arrows, [music] tags, repeated words and half a sentence at the end.
+    None of that belongs in a YouTube title. This is deliberately conservative: it
+    removes noise and dangling glue, it never invents a claim the clip does not say.
+    """
+    s = str(text or "").replace("’", "'")
+    s = _BRACKET_NOISE.sub(" ", s)
+    s = _SPEAKER_PREFIX.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip(" -–—:;,.")
+    words = []
+    for word in s.split():
+        bare = word.lower().strip(".,!?;:\"'")
+        if words and bare and bare == words[-1].lower().strip(".,!?;:\"'"):
+            continue
+        words.append(word)
+    s = " ".join(words).strip(" -–—:;,.")
+    # A sentence that ends mid-thought reads worse than a shorter complete one.
+    for _ in range(4):
+        s = s.rstrip(" -–—:;,")
+        m = _TRAILING_GLUE.search(s)
+        if not m:
+            break
+        s = s[:m.start()].rstrip(" -–—:;,")
+    if len(s) > limit:
+        s = s[:limit].rsplit(" ", 1)[0].rstrip(" -–—:;,")
+    if not s:
+        return "Clip"
+    return s[0].upper() + s[1:]
+
 def generate_metadata(clips, segments):
     META_PROMPT = """For each clip below, write the social media metadata for a vertical short.
 
@@ -1212,7 +1252,7 @@ Return ONLY compact JSON, no markdown. For each clip, matching by index:
                     continue
                 tags = [t if t.startswith("#") else "#" + t for t in _as_list(c.get("hashtags"))][:8]
                 meta[int(_as_float(c["index"]))] = {
-                    "title": (c.get("title") or "").strip()[:95],
+                    "title": clean_title(c.get("title"), 95),
                     "description": (c.get("description") or "").strip(),
                     "hashtags": tags,
                 }
@@ -1229,7 +1269,7 @@ def fallback_metadata(clips):
     for i, c in enumerate(clips):
         words = re.findall(r"[A-Za-z\u0600-\u06FF\u0900-\u097F]+", c.get("title", "clip"))
         meta[i] = {
-            "title": c.get("title", f"Highlight {i + 1}")[:95],
+            "title": clean_title(c.get("title") or f"Highlight {i + 1}", 95),
             "description": c.get("reason", "") or c.get("story_summary", ""),
             "hashtags": ["#shorts", "#viral", "#reels"] + ["#" + w.lower() for w in words[:3]],
         }

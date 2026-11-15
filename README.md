@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.0"><b>Download v5.6.0 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.2"><b>Download v5.6.2 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -80,14 +80,15 @@ podium.
 
 ## The desktop app (Electron)
 
-`v5.6.0` is the first **standalone desktop** release:
+`v5.6.2` is the current **standalone desktop** release:
 
 | OS | Download | Under the hood |
 |---|---|---|
-| Windows x64 | `ClipBlitzStudio-5.6.0-win-x64-setup.exe` | Electron + bundled Python backend |
-| macOS arm64 | `ClipBlitzStudio-5.6.0-mac-arm64.dmg` | universal layout, native arm64 backend |
-| macOS x64 | `ClipBlitzStudio-5.6.0-mac-x64.dmg` | Intel build |
-| Linux x64 | `ClipBlitzStudio-5.6.0-linux-x86_64.AppImage` | AppImage + `.deb` |
+| Windows x64 | `ClipBlitzStudio-5.6.2-win-x64-setup.exe` | Electron + bundled Python backend |
+| macOS arm64 | `ClipBlitzStudio-5.6.2-mac-arm64.dmg` | universal layout, native arm64 backend |
+| macOS x64 | `ClipBlitzStudio-5.6.2-mac-x64.dmg` | Intel build |
+| Linux x64 | `ClipBlitzStudio-5.6.2-linux-x86_64.AppImage` | AppImage + `.deb` |
+| Windows portable | `ClipBlitzStudio-5.6.2-win-x64.zip` | unzip and run `ClipBlitzStudio.exe` |
 
 One double-click. No terminal, no browser tab, no Python install, no `pip`, no
 `npm`, no WebView2 prerequisite. The app starts its own backend on a loopback port,
@@ -118,7 +119,7 @@ If you need a stopgap while you wait for a key or verification: run the **measur
 path, label the result unverified, and do not publish it as a verified highlight. The
 app already does that. Do not build a fake API around a consumer chat.
 
-## What's new in v5.6.0
+## What's new in v5.6.2
 
 - **Electron on Windows, macOS and Linux.** The same native shell on every OS, with
   the backend, ffmpeg, ffprobe and yt-dlp bundled per CPU. No terminal and no external
@@ -126,10 +127,20 @@ app already does that. Do not build a fake API around a consumer chat.
 - **Per-platform packaging in GitHub Actions.** NSIS on Windows, DMG + ZIP on macOS
   (x64 and arm64), AppImage + deb on Linux. Unsigned until certificates are supplied.
 - **Real three-video proof, not a synthetic clip.** TechWiser's *The AI Bubble Has
-  Burst!!!* (13:39) → 1 verified 69 s cut (score 76); F1's *Why NO F1 Driver Can Drive
-  Like Max Verstappen* (9:20) → 3 verified cuts (43.8 s / 60.8 s / 36.1 s, scores
-  86/85/83); MrBeast's *$250,000 Hunger Games In Real Life* (33:57) is the long-video
-  run. Results and timings live in `studio/VERIFICATION-v5.6.0.md`.
+  Burst!!!* (13:39) → **1 verified 19.98 s cut** (score 74); F1's *Why NO F1 Driver Can
+  Drive Like Max Verstappen* (9:20) → **1 verified 43.87 s cut** (score 87); MrBeast's
+  *$250,000 Hunger Games In Real Life* (33:57) → **1 verified 56.67 s cut** (score 76).
+  Every file is 1080×1920 with audio. Three videos, three honest clips — no padded
+  podium. Results, timings and the 429 trail live in `studio/VERIFICATION-v5.6.1.md`.
+- **Caption language had a real bug; 5.6.1 fixes it.** YouTube serves translated tracks,
+  and the old picker chose the one with the most words. MrBeast's English video was read
+  through an Urdu translation and the judge returned an empty podium. The picker now
+  reads the source language from the download sidecar, prefers the original English
+  track, and only then the richest track.
+- **Fallback titles are cleaned (5.6.2).** When every provider is rate-limited, the
+  transcript line used as a title loses `>>`, `[music]`, repeated words and dangling
+  half-sentences instead of being published raw. The pixels are untouched; only the
+  metadata fallback improves.
 - **Settings survive on read-only app bundles.** Provider/YouTube keys write to the
   user-data folder; the macOS `.app` never needs to be writable.
 - **OAuth redirect follows the real port.** If 4300 is busy, the app uses the next
@@ -258,7 +269,7 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.6.0)
+## ARGON, the unified engine (ClipBlitz Studio v5.6.2)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -374,18 +385,19 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 
 ## Quickstart
 
-### Option A: Windows installer (recommended)
-1. Download **`ClipBlitzStudio-5.6.0-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.0).
-2. Run it. It installs for the current user (no admin prompt), bundles CPython, ffmpeg,
-   yt-dlp, the web UI and the agent plugin, and creates Start Menu + optional desktop
-   shortcuts.
-3. It opens the studio at `http://localhost:4300` when the install finishes.
-4. Uninstall from Windows Settings → Apps at any time. Your `data/` folder is left in
-   place so clips and jobs are not lost.
+### Option A: Windows desktop app (recommended)
+1. Download **`ClipBlitzStudio-5.6.2-win-x64-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.2).
+2. Run it. It installs for the current user, bundles the engine, ffmpeg, ffprobe,
+   yt-dlp, the web studio and the agent plugin, and creates Start Menu + optional
+   desktop shortcuts.
+3. It opens the **ClipBlitz Studio** window when the install finishes. No terminal,
+   no browser tab, no Python install.
+4. Uninstall from Windows Settings → Apps at any time. Your clips and jobs stay in
+   `%APPDATA%\ClipBlitz Studio`.
 
-Prefer a portable folder? Download **`ClipBlitzStudio-5.6.0-windows.zip`**, unzip it,
-and run `ClipBlitzStudio\ClipBlitzStudio.exe`. No Python or install is required either
-way.
+Prefer a portable folder? Download **`ClipBlitzStudio-5.6.2-win-x64.zip`**, unzip it,
+and run `ClipBlitzStudio.exe`. The classic Python/WebView2 build is still in the same
+release as `ClipBlitzStudio-5.6.2-setup.exe` and `ClipBlitzStudio-5.6.2-windows.zip`.
 
 ### Option B: Clone from source
 ```bash

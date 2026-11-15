@@ -1,7 +1,7 @@
 ; ClipBlitz Studio - Windows installer (Inno Setup 6)
 ;
 ; Compiled in GitHub Actions after the PyInstaller onedir bundle is assembled:
-;   ISCC /DVersion=5.4.4 /DSourceDir=<repo>\studio\dist\ClipBlitzStudio /O<repo> ClipBlitzStudio.iss
+;   ISCC /DVersion=<version> /DSourceDir=<repo>\studio\dist\ClipBlitzStudio /O<repo> ClipBlitzStudio.iss
 ;
 ; The installer is per-user on purpose: no admin prompt, no Program Files write,
 ; and the app's data/ folder stays writable next to the EXE. Everything the app

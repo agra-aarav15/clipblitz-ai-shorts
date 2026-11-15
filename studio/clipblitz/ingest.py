@@ -246,7 +246,10 @@ def _ytdlp(url, dest_dir):
         # Prefer H.264 at 1080p. YouTube otherwise serves AV1/VP9, which the
         # bundled ffmpeg decodes far more slowly (and older essentials builds
         # have no dav1d at all). The clip renderer only needs 1080p.
-        cmd = [ytdlp(), "--no-playlist", "--no-warnings",
+        # Captions are optional: a 429 on one subtitle language must never abort
+        # the video download. Without --ignore-errors yt-dlp exits and the job dies
+        # before the transcript fallback can run.
+        cmd = [ytdlp(), "--no-playlist", "--no-warnings", "--ignore-errors",
                "-S", "vcodec:h264,res:1080,acodec:aac",
                "-f", "bv*+ba/b", "--merge-output-format", "mp4",
                "--write-info-json",
@@ -266,12 +269,15 @@ def _ytdlp(url, dest_dir):
             raise RuntimeError("yt-dlp not found — put yt-dlp.exe in clipblitz/bin/ (see README)")
         except subprocess.TimeoutExpired:
             raise RuntimeError("Download timed out — try a shorter video")
-        if proc.returncode == 0:
-            hits = sorted(glob.glob(os.path.join(dest_dir, f"{tag}_{stamp}_*.*")))
-            video = _pick_downloaded(hits)
-            if not video:
-                raise RuntimeError("Download finished but no video file was produced")
+        hits = sorted(glob.glob(os.path.join(dest_dir, f"{tag}_{stamp}_*.*")))
+        video = _pick_downloaded(hits)
+        # A caption 429 makes yt-dlp exit non-zero even though the video itself
+        # finished. If a video file is here, take it; a truncated file fails the
+        # pipeline's probe with its own clear error.
+        if video and (proc.returncode == 0 or os.path.getsize(video) > 1024 * 1024):
             return video
+        if proc.returncode == 0:
+            raise RuntimeError("Download finished but no video file was produced")
         last_err = (proc.stderr or "").strip().splitlines()[-3:]
 
     joined = " | ".join(last_err or ["yt-dlp error"])

@@ -447,3 +447,13 @@ The engine is unchanged. 5.5.0 fixes the path around it.
   a verified shared client is an owner decision, not a code trick.
 - **No claim that a fresh link→clips run on a long video has been re-measured for
   5.5.0.** The parser and sidecar path are tested; the long-video benchmark is next.
+
+### 5.5.1: optional captions must not kill a download
+
+A real YouTube link exposed the failure: one subtitle language returned HTTP 429
+*after* the video finished, yt-dlp exited non-zero, and the job died at 1%. Captions
+are an optimization, not a prerequisite. The download now runs with
+`--ignore-errors`, accepts a completed video even on a non-zero caption exit, and
+still raises when no video exists. `scripts/test_captions.py` locks this down. The
+same 275 s link then completed captions → ARGON → render in 71 s with an empty
+provider store (zero calls).

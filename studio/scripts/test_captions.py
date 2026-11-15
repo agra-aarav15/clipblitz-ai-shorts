@@ -141,6 +141,41 @@ def test_captions_for():
               ingest.captions_for(thin) == [])
 
 
+def test_download_resilience():
+    """A 429 on one caption language is common. It must not throw away a video that
+    already downloaded; without --ignore-errors yt-dlp exits and the job dies."""
+    import subprocess as sp
+    from unittest import mock
+
+    def fake_run(cmd, **kw):
+        out = cmd[cmd.index("-o") + 1]
+        video = out.replace("%(title).60s", "Demo").replace("%(ext)s", "mp4")
+        class P:
+            returncode = 1
+            stdout = ""
+            stderr = "ERROR: Unable to download video subtitles for 'en': HTTP Error 429"
+        if getattr(fake_run, "make_video", True):
+            with open(video, "wb") as f:
+                f.write(b"0" * (1024 * 1024 + 1))
+        return P()
+
+    with tempfile.TemporaryDirectory() as d:
+        with mock.patch.object(ingest.subprocess, "run", side_effect=fake_run):
+            got = ingest._ytdlp("https://www.youtube.com/watch?v=abc123", d)
+            check("captions: a caption 429 keeps the downloaded video",
+                  got.endswith(".mp4") and os.path.getsize(got) > 1024 * 1024, got)
+            fake_run.make_video = False
+            try:
+                ingest._ytdlp("https://www.youtube.com/watch?v=abc123", d + "2")
+                ok = False
+            except RuntimeError as e:
+                ok = "Download failed" in str(e)
+            check("captions: a real download failure still raises", ok)
+    check("captions: yt-dlp is told not to abort on a subtitle 429",
+          "--ignore-errors" in open(os.path.join(STUDIO, "clipblitz", "ingest.py"),
+                                    encoding="utf-8").read())
+
+
 def test_pipeline_wiring():
     src = open(os.path.join(STUDIO, "clipblitz", "pipeline.py"), encoding="utf-8").read()
     dl = open(os.path.join(STUDIO, "clipblitz", "ingest.py"), encoding="utf-8").read()
@@ -154,6 +189,7 @@ def main():
     test_json3()
     test_vtt()
     test_captions_for()
+    test_download_resilience()
     test_pipeline_wiring()
     fails = [r for r in RESULTS if r[1] is False]
     print(f"\n{len(RESULTS) - len(fails)} passed, {len(fails)} failed")

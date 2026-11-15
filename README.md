@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.0"><b>Download v5.5.0 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.1"><b>Download v5.5.1 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
@@ -42,6 +42,16 @@ spoken unit with a measured opening and ending:
    viral/strong cuts are published. Two strong clips beat three with filler.
 
 ---
+
+## What's new in v5.5.1
+
+- **A real-URL bug fixed.** On a YouTube link, one caption language returned HTTP 429
+  *after* the video downloaded; yt-dlp's non-zero exit killed the job at 1%. Captions
+  are optional now (`--ignore-errors`), and a downloaded video is kept even when the
+  caption request fails. A real 275 s YouTube link then ran captions → ARGON →
+  render in **71 s with zero provider keys** (one 15.9 s 1080×1920 clip, measured-only).
+- The native window was launched from the published bundle: title present, WebView2
+  child running, `/api/health` 200. Details: `studio/VERIFICATION-v5.5.1.md`.
 
 ## What's new in v5.5.0
 
@@ -156,7 +166,7 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.5.0)
+## ARGON, the unified engine (ClipBlitz Studio v5.5.1)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -273,7 +283,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Windows installer (recommended)
-1. Download **`ClipBlitzStudio-5.5.0-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.0).
+1. Download **`ClipBlitzStudio-5.5.1-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.5.1).
 2. Run it. It installs for the current user (no admin prompt), bundles CPython, ffmpeg,
    yt-dlp, the web UI and the agent plugin, and creates Start Menu + optional desktop
    shortcuts.
@@ -281,7 +291,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 4. Uninstall from Windows Settings → Apps at any time. Your `data/` folder is left in
    place so clips and jobs are not lost.
 
-Prefer a portable folder? Download **`ClipBlitzStudio-5.5.0-windows.zip`**, unzip it,
+Prefer a portable folder? Download **`ClipBlitzStudio-5.5.1-windows.zip`**, unzip it,
 and run `ClipBlitzStudio\ClipBlitzStudio.exe`. No Python or install is required either
 way.
 

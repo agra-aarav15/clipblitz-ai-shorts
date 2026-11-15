@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.6.2 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.6.3 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -44,13 +44,13 @@ fonts are served locally, and your API keys live only in this machine's `.env`.
 The current release also ships a **single-window desktop app** for Windows, macOS and
 Linux. It contains the engine, ffmpeg, ffprobe, yt-dlp and the studio; it opens its own
 window, not a terminal and not a browser tab. Download from
-[Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.2):
+[Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.3):
 
 | OS | File |
 |---|---|
-| Windows x64 | `ClipBlitzStudio-5.6.2-win-x64-setup.exe` (or the portable `-win-x64.zip`) |
-| macOS arm64 / x64 | `ClipBlitzStudio-5.6.2-mac-arm64.dmg`, `ClipBlitzStudio-5.6.2-mac-x64.dmg` |
-| Linux x64 | `ClipBlitzStudio-5.6.2-linux-x86_64.AppImage`, `ClipBlitzStudio-5.6.2-linux-amd64.deb` |
+| Windows x64 | `ClipBlitzStudio-5.6.3-win-x64-setup.exe` (or the portable `-win-x64.zip`) |
+| macOS arm64 / x64 | `ClipBlitzStudio-5.6.3-mac-arm64.dmg`, `ClipBlitzStudio-5.6.3-mac-x64.dmg` |
+| Linux x64 | `ClipBlitzStudio-5.6.3-linux-x86_64.AppImage`, `ClipBlitzStudio-5.6.3-linux-amd64.deb` |
 
 Data lives in the OS app-data folder (`%APPDATA%\ClipBlitz Studio`,
 `~/Library/Application Support/ClipBlitz Studio`, `~/.config/ClipBlitz Studio`). The

@@ -387,7 +387,9 @@ async function bootstrap() {
     return;
   }
 
-  const healthy = await waitForHealth(SELF_TEST ? 90000 : 60000);
+  // A first launch on a cold Windows machine can spend a minute in antivirus and
+  // PyInstaller self-extraction before the engine answers. Do not call that a crash.
+  const healthy = await waitForHealth(SELF_TEST ? 240000 : 240000);
   if (!healthy) {
     fail(
       'The local engine did not answer /api/health.\n\n' +

@@ -202,16 +202,56 @@ def parse_subtitle(path):
     return []
 
 
+def _preferred_languages(video_path):
+    """The source language first, then English. YouTube serves dozens of translated
+    caption tracks; choosing the one with the most words picked a Urdu translation of
+    an English MrBeast video and made the judge useless."""
+    stem = os.path.splitext(video_path)[0]
+    prefs = []
+    try:
+        info = json.load(open(stem + ".info.json", encoding="utf-8"))
+        lang = str(info.get("language") or "").split("-")[0].strip().lower()
+        if len(lang) >= 2:
+            prefs.append(lang)
+    except (OSError, ValueError):
+        pass
+    if "en" not in prefs:
+        prefs.append("en")
+    return prefs
+
+
+def _caption_priority(path, prefs):
+    """(language rank, original-track rank). Lower wins. A downloaded name looks like
+    `...exe.en-orig.json3` or `...exe.ur-pt.json3`; the language is the segment before
+    the container extension."""
+    name = os.path.basename(path)
+    m = re.search(r"\.([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)?)\.(?:json3|vtt|srt)$", name)
+    lang = (m.group(1) if m else "").lower().replace("_", "-")
+    base = lang.split("-")[0]
+    try:
+        rank = prefs.index(base)
+    except ValueError:
+        rank = len(prefs)
+    original = 0 if "orig" in lang else 1
+    return (rank, original)
+
+
 def captions_for(video_path):
     """Timed segments from the source's downloaded captions, or [] when there are
-    none (or they are too thin to trust). json3 is preferred for word timings."""
+    none (or they are too thin to trust).
+
+    Prefer the source language (from the yt-dlp info sidecar), then English, then an
+    original track over a translation, and only then the richest track. A translation
+    with more words is not a better transcript: the judge must read what was said.
+    """
     if not video_path:
         return []
     stem = os.path.splitext(video_path)[0]
+    prefs = _preferred_languages(video_path)
     candidates = []
     for ext in ("json3", "vtt", "srt"):
         candidates += sorted(glob.glob(stem + ".*." + ext))
-    best = []
+    ranked = []
     for path in candidates:
         words = parse_subtitle(path)
         if len(words) < 20:
@@ -222,9 +262,13 @@ def captions_for(video_path):
         except Exception:
             segments = [{"start": words[0]["start"], "end": words[-1]["end"],
                          "text": " ".join(w["word"] for w in words), "words": words}]
-        if len(segments) >= 3 and len(words) > len(best):
-            best = segments
-    return best
+        if len(segments) < 3:
+            continue
+        ranked.append((_caption_priority(path, prefs), len(words), path, segments))
+    if not ranked:
+        return []
+    ranked.sort(key=lambda row: (row[0], -row[1]))
+    return ranked[0][3]
 
 
 def _ytdlp(url, dest_dir):

@@ -141,6 +141,30 @@ def test_captions_for():
               ingest.captions_for(thin) == [])
 
 
+def test_caption_language():
+    """A larger translated track must not beat the source-language track."""
+    with tempfile.TemporaryDirectory() as d:
+        video = os.path.join(d, "yt_demo_lang.mp4")
+        open(video, "wb").write(b"")
+        with open(os.path.join(d, "yt_demo_lang.en.json3"), "w", encoding="utf-8") as f:
+            json.dump(JSON3, f)
+        bigger = {"events": []}
+        for k in range(8):
+            for e in JSON3["events"]:
+                e2 = json.loads(json.dumps(e))
+                e2["tStartMs"] = e["tStartMs"] + k * 20000
+                bigger["events"].append(e2)
+        with open(os.path.join(d, "yt_demo_lang.ur-pt.json3"), "w", encoding="utf-8") as f:
+            json.dump(bigger, f)
+        segments = ingest.captions_for(video)
+        check("captions: the source language beats a larger translation",
+              segments and segments[0]["text"].startswith("Why do"), segments[0]["text"] if segments else "")
+        os.remove(os.path.join(d, "yt_demo_lang.en.json3"))
+        segments = ingest.captions_for(video)
+        check("captions: a non-English source still gets its own track",
+              segments and segments[0]["text"].startswith("Why do"), segments[0]["text"] if segments else "")
+
+
 def test_download_resilience():
     """A 429 on one caption language is common. It must not throw away a video that
     already downloaded; without --ignore-errors yt-dlp exits and the job dies."""
@@ -189,6 +213,7 @@ def main():
     test_json3()
     test_vtt()
     test_captions_for()
+    test_caption_language()
     test_download_resilience()
     test_pipeline_wiring()
     fails = [r for r in RESULTS if r[1] is False]

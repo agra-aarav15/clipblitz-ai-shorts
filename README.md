@@ -43,18 +43,97 @@ spoken unit with a measured opening and ending:
 
 ---
 
+## The room
+
+It is 2 a.m. A 34-minute interview is sitting on your drive. Somewhere in it is the
+forty seconds that will make someone stop scrolling — the line where the guest finally
+says the thing, the pause before the punchline, the look that turns a story into a
+scene. You have watched the timeline. You know it is in there. You cannot find it.
+
+ClipBlitz is the room where you find it. Not a dashboard, not a "content engine", not a
+slot machine that spits out three vertical videos whether they are good or not. A
+cutting desk. One long source on the left, a small podium of cuts on the right, and a
+number under each cut that explains itself.
+
+The light is low. The accent is one warm orange. The type is quiet until it has
+something to say. The clips play before they are explained. The app does not celebrate
+itself; it shows you the window, the transcript, the hook, the ending and the reason it
+kept it. If it cannot defend the cut, it does not ship the cut.
+
+That is the whole product.
+
+## The feel
+
+**Obsidian, paper and heat.** Near-black surfaces, bone-white text and a single ember
+orange for action. No purple gradients, no glass confetti, no eleven competing badges.
+The timeline is a working surface, not a poster. The score is a number, not a trophy.
+When a clip is verified, the interface says *verified* and stops talking.
+
+**A desk, not a feed.** The Connect screen is a short list of providers you actually
+control. The Editor is one source, one transcript, one set of windows. The Clip screen
+is the cut, the hook, the caption, the post. Everything else is one level down.
+
+**Honest by construction.** Every clip has a measured trace and, when a judge was
+available, an independent verdict. A cut with a dead payoff is not promoted because the
+number is high. Three strong clips beat three clips. One honest clip beats a padded
+podium.
+
+## The desktop app (Electron)
+
+`v5.6.0` is the first **standalone desktop** release:
+
+| OS | Download | Under the hood |
+|---|---|---|
+| Windows x64 | `ClipBlitzStudio-5.6.0-win-x64-setup.exe` | Electron + bundled Python backend |
+| macOS arm64 | `ClipBlitzStudio-5.6.0-mac-arm64.dmg` | universal layout, native arm64 backend |
+| macOS x64 | `ClipBlitzStudio-5.6.0-mac-x64.dmg` | Intel build |
+| Linux x64 | `ClipBlitzStudio-5.6.0-linux-x86_64.AppImage` | AppImage + `.deb` |
+
+One double-click. No terminal, no browser tab, no Python install, no `pip`, no
+`npm`, no WebView2 prerequisite. The app starts its own backend on a loopback port,
+waits for health, and opens a native Chromium window. The backend, ffmpeg, ffprobe,
+yt-dlp and the web studio are inside the package. Your clips, jobs, providers and
+YouTube token live in the OS user-data folder, not inside the app.
+
+Unsigned builds are honest about the operating system: Windows SmartScreen may ask
+once; macOS Gatekeeper requires *Open Anyway* until the app is signed and notarized
+with an Apple Developer ID; Linux AppImage needs `chmod +x` (the `.deb` does not).
+Code signing is a certificate problem, not a code problem, and the build is wired for
+the standard electron-builder signing variables.
+
+## Unsafe, and the temporary alternative
+
+These are not features we hide in a corner. They are lines we do not cross, because
+they break the product or the people using it.
+
+| Unsafe / unsupported | Why it is a bad trade | Temporary alternative |
+|---|---|---|
+| **Proxying consumer Gemini web chat as an API**, scraping browser cookies, or wrapping the chat UI | It is not an API. It breaks on every auth change, burns the account, violates Google's terms, and cannot be made reliable by disguising it. | Use the **official Gemini API** or **Vertex AI** on the Google Cloud project you own. A free API key is the temporary path; the same provider popup accepts it. |
+| **One shared Google OAuth refresh token** for every install | Every user would act as the same account; quotas, consent and revocation become impossible to reason about. | Each user connects their own Google account. A verified **Desktop app** OAuth client + the YouTube Data API is the supported path; use test users until verification. |
+| **Downloading or reposting content you do not own**, removing watermarks, bypassing DRM | It is a legal and platform problem, not a growth hack. | Use the rights gate, your own footage, licensed sources, or explicit permission. The clip receipt records what the app knew. |
+| **Driving a logged-in browser to evade rate limits, CAPTCHAs or bans** | It is fragile, hostile to the platform and to the person whose session is being used. | Add a provider key, use a local model, lower concurrency, or wait for the quota. The app surfaces 429s honestly instead of hiding them. |
+| **Pretending a rejected clip is verified** | It destroys the only thing the product has: trust in the score. | The app returns fewer clips, or an empty podium with the reason. Add a judge, or make a manual cut from the transcript. |
+
+If you need a stopgap while you wait for a key or verification: run the **measured**
+path, label the result unverified, and do not publish it as a verified highlight. The
+app already does that. Do not build a fake API around a consumer chat.
+
 ## What's new in v5.6.0
 
-- **The first local provider now works.** The `.env` import assumed `qwen2.5:3b`; if
-  your Ollama has `clipblitz-local:latest` instead, the imported provider 404'd. Import
-  now reads the local `/models` list once and picks an installed model.
-- **Honest measured label.** A no-key run can return its strongest measured window
-  even when the measured gate failed; it now reads **measured** next to **unverified**,
-  not **reject**. A real judge can still empty the podium; the app does not pad.
-- **Raj Shamani, real 505 s link:** no provider → 1 measured window; Groq+Gemini →
-  1 verified 71.5 s clip ("How to Stop Constant Worrying", 11 calls, 265.9 s, Groq
-  429s covered by Gemini); local Ollama timed out → 0. Details in
-  `studio/VERIFICATION-v5.6.0.md`.
+- **Electron on Windows, macOS and Linux.** The same native shell on every OS, with
+  the backend, ffmpeg, ffprobe and yt-dlp bundled per CPU. No terminal and no external
+  browser for the studio. See `studio/electron/README.md`.
+- **Per-platform packaging in GitHub Actions.** NSIS on Windows, DMG + ZIP on macOS
+  (x64 and arm64), AppImage + deb on Linux. Unsigned until certificates are supplied.
+- **Real three-video proof, not a synthetic clip.** TechWiser's *The AI Bubble Has
+  Burst!!!* (13:39) → 1 verified 69 s cut (score 76); F1's *Why NO F1 Driver Can Drive
+  Like Max Verstappen* (9:20) → 3 verified cuts (43.8 s / 60.8 s / 36.1 s, scores
+  86/85/83); MrBeast's *$250,000 Hunger Games In Real Life* (33:57) is the long-video
+  run. Results and timings live in `studio/VERIFICATION-v5.6.0.md`.
+- **Settings survive on read-only app bundles.** Provider/YouTube keys write to the
+  user-data folder; the macOS `.app` never needs to be writable.
+- **OAuth redirect follows the real port.** If 4300 is busy, the app uses the next
+  port and the Google redirect tells the truth instead of pointing at a dead URL.
 
 ## What's new in v5.5.1
 

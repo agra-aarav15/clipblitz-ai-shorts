@@ -112,3 +112,24 @@ Tests: `python scripts/test_titles.py` → 5 passed; full studio suite → **824
   warn until a code-signing certificate is supplied; the builds are wired for it.
 - It does not prove the same wall time on a slower laptop. The measurement layers scale
   with cores; the free-tier 429s are external.
+
+## Desktop shell (v5.6.3)
+
+The engine report above is 5.6.1. The shell was verified separately after the caption
+and title fixes, on the exact zip attached to the v5.6.3 release:
+
+- **CI, four OS jobs, packaged app:** Windows x64, Linux x64, macOS x64 and macOS arm64
+  each ran the real bundled backend and printed
+  `electron self-test: health ok, page ok, port …` in run `43722389967`.
+- **Windows portable, run here:** `ClipBlitzStudio.exe` from
+  `ClipBlitzStudio-5.6.3-win-x64.zip` answered `/api/health` with
+  `"version": "5.6.3"` in **7.3 s** on a warm run, opened the window titled
+  **“ClipBlitz Studio — Cutting Desk”**, and stopped the backend when the app was
+  killed (health went down). The cold first run of the same engine took **59 s** on
+  this machine, which is why 5.6.3 waits four minutes instead of 60 seconds.
+- **Resources in the package:** `resources/backend/ClipBlitzStudio-server.exe`,
+  `resources/backend/bin/ffmpeg`, `ffprobe` and `yt-dlp.exe`, plus the web studio,
+  plugin and logo. No Python, Node or WebView2 is needed on the target.
+- **Not verified here:** a physical Mac or Linux machine (only the CI jobs), a signed
+  Windows/macOS installer (the builds are unsigned), and a real Google OAuth upload
+  (it needs the user's own Cloud project and verified `youtube.upload` scope).

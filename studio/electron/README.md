@@ -18,7 +18,7 @@ blocks embedded webviews for sign-in.
 
 | OS | Installer | Backend |
 |---|---|---|
-| Windows x64 | `ClipBlitzStudio-5.6.3-win-x64-setup.exe` (NSIS), `.zip` portable | `resources/backend/ClipBlitzStudio-server.exe` |
+| Windows x64 | `ClipBlitzStudio-5.7.0-win-x64-setup.exe` (NSIS), `.zip` portable | `resources/backend/ClipBlitzStudio-server.exe` |
 | macOS x64 / arm64 | `.dmg` and `.zip` | `Contents/Resources/backend/ClipBlitzStudio-server` |
 | Linux x64 | `.AppImage` and `.deb` | `resources/backend/ClipBlitzStudio-server` |
 

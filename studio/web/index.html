@@ -17,8 +17,8 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=5.6.3" />
-<link rel="stylesheet" href="/cutdesk.css?v=5.6.3" id="desk-theme" disabled />
+<link rel="stylesheet" href="/styles.css?v=5.7.0" />
+<link rel="stylesheet" href="/cutdesk.css?v=5.7.0" id="desk-theme" disabled />
 </head>
 <body>
 
@@ -70,6 +70,7 @@
     <div class="logo"><svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg><span class="wordmark">ClipBlitz Studio</span></div>
     <nav class="snav" id="snav" aria-label="Screens">
       <button class="snavbtn active" data-screen="studio" type="button"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg><span>Studio</span></button>
+      <button class="snavbtn" data-screen="live" type="button"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg><span>Live</span></button>
       <button class="snavbtn" data-screen="clips" type="button"><svg class="ic" aria-hidden="true"><use href="#i-strip"/></svg><span>Clips</span></button>
       <button class="snavbtn" data-screen="lab" type="button"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg><span>Candidates</span></button>
       <button class="snavbtn" data-screen="transcript" type="button"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg><span>Transcript</span></button>
@@ -239,6 +240,48 @@
         </div>
         <div id="recent" class="recentlist"></div>
       </div>
+    </section>
+
+    <!-- ================= LIVE CHAT RADAR ================= -->
+    <section class="screen" id="screen-live" hidden>
+      <div class="hero">
+        <div class="label-caps">Live chat radar / no provider keys required</div>
+        <h1 class="display">Watch the room.<br />The chat tells you when.</h1>
+        <p class="lede">Paste a live stream. ClipBlitz reads the chat without an API key,
+        remembers every burst, and renders the moment while the room is quiet. If the
+        app is closed, the session is on disk and resumes on the next launch.</p>
+      </div>
+
+      <div class="glass panel">
+        <div class="liveform">
+          <input type="text" id="live-url" placeholder="Paste a live URL — YouTube live or twitch.tv/channel" spellcheck="false" />
+          <button class="btn" id="live-start" type="button"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> Start watching</button>
+        </div>
+        <div class="opts liveopts">
+          <div class="field"><label for="live-before">Before spike (seconds)</label>
+            <input type="number" id="live-before" min="10" max="60" value="25" /></div>
+          <div class="field"><label for="live-after">After spike (seconds)</label>
+            <input type="number" id="live-after" min="5" max="45" value="15" /></div>
+          <div class="field"><label for="live-max">Max clips</label>
+            <select id="live-max"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>8</option></select></div>
+          <div class="field"><label for="live-privacy">YouTube privacy</label>
+            <select id="live-privacy"><option value="unlisted" selected>Unlisted (review first)</option><option value="public">Public</option><option value="private">Private</option></select></div>
+          <div class="field"><label for="live-policy">When a spike ends</label>
+            <select id="live-policy"><option value="quiet" selected>Wait for quiet chat</option><option value="instant">Post first — clip immediately</option></select></div>
+        </div>
+        <div class="liverights">
+          <label class="livecheck"><input type="checkbox" id="live-auto" checked /> Auto-post finished clips to YouTube</label>
+          <label class="livecheck"><input type="checkbox" id="live-rights" /> I own this stream, or I have permission to clip and post it</label>
+        </div>
+        <p class="note">The watcher stores chat and spike windows in <b>data/live/&lt;video-id&gt;/</b>.
+        Closing the app stops it; the next launch resumes. YouTube has a live-chat replay when it
+        still exposes one; Twitch captures chat live only, and clips from the Twitch DVR window.
+        <b>Post first</b> renders the moment immediately (best for launch streams); <b>wait for
+        quiet chat</b> keeps the CPU calm. Auto-post stays off until the rights box is ticked.</p>
+      </div>
+
+      <div id="live-error"></div>
+      <div id="live-list" class="livelist"></div>
     </section>
 
     <!-- ================= CLIPS ================= -->
@@ -635,6 +678,6 @@
     </div>
   </form>
 </dialog>
-<script src="/app.js?v=5.6.3"></script>
+<script src="/app.js?v=5.7.0"></script>
 </body>
 </html>

@@ -37,8 +37,8 @@ if (THEME_BTN) THEME_BTN.addEventListener('click', () => {
   toast(THEME === 'light' ? 'Cutting Desk theme' : 'Obsidian theme');
 });
 
-const SCREENS = ['studio', 'clips', 'lab', 'transcript', 'scout', 'connect'];
-const TITLES = { studio: 'Studio', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', scout: 'Scout', connect: 'Connect' };
+const SCREENS = ['studio', 'live', 'clips', 'lab', 'transcript', 'scout', 'connect'];
+const TITLES = { studio: 'Studio', live: 'Live radar', clips: 'Clips', lab: 'Candidates', transcript: 'Transcript', scout: 'Scout', connect: 'Connect' };
 const FACTOR_LABEL = { hook: 'Hook', story: 'Story', payoff: 'Payoff', energy: 'Energy', pacing: 'Pacing', event: 'Event' };
 const PLATFORM_LABEL = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', x: 'X Post' };
 const PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook', 'x'];
@@ -80,6 +80,7 @@ function showScreen(name, fromClick) {
   revealCards(name);
   if (name === 'connect') { loadProviders(); loadYouTubeKeys(); refreshSocial(); renderQueue(); loadLearning(); }
   if (name === 'studio') loadRecent();
+  if (name === 'live') { loadLive(); startLivePoll(); } else { stopLivePoll(); }
   if (name === 'scout') loadScout();
 }
 
@@ -2401,3 +2402,208 @@ const hashScreen = (location.hash || '').replace('#', '');
 if (SCREENS.includes(hashScreen)) showScreen(hashScreen, true);
 loadLan();
 loadLearning();
+
+/* ============================ LIVE CHAT RADAR ============================
+   The backend watches the chat and persists spikes. This screen is intentionally
+   read-mostly: start a session, watch messages/spikes grow, and play the clips that
+   the engine saves while the room is quiet. Polling stops when you leave the screen;
+   the watcher itself keeps running in the server. */
+let liveTimer = null;
+let liveSig = '';
+
+function hms(t) {
+  t = Math.max(0, Math.round(Number(t) || 0));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function liveStatus(s) {
+  const map = {
+    watching: ['watching', 'ok'], waiting: ['waiting for live', 'wait'],
+    finalizing: ['finishing', 'wait'], done: ['clips ready', 'ok'],
+    stopped: ['stopped', 'wait'], error: ['error', 'err'],
+  };
+  const [label, tone] = map[s.status] || [s.status || 'unknown', 'wait'];
+  return `<span class="chip ${tone === 'err' ? 'pstat err' : tone === 'ok' ? 'pstat ok' : ''}">${esc(label)}</span>`;
+}
+
+function liveClipCard(s, c) {
+  const post = (c.post || {}).youtube;
+  const postText = post
+    ? (post.link ? `<a class="poststate" href="${esc(post.link)}" target="_blank" rel="noopener">published ↗ ${esc(post.link)}</a>`
+      : `<div class="poststate ${post.status === 'error' ? 'err' : 'wait'}">${esc(post.status || 'not posted')}${post.note ? ' · ' + esc(post.note) : ''}</div>`)
+    : '';
+  return `<div class="liveclip">
+    ${c.file ? `<video controls preload="metadata" poster="${esc(c.thumb || '')}" src="${esc(c.file)}"></video>` : ''}
+    <div class="body">
+      <b>${esc(c.title || 'Live clip')}</b>
+      <div class="dim">${hms(c.start)}–${hms(c.end)} · ${c.messages || 0} chat messages · ${c.duration || 0}s</div>
+      ${postText}
+      ${!post || !post.link ? `<button class="btn ghost small" data-live-post="${esc(s.id)}:${esc(c.file || '')}" type="button">Post now</button>` : ''}
+      <button class="btn ghost small" data-live-copy="${esc(s.id)}:${esc(c.file || '')}" type="button">Copy caption</button>
+    </div>
+  </div>`;
+}
+
+function liveCard(s) {
+  const clips = s.clips || [];
+  const spikes = (s.spikes || []).slice(0, 5);
+  const maxMsg = Math.max(1, ...spikes.map(x => Number(x.messages) || 0));
+  const pct = Math.max(0, Math.min(100, Number(s.progress) || 0));
+  const spikeHtml = spikes.length ? `<div class="live-spikes">${spikes.map(x => `
+    <div class="live-spike">
+      <span class="peak">${esc(hms(x.peak))}</span>
+      <span>${Number(x.messages) || 0} msgs · ${Number(x.authors) || 0} people · ${esc(x.top && x.top[0] ? x.top[0].text : '')}</span>
+      <i class="bar-mini" style="width:${Math.max(8, 100 * (Number(x.messages) || 0) / maxMsg)}%"></i>
+    </div>`).join('')}</div>` : '';
+  return `<div class="glass panel livecard" data-session="${esc(s.id)}">
+    <div class="livehead">
+      <div><div class="label-caps">${esc((s.platform === 'twitch' ? 'Twitch' : 'YouTube') + ' · ' + (s.channel || 'live'))}</div>
+        <h3>${esc(s.title || s.id)}</h3></div>
+      ${liveStatus(s)}
+    </div>
+    <div class="livemeta">
+      <span><b>${Number(s.message_count) || 0}</b> chat messages</span>
+      <span><b>${Number(s.spike_count) || 0}</b> spikes remembered</span>
+      <span><b>${clips.length}</b> clips</span>
+      <span>${esc(s.stage || '')}</span>
+    </div>
+    <div class="livebar"><i style="width:${pct}%"></i></div>
+    ${spikeHtml}
+    <div class="live-actions">
+      <label class="livecheck"><input type="checkbox" data-live-auto ${s.auto_post ? 'checked' : ''}/> Auto-post</label>
+      <select data-live-privacy>
+        <option value="unlisted" ${s.privacy === 'unlisted' ? 'selected' : ''}>Unlisted</option>
+        <option value="public" ${s.privacy === 'public' ? 'selected' : ''}>Public</option>
+        <option value="private" ${s.privacy === 'private' ? 'selected' : ''}>Private</option>
+      </select>
+      <select data-live-policy>
+        <option value="instant" ${s.render_policy === 'instant' ? 'selected' : ''}>Post first</option>
+        <option value="quiet" ${s.render_policy === 'quiet' ? 'selected' : ''}>Quiet chat</option>
+      </select>
+      <label class="livecheck"><input type="checkbox" data-live-rights ${s.rights_ok ? 'checked' : ''}/> I have the rights</label>
+      <button class="btn ghost small" data-live-save="${esc(s.id)}" type="button">Save</button>
+      ${s.status === 'watching' || s.status === 'waiting' || s.status === 'finalizing'
+        ? `<button class="btn ghost small" data-live-render="${esc(s.id)}" type="button">Render now</button>
+           <button class="btn ghost small" data-live-stop="${esc(s.id)}" type="button">Stop</button>` : ''}
+      <a class="btn ghost small" href="${esc(s.url || '#')}" target="_blank" rel="noopener">Open stream ↗</a>
+    </div>
+    ${s.error ? `<div class="joberror">${esc(s.error)}</div>` : ''}
+    ${s.empty_reason ? `<div class="dim" style="margin-top:10px">${esc(s.empty_reason)}</div>` : ''}
+    ${clips.length ? `<div class="liveclips">${clips.map(c => liveClipCard(s, c)).join('')}</div>` : ''}
+  </div>`;
+}
+
+async function loadLive(force) {
+  const box = $('live-list');
+  if (!box) return;
+  if (!force && [...document.querySelectorAll('#live-list video')].some(v => !v.paused)) return;
+  try {
+    const data = await (await fetch('/api/live')).json();
+    const sig = JSON.stringify(data);
+    if (!force && sig === liveSig) return;
+    liveSig = sig;
+    box.innerHTML = data.length ? data.map(liveCard).join('')
+      : `<div class="glass panel liveempty">No live sessions yet. Paste a URL above — the watcher runs on this machine, with no API key.</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="glass panel liveempty">Live radar is not reachable: ${esc(e.message)}</div>`;
+  }
+}
+
+function startLivePoll() {
+  stopLivePoll();
+  liveTimer = setInterval(() => loadLive(false), 5000);
+}
+
+function stopLivePoll() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+}
+
+async function startLiveWatch() {
+  const url = ($('live-url')?.value || '').trim();
+  const err = $('live-error');
+  if (err) err.innerHTML = '';
+  if (!url) { toast('Paste a live URL first', true); return; }
+  const btn = $('live-start');
+  if (btn) { btn.disabled = true; btn.textContent = 'Finding the stream…'; }
+  try {
+    const r = await fetch('/api/live/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        before: Number($('live-before')?.value || 25),
+        after: Number($('live-after')?.value || 15),
+        max_clips: Number($('live-max')?.value || 6),
+        auto_post: !!$('live-auto')?.checked,
+        privacy: $('live-privacy')?.value || 'unlisted',
+        rights_ok: !!$('live-rights')?.checked,
+        render_policy: $('live-policy')?.value || 'instant',
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'could not start');
+    toast('Live radar: ' + (data.session?.title || 'session started'));
+    if ($('live-url')) $('live-url').value = '';
+    await loadLive(true);
+    startLivePoll();
+  } catch (e) {
+    if (err) err.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    toast(e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = IC('signal') + ' Start watching'; }
+  }
+}
+
+async function liveAction(id, action, body) {
+  const r = await fetch(`/api/live/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ id }, body || {})),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'live action failed');
+  await loadLive(true);
+  return data;
+}
+
+$('live-start')?.addEventListener('click', startLiveWatch);
+$('live-url')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') startLiveWatch(); });
+$('live-url')?.addEventListener('input', (e) => {
+  // Twitch has no useful post-stream chat replay; the launch-stream default is to
+  // clip and post first. YouTube defaults to the calmer render policy.
+  const policy = $('live-policy');
+  if (policy && /twitch\.tv\//i.test(e.target.value || '')) policy.value = 'instant';
+});
+
+$('live-list')?.addEventListener('click', async (e) => {
+  const stop = e.target.closest('[data-live-stop]');
+  const render = e.target.closest('[data-live-render]');
+  const save = e.target.closest('[data-live-save]');
+  const copy = e.target.closest('[data-live-copy]');
+  const postNow = e.target.closest('[data-live-post]');
+  try {
+    if (stop) { await liveAction(stop.dataset.liveStop, 'stop'); toast('Live watcher stopped'); }
+    if (render) { await liveAction(render.dataset.liveRender, 'render'); toast('Finishing the recording…'); }
+    if (save) {
+      const card = save.closest('[data-session]');
+      await liveAction(save.dataset.liveSave, 'settings', {
+        auto_post: !!card.querySelector('[data-live-auto]')?.checked,
+        privacy: card.querySelector('[data-live-privacy]')?.value || 'unlisted',
+        rights_ok: !!card.querySelector('[data-live-rights]')?.checked,
+        render_policy: card.querySelector('[data-live-policy]')?.value || 'quiet',
+      });
+      toast('Live settings saved');
+    }
+    if (postNow) {
+      const [sid, file] = postNow.dataset.livePost.split(':');
+      await liveAction(sid, 'post', { file });
+      toast('Live clip posted to YouTube');
+    }
+    if (copy) {
+      const [sid, file] = copy.dataset.liveCopy.split(':');
+      const data = await (await fetch('/api/live/' + encodeURIComponent(sid))).json();
+      const clip = (data.clips || []).find(c => c.file === file);
+      const text = clip ? `${clip.title}\n\n${clip.description || ''}\n\n${(clip.hashtags || []).join(' ')}` : '';
+      if (text) { await navigator.clipboard.writeText(text); toast('Caption copied'); }
+    }
+  } catch (e) { toast(e.message, true); }
+});

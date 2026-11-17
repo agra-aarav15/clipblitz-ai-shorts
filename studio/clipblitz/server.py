@@ -40,7 +40,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (argon, captions, clipbench, daily, ffmpeg_tools, hardware, learning,
-               pipeline, rights, scout, social, virality)
+               live, pipeline, rights, scout, social, virality)
 from .config import (APP_VERSION, CONFIG, ffmpeg_available, stt_mode,
                      ytdlp_available)
 
@@ -144,6 +144,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ytdlp": ytdlp_available(), "youtube_ready": yt_ok,
                 "brains": [b["name"] for b in brains()],
                 "providers": brains_status(),
+                "live": {"enabled": True},
                 # the rights gate's options come from the server so the UI copy can
                 # never drift from what the backend actually stores
                 "rights": pipeline.RIGHTS, "rights_note": pipeline.RIGHTS_NOTE,
@@ -165,6 +166,12 @@ class Handler(BaseHTTPRequestHandler):
             })
         if path == "/api/styles":
             return self._json(200, captions.styles_for_api())
+        if path == "/api/live":
+            return self._json(200, live.list_sessions())
+        live_m = re.fullmatch(r"/api/live/([A-Za-z0-9_-]{6,60})", path)
+        if live_m:
+            one = live.get_session(live_m.group(1))
+            return self._json(200, one) if one else self._json(404, {"error": "unknown live session"})
         if path == "/api/jobs":
             jobs = sorted(pipeline.JOBS.values(), key=lambda j: -j.get("created", 0))
             return self._json(200, [{
@@ -356,6 +363,60 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/demo":
             return self._demo(qs)
+        if path == "/api/live/start":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                session = live.start(body.get("url") or "",
+                                     before=body.get("before") or 25,
+                                     after=body.get("after") or 15,
+                                     max_clips=body.get("max_clips") or 6,
+                                     auto_post=body.get("auto_post") or False,
+                                     privacy=body.get("privacy") or "unlisted",
+                                     rights_ok=body.get("rights_ok") or False,
+                                     render_policy=body.get("render_policy"))
+            except Exception as e:
+                return self._json(400, {"error": str(e)[:500]})
+            return self._json(200, {"session": session})
+        if path == "/api/live/settings":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                one = live.set_settings(str(body.get("id") or ""),
+                                        auto_post=body.get("auto_post"),
+                                        privacy=body.get("privacy"),
+                                        rights_ok=body.get("rights_ok"),
+                                        render_policy=body.get("render_policy"))
+            except Exception as e:
+                return self._json(400, {"error": str(e)[:500]})
+            return self._json(200, {"session": one})
+        if path == "/api/live/post":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                clip = live.post_clip(str(body.get("id") or ""), str(body.get("file") or ""),
+                                      privacy=body.get("privacy"))
+            except Exception as e:
+                return self._json(400, {"error": str(e)[:500]})
+            return self._json(200, {"clip": clip})
+        if path == "/api/live/stop":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            one = live.stop(str(body.get("id") or ""))
+            return self._json(200, {"session": one}) if one else self._json(404, {"error": "unknown live session"})
+        if path == "/api/live/render":
+            body = json_body()
+            if body is None:
+                return self._json(400, {"error": "bad json"})
+            try:
+                one = live.render_now(str(body.get("id") or ""))
+            except Exception as e:
+                return self._json(400, {"error": str(e)[:500]})
+            return self._json(200, {"session": one})
         if path.startswith("/api/from_url"):
             body = json_body()
             if body is None:
@@ -933,5 +994,13 @@ def serve(port=None):
         print(f"  daily cycle on: every day from {int(CONFIG.get('daily_hour') or 0):02d}:00 "
               f"local, up to {int(CONFIG.get('daily_cuts') or 0)} cut(s), now: {why}",
               flush=True)
+    # Pick up a live chat watcher that was running when the app/server last closed.
+    # The state on disk is the source of truth; resume() never blocks the listener.
+    try:
+        active = live.resume()
+        if active:
+            print(f"  live radar resumed {active} session(s)", flush=True)
+    except Exception as e:
+        print(f"  live radar resume failed: {e}", flush=True)
     _daily_heartbeat()
     srv.serve_forever()

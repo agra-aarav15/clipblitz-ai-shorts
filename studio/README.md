@@ -32,7 +32,7 @@ Windows: double-click **`START.bat`** (installs Python silently if the machine h
 macOS / Linux / Termux: `bash start.sh`. Full guide: **[SETUP.md](SETUP.md)**.
 
 ```
-ClipBlitz Studio v5.6.3 (engine: ARGON) → http://localhost:4300
+ClipBlitz Studio v5.7.0 (engine: ARGON) → http://localhost:4300
   your phone (same Wi-Fi)  http://192.168.31.103:4300
 ```
 
@@ -44,13 +44,13 @@ fonts are served locally, and your API keys live only in this machine's `.env`.
 The current release also ships a **single-window desktop app** for Windows, macOS and
 Linux. It contains the engine, ffmpeg, ffprobe, yt-dlp and the studio; it opens its own
 window, not a terminal and not a browser tab. Download from
-[Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.3):
+[Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.7.0):
 
 | OS | File |
 |---|---|
-| Windows x64 | `ClipBlitzStudio-5.6.3-win-x64-setup.exe` (or the portable `-win-x64.zip`) |
-| macOS arm64 / x64 | `ClipBlitzStudio-5.6.3-mac-arm64.dmg`, `ClipBlitzStudio-5.6.3-mac-x64.dmg` |
-| Linux x64 | `ClipBlitzStudio-5.6.3-linux-x86_64.AppImage`, `ClipBlitzStudio-5.6.3-linux-amd64.deb` |
+| Windows x64 | `ClipBlitzStudio-5.7.0-win-x64-setup.exe` (or the portable `-win-x64.zip`) |
+| macOS arm64 / x64 | `ClipBlitzStudio-5.7.0-mac-arm64.dmg`, `ClipBlitzStudio-5.7.0-mac-x64.dmg` |
+| Linux x64 | `ClipBlitzStudio-5.7.0-linux-x86_64.AppImage`, `ClipBlitzStudio-5.7.0-linux-amd64.deb` |
 
 Data lives in the OS app-data folder (`%APPDATA%\ClipBlitz Studio`,
 `~/Library/Application Support/ClipBlitz Studio`, `~/.config/ClipBlitz Studio`). The
@@ -59,6 +59,26 @@ and Linux AppImages need `chmod +x`. See **`electron/README.md`** for the build,
 signing variables, and the self-test. The three-video evidence is in
 **`VERIFICATION-v5.6.1.md`**.
 
+
+## Live Chat Radar
+
+The **Live** tab watches a YouTube or Twitch live stream's chat without an API key.
+YouTube uses its public web continuation; Twitch uses anonymous IRC. It scores
+5-second buckets against the stream's own median, remembers each burst as a window
+that starts **25 s before** and ends **15 s after** the burst, and stores everything in
+`data/live/<video-id>/` so a closed app resumes on the next launch. **Post first** cuts
+from the live DVR immediately; **quiet chat** renders at most one saved spike per 45 s
+and only while the last 20 s of chat is quiet relative to that spike. **Render now** is
+the explicit override. Twitch has no useful chat replay and its DVR ends with the
+broadcast, so Post first is its default; YouTube replay is used when available.
+
+Rendered clips use the same 1080×1920 path as Studio, with captions when the source
+has them. Auto-post is available through the official YouTube Data API after the
+**Connect** screen completes OAuth; it stays disabled until you tick the rights box.
+TikTok, Instagram, Facebook and X remain assisted one-click packages. See the root
+[README](../README.md#whats-new-in-v570--the-live-chat-radar) for the real 4,497-message
+proof and the honest limits (public chat endpoint, DVR retention, replay availability,
+no channel creation).
 
 ## Providers
 

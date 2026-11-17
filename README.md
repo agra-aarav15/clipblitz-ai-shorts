@@ -14,10 +14,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.3"><b>Download v5.6.3 Release</b></a> ·
+  <a href="https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.7.0"><b>Download v5.7.0 Release</b></a> ·
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
-  <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a>
+  <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a> ·
+  <a href="CHANNEL-SETUP.md"><b>Channel Setup Kit</b></a>
 </p>
 
 ---
@@ -80,15 +81,15 @@ podium.
 
 ## The desktop app (Electron)
 
-`v5.6.3` is the current **standalone desktop** release:
+`v5.7.0` is the current **standalone desktop** release:
 
 | OS | Download | Under the hood |
 |---|---|---|
-| Windows x64 | `ClipBlitzStudio-5.6.3-win-x64-setup.exe` | Electron + bundled Python backend |
-| macOS arm64 | `ClipBlitzStudio-5.6.3-mac-arm64.dmg` | universal layout, native arm64 backend |
-| macOS x64 | `ClipBlitzStudio-5.6.3-mac-x64.dmg` | Intel build |
-| Linux x64 | `ClipBlitzStudio-5.6.3-linux-x86_64.AppImage` | AppImage + `.deb` |
-| Windows portable | `ClipBlitzStudio-5.6.3-win-x64.zip` | unzip and run `ClipBlitzStudio.exe` |
+| Windows x64 | `ClipBlitzStudio-5.7.0-win-x64-setup.exe` | Electron + bundled Python backend |
+| macOS arm64 | `ClipBlitzStudio-5.7.0-mac-arm64.dmg` | universal layout, native arm64 backend |
+| macOS x64 | `ClipBlitzStudio-5.7.0-mac-x64.dmg` | Intel build |
+| Linux x64 | `ClipBlitzStudio-5.7.0-linux-x86_64.AppImage` | AppImage + `.deb` |
+| Windows portable | `ClipBlitzStudio-5.7.0-win-x64.zip` | unzip and run `ClipBlitzStudio.exe` |
 
 One double-click. No terminal, no browser tab, no Python install, no `pip`, no
 `npm`, no WebView2 prerequisite. The app starts its own backend on a loopback port,
@@ -119,31 +120,88 @@ If you need a stopgap while you wait for a key or verification: run the **measur
 path, label the result unverified, and do not publish it as a verified highlight. The
 app already does that. Do not build a fake API around a consumer chat.
 
-## What's new in v5.6.3
+## What's new in v5.7.0 — the Live Chat Radar
+
+A live stream is a different editing problem: the moment is happening now, and the
+audience tells you where it is. **Live** watches a YouTube or Twitch live chat without
+an API key, remembers every burst, and cuts the reaction window — immediately for a
+launch stream, or while the chat is quiet when CPU matters.
+
+- **Paste a live URL, walk away.** YouTube is read through the public web
+  continuation; Twitch is read through the anonymous IRC chat. The watcher keeps a
+  rolling chat log on disk and scores 5-second message buckets against the stream's
+  **own median**. A quiet chat and a screaming chat are both judged against themselves,
+  so the radar does not need a global "messages per second" number.
+- **It remembers the window, not just the timestamp.** Each spike becomes
+  `burst_start - 25 s` → `burst_end + 15 s` (configurable), so the clip includes the
+  thing people reacted to before they started typing. Windows are de-duplicated and
+  capped (default 6).
+- **Shutdown-safe.** State lives in `data/live/<video-id>/`: `session.json`, the chat
+  log, downloaded sections and captions. A closed app does not lose the session; the
+  next launch resumes it. A stream that ended while the app was off is read from the
+  live-chat replay when YouTube still exposes it.
+- **Post first, or wait for quiet chat.** Choose **Post first** for a launch stream:
+  the spike window is cut from the live DVR as soon as it ends. Choose **quiet chat**
+  to render at most one saved spike per 45 s, and only when the last 20 s of chat is
+  below 35% of that spike's own rate. **Render now** is the explicit override.
+- **Clips are the same 1080×1920 output as Studio**, with source captions when
+  available, focus framing, grade, vignette and a thumbnail. Only the spike section is
+  downloaded (`yt-dlp --download-sections`); the whole VOD is never pulled. Twitch is
+  read from its live DVR window, so no multi-gigabyte recording is left on disk.
+- **Auto-post is real, and gated.** Tick *I own this stream, or I have permission* and
+  connect YouTube with the app's own OAuth client; finished clips upload through the
+  official YouTube Data API with a title, description and hashtags generated from the
+  stream title and the chat reaction. Until rights are cleared, the clip says
+  `waiting_for_rights` and nothing leaves the machine. If OAuth is missing it says
+  `not_connected`; there is no shared token in the binary.
+- **No AI provider is required for the radar.** Spike detection is arithmetic. Titles
+  are a cleaned reaction plus a short stream-title prefix, not a claim that a language
+  model understood the scene. Provider keys only affect the rest of Studio.
+
+**Real proof on a finished broadcast.** The 60-minute *United Airlines Widespread
+System Outage* YouTube live stream (`ArAxjdWSvk8`) produced **4,497 persisted chat
+messages**, **2 remembered spikes**, and a **45.0 s clip at 1080×1920 with audio** from
+the `70.0–115.0 s` window (26 messages from 26 people). On Twitch, an anonymous
+connection persisted **377 messages** from a busy channel and a **36.6 s DVR section**
+was downloaded while the stream was live. The YouTube clip and caption survive a
+server restart. No upload was made.
+
+**What is honest about the live path.** YouTube's live-chat continuation is a public
+web endpoint, not a documented API, and Twitch IRC is an unofficial read path: either
+can change without notice, and a stream owner can disable chat. DVR length is
+controlled by the platform, so a very old spike may no longer be downloadable — the
+session records that error instead of pretending. Twitch has **no chat replay** for a
+stream the app missed and its live DVR disappears when the broadcast ends; that is why
+**Post first** is the Twitch default, and why an app that is off for the whole Twitch
+stream has nothing to score. YouTube's replay is used when YouTube still exposes it.
+Auto-post only covers **YouTube**; TikTok, Instagram, Facebook and X remain assisted
+one-click packages. The assistant cannot create a YouTube channel or complete Google
+consent for you.
+
+### Also in this release
 
 - **Electron on Windows, macOS and Linux.** The same native shell on every OS, with
   the backend, ffmpeg, ffprobe and yt-dlp bundled per CPU. No terminal and no external
   browser for the studio. See `studio/electron/README.md`.
 - **Per-platform packaging in GitHub Actions.** NSIS on Windows, DMG + ZIP on macOS
   (x64 and arm64), AppImage + deb on Linux. Unsigned until certificates are supplied.
+- **Cold first launch is not a crash (5.6.3).** The bundled engine is a PyInstaller
+  binary; antivirus and self-extraction can take about a minute on the first run. The
+  shell waits up to four minutes on the splash instead of declaring failure at 60 s.
 - **Real three-video proof, not a synthetic clip.** TechWiser's *The AI Bubble Has
   Burst!!!* (13:39) → **1 verified 19.98 s cut** (score 74); F1's *Why NO F1 Driver Can
   Drive Like Max Verstappen* (9:20) → **1 verified 43.87 s cut** (score 87); MrBeast's
   *$250,000 Hunger Games In Real Life* (33:57) → **1 verified 56.67 s cut** (score 76).
-  Every file is 1080×1920 with audio. Three videos, three honest clips — no padded
-  podium. Results, timings and the 429 trail live in `studio/VERIFICATION-v5.6.1.md`.
+  Every file is 1080×1920 with audio. Results, timings and the 429 trail live in
+  `studio/VERIFICATION-v5.6.1.md`.
 - **Caption language had a real bug; 5.6.1 fixes it.** YouTube serves translated tracks,
   and the old picker chose the one with the most words. MrBeast's English video was read
   through an Urdu translation and the judge returned an empty podium. The picker now
   reads the source language from the download sidecar, prefers the original English
   track, and only then the richest track.
-- **Cold first launch is not a crash (5.6.3).** The bundled engine is a PyInstaller
-  binary; antivirus and self-extraction can take about a minute on the first run. The
-  shell now waits up to four minutes on the splash instead of declaring failure at 60 s.
 - **Fallback titles are cleaned (5.6.2).** When every provider is rate-limited, the
   transcript line used as a title loses `>>`, `[music]`, repeated words and dangling
-  half-sentences instead of being published raw. The pixels are untouched; only the
-  metadata fallback improves.
+  half-sentences instead of being published raw.
 - **Settings survive on read-only app bundles.** Provider/YouTube keys write to the
   user-data folder; the macOS `.app` never needs to be writable.
 - **OAuth redirect follows the real port.** If 4300 is busy, the app uses the next
@@ -272,7 +330,7 @@ Correctness and speed, not features. Full evidence: `studio/VERIFICATION-v5.4.4.
 
 ---
 
-## ARGON, the unified engine (ClipBlitz Studio v5.6.3)
+## ARGON, the unified engine (ClipBlitz Studio v5.7.0)
 
 ARGON chooses the cut from spoken hooks, story arcs, self-summary lines, measured peaks and
 cinematic beats. It is the only engine exposed in the UI, health payload and agent tools.
@@ -389,7 +447,7 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 ## Quickstart
 
 ### Option A: Windows desktop app (recommended)
-1. Download **`ClipBlitzStudio-5.6.3-win-x64-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.6.3).
+1. Download **`ClipBlitzStudio-5.7.0-win-x64-setup.exe`** from [Releases](https://github.com/agra-aarav15/clipblitz-ai-shorts/releases/tag/v5.7.0).
 2. Run it. It installs for the current user, bundles the engine, ffmpeg, ffprobe,
    yt-dlp, the web studio and the agent plugin, and creates Start Menu + optional
    desktop shortcuts.
@@ -398,9 +456,9 @@ serves the identical MCP server on stdio, and `ClipBlitzStudio.exe --tools` prin
 4. Uninstall from Windows Settings → Apps at any time. Your clips and jobs stay in
    `%APPDATA%\ClipBlitz Studio`.
 
-Prefer a portable folder? Download **`ClipBlitzStudio-5.6.3-win-x64.zip`**, unzip it,
+Prefer a portable folder? Download **`ClipBlitzStudio-5.7.0-win-x64.zip`**, unzip it,
 and run `ClipBlitzStudio.exe`. The classic Python/WebView2 build is still in the same
-release as `ClipBlitzStudio-5.6.3-setup.exe` and `ClipBlitzStudio-5.6.3-windows.zip`.
+release as `ClipBlitzStudio-5.7.0-setup.exe` and `ClipBlitzStudio-5.7.0-windows.zip`.
 
 ### Option B: Clone from source
 ```bash

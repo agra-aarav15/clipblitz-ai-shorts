@@ -8,6 +8,10 @@ The Instagram reel you sent makes the strategic point better than a feature list
 live moment, the clipper that waits for the VOD has already lost. The channel should
 sell **the first usable clip**, not "another AI editor".
 
+The launch-week plan generated from the two reels and the actual MIT `youtube-agent-skill`
+tools is in **[CHANNEL-LAUNCH-PLAN.md](CHANNEL-LAUNCH-PLAN.md)**; the editable calendar
+is `channel-kit/calendar.csv`.
+
 Prepared assets:
 
 - `docs/channel/avatar-1080.png` — square avatar (YouTube crops it to a circle)

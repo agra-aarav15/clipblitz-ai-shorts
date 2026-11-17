@@ -18,7 +18,8 @@
   <a href="studio/SETUP.md"><b>Setup &amp; Phone Guide</b></a> ·
   <a href="BEGINNER-GUIDE.md"><b>Absolute Beginner Guide</b></a> ·
   <a href="SETUP-YOUTUBE.md"><b>YouTube Auto-Post</b></a> ·
-  <a href="CHANNEL-SETUP.md"><b>Channel Setup Kit</b></a>
+  <a href="CHANNEL-SETUP.md"><b>Channel Setup Kit</b></a> ·
+  <a href="CHANNEL-LAUNCH-PLAN.md"><b>Launch Week Plan</b></a>
 </p>
 
 ---

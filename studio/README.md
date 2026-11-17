@@ -80,6 +80,10 @@ TikTok, Instagram, Facebook and X remain assisted one-click packages. See the ro
 proof and the honest limits (public chat endpoint, DVR retention, replay availability,
 no channel creation).
 
+## Channel kit
+
+`CHANNEL-SETUP.md` has the account/OAuth steps; `CHANNEL-LAUNCH-PLAN.md` has the launch-week calendar generated from the reels and the MIT `youtube-agent-skill` tools. Prepared avatar and banner live in `docs/channel/`.
+
 ## Providers
 
 ARGON does not require a provider: the deterministic pass runs offline. When an editor or

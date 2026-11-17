@@ -103,7 +103,10 @@ class Handler(BaseHTTPRequestHandler):
                 data = f.read()
         except OSError:
             return self._json(404, {"error": "not found"})
-        self.send_response(200)
+        self._bytes(data, ctype, cache)
+
+    def _bytes(self, data, ctype, cache="no-store", code=200):
+        self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", cache)
@@ -227,16 +230,16 @@ class Handler(BaseHTTPRequestHandler):
             code = qs.get("code", [""])[0]
             state = qs.get("state", [""])[0]
             if not code:
-                return self._file(self._success_page("Google did not return a code.", False),
-                                  "text/html; charset=utf-8")
+                return self._bytes(self._success_page("Google did not return a code.", False),
+                                   "text/html; charset=utf-8")
             try:
                 social.youtube_exchange(code, state)
-                return self._file(self._success_page(
+                return self._bytes(self._success_page(
                     "YouTube connected. Close this tab and go back to ClipBlitz Studio.", True),
                     "text/html; charset=utf-8")
             except Exception as e:
-                return self._file(self._success_page(str(e), False),
-                                  "text/html; charset=utf-8")
+                return self._bytes(self._success_page(str(e), False),
+                                   "text/html; charset=utf-8")
 
         if path == "/" or path == "/index.html":
             return self._file(os.path.join(WEB, "index.html"), "text/html; charset=utf-8")

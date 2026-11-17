@@ -57,7 +57,7 @@ In **YouTube Studio → Customization → Basic info**:
   Handles can be changed, subject to availability and YouTube's change limit. Pick one
   and keep it.
 - **Disclaimer in the description** (must be visible, not hidden):
-  `Unofficial fan channel. Not affiliated with Rockstar Games, Take-Two, Sony or Microsoft.`
+  ``
 
 Do not use the GTA VI logo, the official key art, or the "VI" logo as your avatar.
 Text-only is the version that survives.
@@ -74,13 +74,6 @@ Text-only is the version that survives.
 ### Description **[YOU]**
 
 ```text
-GTA VI CLIPS INDIA
-
-Short clips from GTA VI streams: the moment, the reaction, and the context.
-Unofficial fan channel. Not affiliated with Rockstar Games, Take-Two, Sony or Microsoft.
-Clips are my own gameplay, or used with the creator's permission.
-
-Business: your-email@example.com
 ```
 
 If you do **not** have permission for a clip, do not write "used with permission" for
@@ -103,8 +96,7 @@ box. The algorithm learns from who clicks and watches. What you can actually set
 **YouTube Studio → Settings → Channel → Basic info:**
 
 - **Country of residence:** India.
-- **Keywords:** `GTA 6 clips, GTA VI, GTA 6 shorts, GTA 6 India, GTA 6 live,
-  gaming clips, Twitch clips, live stream clips, GTA VI Clip Desk`.
+- **Keywords:** .
   Keywords are a small signal; do not stuff unrelated games.
 - **Contact info:** your email.
 

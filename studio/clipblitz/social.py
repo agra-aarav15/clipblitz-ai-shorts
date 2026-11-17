@@ -200,8 +200,11 @@ def youtube_diagnose():
         steps["token_works"] = {
             "ok": channel is not None,
             "detail": f"token valid · channel: {channel}" if channel else
-            "token stored but Google rejects it (expired/revoked?)",
-            "fix": "" if channel else "Press Disconnect, then Connect YouTube again to re-consent.",
+            "token saved, but the channel name could not be read. This usually means the saved "
+            "consent was upload-only, or Google expired the token.",
+            "fix": "" if channel else (
+                "Press Disconnect, then Connect YouTube again and allow both YouTube permissions. "
+                "If it still fails, the token expired — re-consent is the fix."),
         }
         if channel:
             try:
@@ -293,7 +296,8 @@ def youtube_auth_url():
         "client_id": cid,
         "redirect_uri": youtube_redirect_uri(),
         "response_type": "code",
-        "scope": "https://www.googleapis.com/auth/youtube.upload",
+        "scope": "https://www.googleapis.com/auth/youtube.upload "
+                 "https://www.googleapis.com/auth/youtube.readonly",
         "access_type": "offline",
         "prompt": "consent",
         "state": _new_state(),

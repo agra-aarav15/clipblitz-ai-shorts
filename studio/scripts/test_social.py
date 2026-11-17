@@ -126,8 +126,9 @@ def test_consent_url_carries_the_port_and_a_state():
           qs["redirect_uri"][0] == "http://localhost:4300/oauth/youtube/callback",
           qs["redirect_uri"][0])
     check("consent: it asks for offline access", qs["access_type"][0] == "offline")
-    check("consent: the scope is upload only, nothing else",
-          qs["scope"][0] == "https://www.googleapis.com/auth/youtube.upload")
+    check("consent: it asks for upload and channel-read, nothing else",
+          qs["scope"][0] == "https://www.googleapis.com/auth/youtube.upload "
+          "https://www.googleapis.com/auth/youtube.readonly")
     check("consent: a state is sent", bool(qs.get("state", [""])[0]))
     check("consent: the state is stored for the callback to check",
           os.path.isfile(social.YT_STATE_FILE))

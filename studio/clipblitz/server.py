@@ -129,7 +129,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             yt_ok = False
             if social.youtube_connected():
-                yt_ok = social.youtube_channel() is not None  # real token check
+                # Upload readiness is the token, not channel-name read. A token granted
+                # only youtube.upload can post; channels.list would need youtube.readonly.
+                yt_ok = True
             from .brains import brains, brains_status
             from . import hardware
             return self._json(200, {

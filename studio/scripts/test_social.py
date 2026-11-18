@@ -258,6 +258,22 @@ def test_invalid_client_is_also_a_reauth():
               "CB_YT_CLIENT_ID" in str(e) or "Credentials" in str(e), str(e))
 
 
+def test_unauthorized_client_is_also_a_reauth():
+    clean_token()
+    fresh_token()
+    stub_post(lambda url, f: (_ for _ in ()).throw(
+        http_error({"error": "unauthorized_client", "error_description": "Unauthorized"})))
+    try:
+        social.youtube_access_token()
+    except RuntimeError:
+        pass
+    tok = json.load(open(social.YT_TOKEN_FILE, encoding="utf-8"))
+    check("expiry: an unauthorized refresh token asks for a fresh consent",
+          tok.get("reauth_required") is True)
+    check("expiry: the unauthorized state is not reported as connected",
+          social.youtube_connected() is False)
+
+
 def test_network_error_is_not_a_reauth():
     clean_token()
     fresh_token()
@@ -316,6 +332,7 @@ def main():
                test_expired_refresh_token_is_named,
                test_second_failure_does_not_hammer_google,
                test_invalid_client_is_also_a_reauth,
+               test_unauthorized_client_is_also_a_reauth,
                test_network_error_is_not_a_reauth,
                test_good_refresh_clears_the_warning,
                test_state_without_a_token,

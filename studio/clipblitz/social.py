@@ -388,7 +388,7 @@ def youtube_access_token():
         body = _read_err(e)
         # invalid_grant here means the refresh token itself is dead (expired while the
         # app is in Testing, or revoked) — only a new consent fixes it.
-        reauth = _reason_of(body) in ("invalid_grant", "invalid_client")
+        reauth = _reason_of(body) in ("invalid_grant", "invalid_client", "unauthorized_client")
         human = _google_error_html(body, context="refresh")
         _token_note(human, reauth)
         raise RuntimeError(human) from None

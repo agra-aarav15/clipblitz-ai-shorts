@@ -65,7 +65,7 @@ def _fmt(t):
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def chunk_words(words, max_len, max_chars=None, pause=0.6):
+def chunk_words(words, max_len, max_chars=None, pause=0.6, break_on_punct=True):
     """Group words into caption chunks: break on punctuation, word count, a line that
     has grown too wide to read, or a pause in speech.
 
@@ -89,7 +89,7 @@ def chunk_words(words, max_len, max_chars=None, pause=0.6):
             add = len(word)
         cur.append(w)
         chars += add
-        if word[-1:] in ".!?…,;:":
+        if break_on_punct and word[-1:] in ".!?…,;:":
             chunks.append(cur)
             cur, chars = [], 0
     if cur:
@@ -121,7 +121,7 @@ def _event(t0, t1, text):
     return f"Dialogue: 0,{_fmt(t0)},{_fmt(t1)},Cap,,0,0,0,,{text}"
 
 
-def _clamp_events(events, minimum=0.06):
+def _clamp_events(events, minimum=0.18):
     """One caption at a time. Whisper word timings can overlap by a few milliseconds;
     two ASS events over the same frame look like double-printed subtitles. Each event
     starts no earlier than the previous one ended, and keeps a minimum readable hold."""
@@ -145,11 +145,16 @@ def _shake_pos(i, base_y):
     return rf"{{\pos({x},{y})\blur2}}"
 
 
-def build_ass(words, window, style_id, size_scale, position, out_path, margin_v=None):
+def build_ass(words, window, style_id, size_scale, position, out_path, margin_v=None,
+              chunk=None, break_on_punct=True):
     """words: [{word,start,end}] absolute times; window: (start, end) of the clip."""
     p = dict(PRESETS.get(style_id, PRESETS[DEFAULT_STYLE]))
     if margin_v is not None:
         p["margin_v"] = int(margin_v)
+    if chunk is not None:
+        # Live speech does not have studio-clean word gaps. Three-word pops can
+        # flicker several times a second; a five-word live chunk is calmer.
+        p["chunk"] = max(2, int(chunk))
     w0, w1 = window
     inside = [w for w in words if w["end"] > w0 and w["start"] < w1]
     if not inside:  # no word timings — one steady block so captions still render
@@ -161,13 +166,14 @@ def build_ass(words, window, style_id, size_scale, position, out_path, margin_v=
 
     events = []
     if p["effect"] == "karaoke":
-        for chunk in chunk_words(rel, p["chunk"]):
+        for chunk in chunk_words(rel, p["chunk"], break_on_punct=break_on_punct):
             t0, t1 = chunk[0]["start"], chunk[-1]["end"]
             parts = "".join(rf"{{\k{max(1, int(round((w['end'] - w['start']) * 100)))}}}{w['word']} "
                             for w in chunk)
             events.append((t0, t1, "{\\k0}" + parts.rstrip()))
     else:
-        for i, chunk in enumerate(chunk_words(rel, p["chunk"])):
+        for i, chunk in enumerate(chunk_words(rel, p["chunk"],
+                                               break_on_punct=break_on_punct)):
             t0, t1 = chunk[0]["start"], chunk[-1]["end"]
             text = " ".join(w["word"] for w in chunk)
             text = text.replace("{", "").replace("}", "")

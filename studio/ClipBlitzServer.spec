@@ -10,11 +10,20 @@ import sys
 
 icon = "assets/ClipBlitzStudio.ico" if sys.platform == "win32" else None
 
+# OpenCV's Haar cascades are data files, not Python modules. Without them the
+# packaged facecam detector is installed but silently finds no faces, which is
+# exactly the "streamer is missing" bug. Ship the XML cascades with the exe.
+try:
+    from PyInstaller.utils.hooks import collect_data_files
+    cv_data = collect_data_files("cv2", includes=["data/*.xml"])
+except Exception:
+    cv_data = []
+
 a = Analysis(
     ["server_entry.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=list(cv_data),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

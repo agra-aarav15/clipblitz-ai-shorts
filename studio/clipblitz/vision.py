@@ -65,15 +65,22 @@ def _frames(src, start, end, count):
     if not src or not os.path.isfile(src):
         return []
     duration = max(0.2, float(end) - float(start))
-    rate = max(0.2, min(4.0, count / duration))
+    # Do not decode the whole 50s clause just to find a static corner cam. The
+    # first 12 seconds are enough for a webcam that is on screen for the clip;
+    # this also keeps AV1 sources inside the subprocess timeout.
+    span = min(duration, 12.0)
+    rate = max(0.5, min(4.0, count / span))
     tmp = tempfile.mkdtemp(prefix="cb_faces_")
     pattern = os.path.join(tmp, "f_%02d.jpg")
+    # 480px was too small for a corner webcam: a face that is ~120px in a 1080p
+    # source becomes ~30px here, right at the Haar detector's floor. 960px roughly
+    # doubles the face and is still only a few JPEGs per clip.
     cmd = [ffmpeg(), "-v", "error", "-nostdin", "-ss", f"{max(0.0, float(start)):.3f}",
-           "-i", src, "-t", f"{duration:.3f}",
-           "-vf", f"fps={rate:.3f},scale=480:-2", "-frames:v", str(max(1, count)),
-           "-q:v", "4", pattern]
+           "-i", src, "-t", f"{span:.3f}",
+           "-vf", f"fps={rate:.3f},scale=960:-2", "-frames:v", str(max(1, count)),
+           "-q:v", "3", pattern]
     try:
-        subprocess.run(cmd, capture_output=True, timeout=30)
+        subprocess.run(cmd, capture_output=True, timeout=90)
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         return []
@@ -114,8 +121,8 @@ def face_crop_x(src, start, end, samples=4, target_ratio=9 / 16):
                 continue
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             boxes = []
-            kw = dict(scaleFactor=1.12, minNeighbors=4,
-                      minSize=(max(14, fw // 18), max(14, fh // 18)))
+            kw = dict(scaleFactor=1.10, minNeighbors=4,
+                      minSize=(max(20, fw // 32), max(20, fh // 32)))
             if frontal is not None:
                 boxes += [tuple(int(v) for v in b) for b in frontal.detectMultiScale(gray, **kw)]
             if profile is not None:
@@ -182,7 +189,7 @@ def _face_boxes(img, frontal, profile):
     return out
 
 
-def facecam_box(src, start, end, samples=6):
+def facecam_box(src, start, end, samples=6, detail=False):
     """Locate the streamer's face and return a padded crop box for a face inset.
 
     Live gaming frames are usually 16:9 with the webcam in a corner. A 9:16
@@ -200,29 +207,45 @@ def facecam_box(src, start, end, samples=6):
     if not frames:
         return None
     found = []
+    max_areas = []
     try:
         for path, _fw, _fh in frames:
             img = cv2.imread(path)
             faces = _face_boxes(img, frontal, profile)
-            if faces:
-                faces.sort(key=lambda b: -b[4])
-                found.append(faces[0][:4])
+            max_areas.append(max([b[4] for b in faces], default=0.0))
+            if not faces:
+                continue
+            # Pick the webcam face, not the biggest face in the game. A streamer
+            # cam sits in a corner; a character's face can be larger and central.
+            # Score area but strongly favour the outer 32% of the frame.
+            def corner_score(b):
+                cx, cy = b[0] + b[2] / 2.0, b[1] + b[3] / 2.0
+                edge = max(0.0, 0.32 - min(cx, 1.0 - cx, cy, 1.0 - cy))
+                return b[4] * (1.0 + 8.0 * edge)
+            best = max(faces, key=corner_score)
+            found.append(best)
         if not found:
             return None
         # Median stabilises a one-frame false positive without lagging a cut.
         med = [sorted(b[i] for b in found)[len(found) // 2] for i in range(4)]
+        # The biggest face in a frame is the useful signal: a full-screen talking
+        # head has a large face in most samples, while a game character face is a
+        # one-frame outlier.
+        coverage = sorted(max_areas)[len(max_areas) // 2] if max_areas else 0.0
         x, y, w, h = med
         cx, cy = x + w / 2.0, y + h / 2.0
         # The webcam frame is wider and taller than the detected face. These
         # multipliers cover a typical corner cam; the card later centre-crops it.
-        cw, ch = max(0.12, w * 2.8), max(0.14, h * 2.7)
+        # A 47px face inside a 960px frame is a ~120px webcam face in the 1080p
+        # source. Pad generously to include the webcam frame; the old 2.8x box
+        # clipped the streamer's shoulders and sometimes half the face.
+        cw, ch = max(0.18, w * 3.8), max(0.22, h * 3.2)
+        cw, ch = min(cw, 0.34), min(ch, 0.46)
         x0 = max(0.0, min(1.0 - cw, cx - cw / 2.0))
         y0 = max(0.0, min(1.0 - ch, cy - ch / 2.0))
-        cw, ch = min(cw, 0.32), min(ch, 0.42)
-        x0 = max(0.0, min(1.0 - cw, cx - cw / 2.0))
-        y0 = max(0.0, min(1.0 - ch, cy - ch / 2.0))
-        return (round(x0, 4), round(y0, 4),
-                round(min(cw, 1.0 - x0), 4), round(min(ch, 1.0 - y0), 4))
+        box = (round(x0, 4), round(y0, 4),
+               round(min(cw, 1.0 - x0), 4), round(min(ch, 1.0 - y0), 4))
+        return (box, round(coverage, 4)) if detail else box
     except Exception:
         return None
     finally:

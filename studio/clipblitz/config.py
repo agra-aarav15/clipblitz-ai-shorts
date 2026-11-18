@@ -16,7 +16,7 @@ ROOT = app_root()
 # One number for the product: the health payload, the server banner, the MCP
 # serverInfo and plugin/.claude-plugin/plugin.json all read it from here, so a
 # release cannot ship half-bumped.
-APP_VERSION = "5.7.2"
+APP_VERSION = "5.7.3"
 
 
 def _load_env(path):
@@ -70,7 +70,7 @@ CONFIG = {
     "stt": os.environ.get("CB_STT", "auto"),
     # whisper-1 is OpenAI's name; Groq serves whisper-large-v3 — resolved per base below
     "stt_model": os.environ.get("CB_STT_MODEL", "whisper-1"),
-    "whisper_model": os.environ.get("CB_WHISPER_MODEL", "tiny"),
+    "whisper_model": os.environ.get("CB_WHISPER_MODEL", "base"),
     # v2: clips + social
     "top_n": int(os.environ.get("CB_TOP_N", "3")),
     # breathing room after the last word so a cut does not slam shut on the payoff.

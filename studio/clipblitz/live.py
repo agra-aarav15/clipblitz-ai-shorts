@@ -37,7 +37,7 @@ import time
 import urllib.request
 
 from . import captions, ffmpeg_tools, ingest, social, virality
-from .config import CONFIG, ffmpeg, ytdlp
+from .config import CONFIG, ffmpeg, ffprobe, ytdlp
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -115,6 +115,16 @@ def _load_sessions(force=False):
                 if isinstance(data, dict) and data.get("video_id"):
                     data.setdefault("clips", [])
                     data.setdefault("spikes", [])
+                    # Older builds appended the same spike again when its window
+                    # grew. Keep the first card, which is the one users see.
+                    seen, clean = set(), []
+                    for c in data["clips"]:
+                        key = c.get("spike_id") or c.get("spike_key") or c.get("file")
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        clean.append(c)
+                    data["clips"] = clean
                     _SESSIONS[data["video_id"]] = data
         _LOADED = True
 
@@ -216,8 +226,8 @@ def _probe(url):
     if ffdir:
         cmd += ["--ffmpeg-location", ffdir]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                              timeout=120)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=120)
     except FileNotFoundError:
         raise RuntimeError("yt-dlp is missing - the bundled copy is required.")
     except subprocess.TimeoutExpired:
@@ -263,8 +273,8 @@ def _probe_twitch(url):
     cmd = [ytdlp(), "--no-playlist", "--no-warnings", "--skip-download",
            "--print", template, "https://www.twitch.tv/" + login]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                              timeout=120)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=120)
     except FileNotFoundError:
         raise RuntimeError("yt-dlp is missing - the bundled copy is required.")
     except subprocess.TimeoutExpired:
@@ -925,6 +935,19 @@ def _words(s):
     return []
 
 
+def _section_codec(path):
+    try:
+        out = subprocess.run(
+            [ffprobe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=20,
+        ).stdout.strip().splitlines()
+        return (out[0] if out else "").strip().lower()
+    except Exception:
+        return ""
+
+
 def _download_section(s, spike):
     """Download only [start,end] from the finished recording. Returns (path, duration)."""
     vid = s["video_id"]
@@ -933,13 +956,22 @@ def _download_section(s, spike):
     start, end = float(spike["start"]), float(spike["end"])
     target = os.path.join(outdir, "%s_%06d.mp4" % (spike["id"], int(start)))
     if os.path.isfile(target) and os.path.getsize(target) > 50_000:
-        try:
-            return target, ffmpeg_tools.duration_of(target)
-        except Exception:
-            pass
+        # Old builds used --force-keyframes-at-cuts, which silently re-encoded the
+        # HLS section as mpeg2video. Never reuse that blurry cache.
+        codec = _section_codec(target)
+        if codec in ("mpeg2video", "mpeg1video", "mpeg4"):
+            try:
+                os.remove(target)
+            except OSError:
+                pass
+        else:
+            try:
+                return target, ffmpeg_tools.duration_of(target)
+            except Exception:
+                pass
     cmd = [ytdlp(), "--no-playlist", "--no-warnings", "--ignore-errors",
            "--download-sections", "*%.2f-%.2f" % (start, end),
-           "--force-keyframes-at-cuts", "--merge-output-format", "mp4"]
+           "--merge-output-format", "mp4"]
     if s.get("platform") == "twitch":
         cmd += ["-f", "best[height<=1080]/best[height<=720]/best"]
     else:
@@ -955,8 +987,8 @@ def _download_section(s, spike):
         cmd += ["--ffmpeg-location", os.path.dirname(ff) or ff]
     cmd += ["-o", target, s["url"]]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                              timeout=900)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=900)
     except subprocess.TimeoutExpired:
         raise RuntimeError("The section download timed out.")
     if not os.path.isfile(target) or os.path.getsize(target) < 50_000:
@@ -965,7 +997,7 @@ def _download_section(s, spike):
     return target, ffmpeg_tools.duration_of(target)
 
 
-def _stt_words(section, duration, video_id):
+def _stt_words(section, duration, video_id, shift=0.0):
     """Captions fallback when the stream exposes no subtitle track.
 
     Live YouTube captions are often absent, and Twitch has no replay captions at
@@ -1005,6 +1037,11 @@ def _stt_words(section, duration, video_id):
                 words.extend({"word": t, "start": t0 + i * step,
                               "end": min(t1, t0 + (i + 1) * step)}
                              for i, t in enumerate(toks))
+        if shift > 0.001:
+            # The section's audio stream can begin before its video (HLS keyframe
+            # offset). STT heard that lead; move the words onto the video clock.
+            words = [dict(w, start=w["start"] - shift, end=w["end"] - shift)
+                     for w in words]
         return [w for w in words if w["end"] > w["start"] and w["start"] < duration]
     except Exception:
         return []
@@ -1019,7 +1056,11 @@ def _render_section(s, spike, section, section_duration, words):
     meta = _meta_for(spike, s)
     stt_used = False
     if not words:
-        words = _stt_words(section, float(section_duration), s["video_id"])
+        try:
+            lead = max(0.0, float(ffmpeg_tools.av_start_offset(section)))
+        except Exception:
+            lead = 0.0
+        words = _stt_words(section, float(section_duration), s["video_id"], shift=lead)
         stt_used = bool(words)
     ass_name = None
     if words:
@@ -1030,19 +1071,31 @@ def _render_section(s, spike, section, section_duration, words):
         window = (0.0, float(section_duration)) if stt_used else (
             float(spike["start"]), float(spike["end"]))
         captions.build_ass(words, window, "wordpop", 1.0, "bottom", ass_path,
-                               margin_v=430)
+                               margin_v=300, chunk=5, break_on_punct=False)
         ass_name = base + ".ass"
     # A stream is 16:9 with the webcam in a corner. A plain 9:16 centre crop
     # deletes the face; detect that corner and render the face band on top.
     facecam = None
     try:
         from . import vision
-        facecam = vision.facecam_box(section, 0.0, float(section_duration), samples=6)
+        facecam, face_cov = vision.facecam_box(
+            section, 0.0, float(section_duration), samples=6, detail=True)
+        # A frame-filling talking head (chit-chat scene) is not a corner webcam.
+        # Treat it as no facecam so the blur layout keeps the whole frame rather
+        # than building a face card out of the same giant face. The raw face
+        # coverage separates a real corner cam (about 0.005-0.02) from a full
+        # screen face (about 0.04+), even when the padded box hits its clamp.
+        if facecam and face_cov >= 0.022 and facecam[2] >= 0.28:
+            facecam = None
     except Exception:
         facecam = None
+    # No detected face is not a reason to centre-crop the streamer away. Blur-pad
+    # keeps the whole 16:9 frame at native height, so the face (and gameplay) stays
+    # visible and sharp even when Haar misses it.
     ffmpeg_tools.cut_clip(section, 0.0, float(section_duration), out, ass_name,
-                          cwd=clips_dir, framing="focus", grade=True, ratio="9:16",
-                          vignette=True, auto_zoom=False, facecam_box=facecam)
+                          cwd=clips_dir, framing=("blur" if not facecam else "focus"),
+                          grade=True, ratio="9:16", vignette=True, auto_zoom=False,
+                          facecam_box=facecam)
     thumb = None
     try:
         thumb_path = os.path.join(clips_dir, base + ".jpg")
@@ -1412,6 +1465,14 @@ def _auto_post(s, clip):
             "note": "Connect YouTube in Connect, then this clip can be posted.",
         }
         return
+    if social.youtube_upload_limit_reached():
+        clip.setdefault("post", {})["youtube"] = {
+            "status": "platform_daily_limit",
+            "note": "YouTube's account upload limit is already used today. The clip is saved "
+                    "locally. Wait for YouTube to reset it (about midnight Pacific), or verify "
+                    "the channel at youtube.com/verify, then use Post now.",
+        }
+        return
     limit = int(os.environ.get("CB_AUTO_POST_LIMIT", "6") or 6)
     if not social.youtube_take_upload_slot(limit):
         clip.setdefault("post", {})["youtube"] = {
@@ -1481,7 +1542,12 @@ def set_settings(vid, auto_post=None, privacy=None, rights_ok=None, render_polic
 
 def _render_one(s, spike, total):
     """Download + render one spike. Safe to call repeatedly; finished spikes skip."""
-    if any(c.get("spike_key") == spike.get("key") for c in (s.get("clips") or [])):
+    # A live spike's key changes as its window grows (6238-6243 -> 6238-6248).
+    # Dedupe by the stable spike id instead, or the same moment is rendered and
+    # uploaded twice.
+    if any(c.get("spike_id") == spike.get("id") or
+           c.get("spike_key") == spike.get("key")
+           for c in (s.get("clips") or [])):
         return None
     _download_subtitles(s)
     words = _words(s)
@@ -1515,7 +1581,9 @@ def _maybe_render_live(s):
             _save(s)
     lead = 2 if policy == "instant" else 6
     pending = [sp for sp in (s.get("spikes") or [])
-               if not any(c.get("spike_key") == sp.get("key") for c in (s.get("clips") or []))
+               if not any(c.get("spike_id") == sp.get("id") or
+                          c.get("spike_key") == sp.get("key")
+                          for c in (s.get("clips") or []))
                and float(sp.get("end") or 0) + lead <= now]
     if not pending:
         return
@@ -1602,9 +1670,10 @@ def _finalize(s):
     _download_subtitles(s)
     words = _words(s)
 
-    done = {c.get("spike_key") for c in (s.get("clips") or [])}
+    done_ids = {c.get("spike_id") for c in (s.get("clips") or [])}
+    done_keys = {c.get("spike_key") for c in (s.get("clips") or [])}
     for i, spike in enumerate(spikes, 1):
-        if spike.get("key") in done:
+        if spike.get("id") in done_ids or spike.get("key") in done_keys:
             continue
         s["stage"] = "downloading clip %d/%d" % (i, len(spikes))
         s["progress"] = 30 + int(55 * (i - 1) / max(1, len(spikes)))

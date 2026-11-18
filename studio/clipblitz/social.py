@@ -25,6 +25,7 @@ SOCIAL_DIR = os.path.join(CONFIG["data_dir"], "social")
 YT_TOKEN_FILE = os.path.join(SOCIAL_DIR, "youtube.json")
 YT_STATE_FILE = os.path.join(SOCIAL_DIR, "oauth_state.json")
 YT_UPLOAD_LEDGER = os.path.join(SOCIAL_DIR, "upload_day.json")
+YT_UPLOAD_LIMIT = os.path.join(SOCIAL_DIR, "upload_limit_day.json")
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 STATE_TTL = 600  # a consent round-trip older than this is stale
 
@@ -91,9 +92,67 @@ def _read_err(e):
 
 def _reason_of(body):
     try:
-        return json.loads(body).get("error", "")
+        err = json.loads(body).get("error", "")
+        return err if isinstance(err, str) else ""
     except (ValueError, AttributeError):
         return ""
+
+
+def _reason_detail(body):
+    """The machine reason from a YouTube Data API error (nested errors[0].reason)."""
+    try:
+        data = json.loads(body)
+        err = data.get("error") or {}
+        if isinstance(err, dict):
+            errors = err.get("errors") or []
+            if errors and isinstance(errors[0], dict):
+                return str(errors[0].get("reason") or "")
+            return str(err.get("status") or "")
+    except (ValueError, AttributeError, TypeError):
+        pass
+    return ""
+
+
+def _upload_limit_write(reached):
+    try:
+        os.makedirs(SOCIAL_DIR, exist_ok=True)
+        tmp = YT_UPLOAD_LIMIT + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"day": _quota_day(), "reached": bool(reached)}, f)
+        os.replace(tmp, YT_UPLOAD_LIMIT)
+    except OSError:
+        pass
+
+
+def youtube_upload_limit_reached():
+    """True only for the current Pacific day; YouTube resets this limit itself."""
+    try:
+        data = json.load(open(YT_UPLOAD_LIMIT, encoding="utf-8"))
+        return bool(data.get("reached")) and data.get("day") == _quota_day()
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _youtube_http_error(e, stage="upload"):
+    body = _read_err(e)
+    reason = _reason_detail(body)
+    if reason == "uploadLimitExceeded":
+        _upload_limit_write(True)
+        return RuntimeError(
+            "YouTube has hit this account's daily upload limit (this is separate from the "
+            "API quota). The clip is saved locally. Wait for YouTube to reset the limit "
+            "(about midnight Pacific / tomorrow afternoon in India), or verify the channel "
+            "at youtube.com/verify, then press Post now. Do not keep retrying today.")
+    msg = ""
+    try:
+        msg = (json.loads(body).get("error") or {}).get("message") or ""
+    except (ValueError, AttributeError, TypeError):
+        msg = (body or "")[:240]
+    if e.code == 401:
+        return RuntimeError("YouTube rejected the saved token (401). Press Connect YouTube again.")
+    if e.code == 403:
+        return RuntimeError("YouTube refused the upload (403): " + (msg or "quota or permission problem"))
+    return RuntimeError("YouTube rejected the %s (%s): %s" % (stage, e.code, msg or "no details"))
 
 
 def _token_read():
@@ -471,7 +530,13 @@ def youtube_channel():
 
 
 def youtube_upload(video_path, title, description, tags, privacy):
-    """Resumable upload → returns the YouTube video URL."""
+    """Resumable upload → returns the YouTube video URL.
+
+    A 400 from YouTube is not an opaque transport failure: uploadLimitExceeded is
+    the account's own daily video limit and retrying it every render only makes
+    the UI look broken. Turn it into a sentence the owner can act on, and remember
+    it for the rest of the Pacific quota day.
+    """
     token = youtube_access_token()
     meta = {
         "snippet": {
@@ -483,23 +548,33 @@ def youtube_upload(video_path, title, description, tags, privacy):
         "status": {"privacyStatus": privacy or "public", "selfDeclaredMadeForKids": False},
     }
     size = os.path.getsize(video_path)
-    body = json.dumps(meta).encode()
+    body = json.dumps(meta, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
         data=body, method="POST",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8",
                  "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4",
                  "User-Agent": "ClipBlitz/0.1"})
-    with urllib.request.urlopen(req, timeout=120) as res:
-        upload_url = res.headers["Location"]
+    try:
+        with urllib.request.urlopen(req, timeout=120) as res:
+            upload_url = res.headers["Location"]
+    except urllib.error.HTTPError as e:
+        raise _youtube_http_error(e, "upload start") from None
+    except OSError as e:
+        raise RuntimeError("Couldn't reach YouTube to start the upload: %s" % e) from None
 
     with open(video_path, "rb") as f:
         put = urllib.request.Request(upload_url, data=f, method="PUT",
                                      headers={"Content-Type": "video/mp4",
                                               "Content-Length": str(size),
                                               "User-Agent": "ClipBlitz/0.1"})
-        with urllib.request.urlopen(put, timeout=3600) as res:
-            vid = json.loads(res.read())["id"]
+        try:
+            with urllib.request.urlopen(put, timeout=3600) as res:
+                vid = json.loads(res.read())["id"]
+        except urllib.error.HTTPError as e:
+            raise _youtube_http_error(e, "upload") from None
+        except OSError as e:
+            raise RuntimeError("YouTube upload connection failed: %s" % e) from None
     return f"https://www.youtube.com/shorts/{vid}"
 
 

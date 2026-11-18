@@ -2429,9 +2429,17 @@ function liveStatus(s) {
 
 function liveClipCard(s, c) {
   const post = (c.post || {}).youtube;
+  let postStatus = post && post.status;
+  let postNote = post && post.note;
+  // Older sessions stored the raw transport error. Keep them readable without
+  // requiring a re-render: the real reason was YouTube's account upload limit.
+  if (postNote && /HTTP Error 400/i.test(postNote)) {
+    postStatus = 'platform_daily_limit';
+    postNote = "YouTube's account upload limit is already used today. The clip is saved locally. Wait for YouTube to reset it (about midnight Pacific), or verify the channel at youtube.com/verify, then use Post now.";
+  }
   const postText = post
     ? (post.link ? `<a class="poststate" href="${esc(post.link)}" target="_blank" rel="noopener">published ↗ ${esc(post.link)}</a>`
-      : `<div class="poststate ${post.status === 'error' ? 'err' : 'wait'}">${esc(post.status || 'not posted')}${post.note ? ' · ' + esc(post.note) : ''}</div>`)
+      : `<div class="poststate ${postStatus === 'error' ? 'err' : 'wait'}">${esc(postStatus || 'not posted')}${postNote ? ' · ' + esc(postNote) : ''}</div>`)
     : '';
   return `<div class="liveclip">
     ${c.file ? `<video controls preload="metadata" poster="${esc(c.thumb || '')}" src="${esc(c.file)}"></video>` : ''}

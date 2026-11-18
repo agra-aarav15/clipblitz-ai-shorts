@@ -1,7 +1,7 @@
 {
   "name": "clipblitz-studio",
   "productName": "ClipBlitz Studio",
-  "version": "5.7.1",
+  "version": "5.7.2",
   "description": "The cutting desk for the internet's best 30 seconds. Native Electron desktop app with a bundled ClipBlitz backend.",
   "main": "main.js",
   "author": "ClipBlitz",

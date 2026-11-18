@@ -145,9 +145,11 @@ def _shake_pos(i, base_y):
     return rf"{{\pos({x},{y})\blur2}}"
 
 
-def build_ass(words, window, style_id, size_scale, position, out_path):
+def build_ass(words, window, style_id, size_scale, position, out_path, margin_v=None):
     """words: [{word,start,end}] absolute times; window: (start, end) of the clip."""
-    p = PRESETS.get(style_id, PRESETS[DEFAULT_STYLE])
+    p = dict(PRESETS.get(style_id, PRESETS[DEFAULT_STYLE]))
+    if margin_v is not None:
+        p["margin_v"] = int(margin_v)
     w0, w1 = window
     inside = [w for w in words if w["end"] > w0 and w["start"] < w1]
     if not inside:  # no word timings — one steady block so captions still render

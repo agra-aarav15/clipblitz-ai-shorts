@@ -380,12 +380,61 @@ def _filtergraph(framing, sub_name, dur=0.0, grade_film=False, grain=False, rati
     # Blurring at 1/4 size and scaling back is visually identical here and several
     # times cheaper than boxblur=20:5 on the full 1080x1920 canvas.
     bw, bh = max(2, (W // 4) // 2 * 2), max(2, (H // 4) // 2 * 2)
-    chain = (f"[{vsrc}]split=2[bg][fg];"
+    chain = (f"[{vsrc}]setpts=PTS-STARTPTS,split=2[bg][fg];"
              f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,"
              f"crop={W}:{H},scale={bw}:{bh},boxblur=6:2,scale={W}:{H}[bgb];"
              "[fg]scale=%d:-2[fgs];" % W +
              f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p,fps=30{zoom},{fv_in},{fv_out}{grade}{sub}[v]")
     return chain, None
+
+
+def _facecam_graph(sub_name, dur, face_box, W, H, grade_film=False,
+                   grain=False, vignette=True):
+    """Top webcam inset + full-width gameplay + captions at the bottom.
+
+    A 9:16 centre crop of a 16:9 stream throws away the corner webcam, which is
+    the face the audience came for (and the face that makes a reaction clip
+    transformative). This layout keeps the source width: a 1080x480 face band,
+    a 1080x1440 gameplay crop below it, and the ASS captions over the bottom of
+    the gameplay. It also loses less resolution than cropping a 16:9 frame to
+    9:16 and upscaling it.
+    """
+    W, H = int(W), int(H)
+    top_h = max(280, min(560, int(H * 0.25)))       # 480 at 1080x1920
+    game_h = H - top_h
+    x, y, fw, fh = [float(v) for v in face_box]
+    x = max(0.0, min(1.0, x)); y = max(0.0, min(1.0, y))
+    fw = max(0.05, min(1.0 - x, fw)); fh = max(0.05, min(1.0 - y, fh))
+    card_w = min(520, int(W * 0.48))
+    card_h = min(320, top_h - 80)
+    card_x = (W - card_w) // 2
+    card_y = max(24, (top_h - card_h) // 2)
+    fv_in = "fade=t=in:st=0:d=0.18"
+    fv_out = f"fade=t=out:st={max(0.0, dur - 0.12):.2f}:d=0.12"
+    sub = f",subtitles={sub_name}" if sub_name else ""
+    grade = (f",{cinema.cinematic_filters(grain=grain, vignette=vignette)}"
+             if grade_film else "")
+    # The face crop is the detected webcam region, not the whole source. The
+    # blurred top band is the same source frame; it makes the inset feel designed
+    # rather than pasted on a black bar.
+    chain = (
+        f"[0:v]setpts=PTS-STARTPTS,split=3[fc_bg][fc_cam][fc_game];"
+        f"[fc_bg]scale={W}:{top_h}:force_original_aspect_ratio=increase,"
+        f"crop={W}:{top_h},boxblur=18:2,eq=brightness=-0.12[fc_bg2];"
+        f"[fc_cam]crop=w=iw*{fw:.4f}:h=ih*{fh:.4f}:x=iw*{x:.4f}:y=ih*{y:.4f},"
+        f"scale={card_w}:{card_h}:force_original_aspect_ratio=increase,"
+        f"crop={card_w}:{card_h},setsar=1[fc_face];"
+        f"[fc_bg2]drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:"
+        f"color=black@0.55:t=fill,"
+        f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:"
+        f"color=white@0.28:t=4[fc_topbg];"
+        f"[fc_topbg][fc_face]overlay={card_x}:{card_y + 4}[fc_top];"
+        f"[fc_game]scale={W}:{game_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={W}:{game_h},setsar=1[fc_game2];"
+        f"[fc_top][fc_game2]vstack=inputs=2[fc_stack];"
+        f"[fc_stack]format=yuv420p,fps=30,{fv_in},{fv_out}{grade}{sub}[v]"
+    )
+    return chain
 
 
 def _audio_fade(dur, lead=0.0):
@@ -409,53 +458,72 @@ def thumbnail(src, at, out, width=540):
 
 def cut_clip(src, start, end, out, sub_name=None, cwd=None, framing="focus",
              grade=True, grain=False, ratio="9:16", audio_lead=0.0, crop_x=None,
-             vignette=True, auto_zoom=False, focus_path=None, active=None):
+             vignette=True, auto_zoom=False, focus_path=None, active=None,
+             facecam_box=None):
     """Cut [start,end], reframe vertical (default: focus crop that follows the
     subject), burn subtitles (.ass) if given, polish edges with audio+video fades.
     sub_name is relative to cwd (pass the clips dir)."""
     duration = round(end - start, 2)
     vsrc = f"0:{_video_stream_index(src)}"
-    complex_fg, simple_vf = _filtergraph(framing, sub_name, duration,
-                                         grade_film=grade, grain=grain, ratio=ratio,
-                                         crop_x=crop_x, vignette=vignette,
-                                         auto_zoom=auto_zoom, focus_path=focus_path,
-                                         vsrc=vsrc, active=active)
+    if facecam_box:
+        from . import cinema
+        fw, fh = cinema.ratio_size(ratio)
+        complex_fg = _facecam_graph(sub_name, duration, facecam_box, fw, fh,
+                                    grade_film=grade, grain=grain, vignette=vignette)
+        simple_vf = None
+    else:
+        complex_fg, simple_vf = _filtergraph(framing, sub_name, duration,
+                                             grade_film=grade, grain=grain, ratio=ratio,
+                                             crop_x=crop_x, vignette=vignette,
+                                             auto_zoom=auto_zoom, focus_path=focus_path,
+                                             vsrc=vsrc, active=active)
     # The old J-cut delayed audio without delaying picture, which put sound 350 ms
     # late. It is disabled until a real audio-lead graph (with caption shift) exists.
     lead = 0.0
-    af = ["-af", _audio_fade(duration)]
+    af = ["-af", "asetpts=PTS-STARTPTS," + _audio_fade(duration)]
     if lead > 0.01:
         # pull the picture a touch later so the audio (which starts at -ss start-lead) is already
         # running when the picture appears — the incoming cut "leads" with sound
-        af = ["-af", f"adelay={int(lead * 1000)}|{int(lead * 1000)}," + _audio_fade(duration + lead)]
+        af = ["-af", f"asetpts=PTS-STARTPTS,adelay={int(lead * 1000)}|{int(lead * 1000)}," + _audio_fade(duration + lead)]
     base = [ffmpeg(), "-y", "-ss", f"{max(0.0, start - lead):.2f}", "-i", src,
             "-t", f"{(duration + lead):.2f}"]
     if complex_fg is not None:
         args = base + ["-filter_complex", complex_fg, "-map", "[v]", "-map", "0:a?", *af,
-                       "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
-                       "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
+                       "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+                       "-profile:v", "high", "-pix_fmt", "yuv420p",
+                       "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]
     else:
-        args = base + ["-vf", simple_vf, "-map", vsrc, "-map", "0:a?", *af,
-                       "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
-                       "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
+        args = base + ["-vf", "setpts=PTS-STARTPTS," + simple_vf, "-map", vsrc, "-map", "0:a?", *af,
+                       "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+                       "-profile:v", "high", "-pix_fmt", "yuv420p",
+                       "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]
     try:
         run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))
     except RuntimeError:
         if sub_name:  # libass missing / subtitle parse issue — retry WITHOUT captions
-            complex_fg2, simple_vf2 = _filtergraph(framing, None, duration,
-                                                   grade_film=grade, grain=grain, ratio=ratio,
-                                                   crop_x=crop_x, vignette=vignette,
-                                                   auto_zoom=auto_zoom,
-                                                   focus_path=focus_path, vsrc=vsrc,
-                                                   active=active)
+            if facecam_box:
+                from . import cinema
+                fw, fh = cinema.ratio_size(ratio)
+                complex_fg2 = _facecam_graph(None, duration, facecam_box, fw, fh,
+                                             grade_film=grade, grain=grain, vignette=vignette)
+                simple_vf2 = None
+            else:
+                complex_fg2, simple_vf2 = _filtergraph(framing, None, duration,
+                                                       grade_film=grade, grain=grain, ratio=ratio,
+                                                       crop_x=crop_x, vignette=vignette,
+                                                       auto_zoom=auto_zoom,
+                                                       focus_path=focus_path, vsrc=vsrc,
+                                                       active=active)
             if complex_fg2 is not None:
                 args = base + ["-filter_complex", complex_fg2, "-map", "[v]", "-map", "0:a?", *af,
-                               "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
-                               "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
+                               "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+                               "-profile:v", "high", "-pix_fmt", "yuv420p",
+                               "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]
             else:
-                args = base + ["-vf", simple_vf2, "-map", vsrc, "-map", "0:a?", *af,
-                               "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
-                               "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
+                args = base + ["-vf", "setpts=PTS-STARTPTS," + simple_vf2, "-map", vsrc, "-map", "0:a?", *af,
+                               "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+                               "-profile:v", "high", "-pix_fmt", "yuv420p",
+                               "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]
             run(args, cwd=cwd, timeout=max(900, int((duration + lead) * 12)))
             return out + " (captions skipped: libass burn failed)"
         raise

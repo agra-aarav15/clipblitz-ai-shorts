@@ -17,8 +17,8 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23050505'/%3E%3Cpath d='M27.2 9.5 14.5 27.4h8.1L20.2 38.5 33.5 20.6h-8.2z' fill='%23fff'/%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/styles.css?v=5.7.1" />
-<link rel="stylesheet" href="/cutdesk.css?v=5.7.1" id="desk-theme" disabled />
+<link rel="stylesheet" href="/styles.css?v=5.7.2" />
+<link rel="stylesheet" href="/cutdesk.css?v=5.7.2" id="desk-theme" disabled />
 </head>
 <body>
 
@@ -254,7 +254,7 @@
 
       <div class="glass panel">
         <div class="liveform">
-          <input type="text" id="live-url" placeholder="Paste a live URL — YouTube live or twitch.tv/channel" spellcheck="false" />
+          <textarea id="live-url" rows="2" placeholder="Paste up to 3 live URLs — one per line (YouTube live or twitch.tv/channel)" spellcheck="false"></textarea>
           <button class="btn" id="live-start" type="button"><svg class="ic" aria-hidden="true"><use href="#i-signal"/></svg> Start watching</button>
         </div>
         <div class="opts liveopts">
@@ -277,7 +277,8 @@
         Closing the app stops it; the next launch resumes. YouTube has a live-chat replay when it
         still exposes one; Twitch captures chat live only, and clips from the Twitch DVR window.
         <b>Post first</b> renders the moment immediately (best for launch streams); <b>wait for
-        quiet chat</b> keeps the CPU calm. Auto-post stays off until the rights box is ticked.</p>
+        quiet chat</b> keeps the CPU calm. Auto-post stays off until the rights box is ticked.
+        With 2–3 streams, the daily YouTube budget is shared: 2 clips each for 3 streams.</p>
       </div>
 
       <div id="live-error"></div>
@@ -678,6 +679,6 @@
     </div>
   </form>
 </dialog>
-<script src="/app.js?v=5.7.1"></script>
+<script src="/app.js?v=5.7.2"></script>
 </body>
 </html>

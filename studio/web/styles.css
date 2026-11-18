@@ -989,7 +989,8 @@ textarea { resize: vertical; }
 
 /* ============================ LIVE CHAT RADAR ============================ */
 .liveform { display: flex; gap: 10px; align-items: center; }
-.liveform input { flex: 1; min-width: 0; }
+.liveform input, .liveform textarea { flex: 1; min-width: 0; }
+.liveform textarea { min-height: 52px; resize: vertical; line-height: 1.45; }
 .liveopts { margin-top: 12px; }
 .liverights { display: flex; flex-wrap: wrap; gap: 12px 22px; margin-top: 12px; }
 .livecheck { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--text-2); line-height: 1.4; }

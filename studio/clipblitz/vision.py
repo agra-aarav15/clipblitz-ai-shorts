@@ -156,6 +156,87 @@ def face_crop_x(src, start, end, samples=4, target_ratio=9 / 16):
             pass
 
 
+def _face_boxes(img, frontal, profile):
+    """Return [(x, y, w, h, area)] in normalized frame coordinates."""
+    if cv2 is None or img is None:
+        return []
+    fh, fw = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    boxes = []
+    kw = dict(scaleFactor=1.12, minNeighbors=4,
+              minSize=(max(14, fw // 18), max(14, fh // 18)))
+    if frontal is not None:
+        boxes += [tuple(int(v) for v in b) for b in frontal.detectMultiScale(gray, **kw)]
+    if profile is not None:
+        boxes += [tuple(int(v) for v in b) for b in profile.detectMultiScale(gray, **kw)]
+        flipped = cv2.flip(gray, 1)
+        for x, y, w, h in profile.detectMultiScale(flipped, **kw):
+            boxes.append((int(fw - x - w), int(y), int(w), int(h)))
+    out = []
+    for x, y, w, h in boxes:
+        area = w * h
+        if area < fw * fh * 0.003:
+            continue
+        out.append((x / max(1.0, fw), y / max(1.0, fh),
+                    w / max(1.0, fw), h / max(1.0, fh), area / max(1.0, fw * fh)))
+    return out
+
+
+def facecam_box(src, start, end, samples=6):
+    """Locate the streamer's face and return a padded crop box for a face inset.
+
+    Live gaming frames are usually 16:9 with the webcam in a corner. A 9:16
+    centre crop throws that corner away, which is exactly the wrong editorial
+    choice for a reaction clip. This returns a normalized (x, y, w, h) around the
+    largest stable face, padded to include the webcam frame. None means the caller
+    should keep the normal vertical crop.
+    """
+    if cv2 is None or not src or not os.path.isfile(src):
+        return None
+    frontal, profile = _detectors()
+    if frontal is None and profile is None:
+        return None
+    frames = _frames(src, start, end, max(3, int(samples or 6)))
+    if not frames:
+        return None
+    found = []
+    try:
+        for path, _fw, _fh in frames:
+            img = cv2.imread(path)
+            faces = _face_boxes(img, frontal, profile)
+            if faces:
+                faces.sort(key=lambda b: -b[4])
+                found.append(faces[0][:4])
+        if not found:
+            return None
+        # Median stabilises a one-frame false positive without lagging a cut.
+        med = [sorted(b[i] for b in found)[len(found) // 2] for i in range(4)]
+        x, y, w, h = med
+        cx, cy = x + w / 2.0, y + h / 2.0
+        # The webcam frame is wider and taller than the detected face. These
+        # multipliers cover a typical corner cam; the card later centre-crops it.
+        cw, ch = max(0.12, w * 2.8), max(0.14, h * 2.7)
+        x0 = max(0.0, min(1.0 - cw, cx - cw / 2.0))
+        y0 = max(0.0, min(1.0 - ch, cy - ch / 2.0))
+        cw, ch = min(cw, 0.32), min(ch, 0.42)
+        x0 = max(0.0, min(1.0 - cw, cx - cw / 2.0))
+        y0 = max(0.0, min(1.0 - ch, cy - ch / 2.0))
+        return (round(x0, 4), round(y0, 4),
+                round(min(cw, 1.0 - x0), 4), round(min(ch, 1.0 - y0), 4))
+    except Exception:
+        return None
+    finally:
+        for path, _w, _h in frames:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        try:
+            shutil.rmtree(os.path.dirname(frames[0][0]), ignore_errors=True)
+        except Exception:
+            pass
+
+
 def _face_centres(img, frontal, profile):
     """Return [(centre_x_fraction, area_fraction)] for faces in one frame."""
     if cv2 is None or img is None:

@@ -13,6 +13,7 @@ import os
 import secrets
 import subprocess
 import threading
+from datetime import datetime, timedelta, timezone
 import time
 import urllib.parse
 import urllib.request
@@ -23,6 +24,7 @@ from .config import CONFIG
 SOCIAL_DIR = os.path.join(CONFIG["data_dir"], "social")
 YT_TOKEN_FILE = os.path.join(SOCIAL_DIR, "youtube.json")
 YT_STATE_FILE = os.path.join(SOCIAL_DIR, "oauth_state.json")
+YT_UPLOAD_LEDGER = os.path.join(SOCIAL_DIR, "upload_day.json")
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 STATE_TTL = 600  # a consent round-trip older than this is stale
 
@@ -290,6 +292,58 @@ def youtube_check_state(state):
         raise RuntimeError("That consent took longer than ten minutes — press Connect "
                            "YouTube again and finish the Google window.")
 
+
+def _quota_day():
+    """YouTube's Data API quota resets at midnight Pacific, not local midnight."""
+    return (datetime.now(timezone.utc) - timedelta(hours=8)).date().isoformat()
+
+
+_UPLOAD_LOCK = threading.Lock()
+
+
+def _ledger_write(count):
+    try:
+        os.makedirs(SOCIAL_DIR, exist_ok=True)
+        tmp = YT_UPLOAD_LEDGER + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"day": _quota_day(), "count": max(0, int(count))}, f)
+        os.replace(tmp, YT_UPLOAD_LEDGER)
+    except OSError:
+        pass
+
+
+def youtube_uploads_today():
+    try:
+        data = json.load(open(YT_UPLOAD_LEDGER, encoding="utf-8"))
+        if data.get("day") == _quota_day():
+            return max(0, int(data.get("count") or 0))
+    except (OSError, ValueError, TypeError):
+        pass
+    return 0
+
+
+def youtube_auto_post_allowed(limit=6):
+    return youtube_uploads_today() < max(1, int(limit))
+
+
+def youtube_take_upload_slot(limit=6):
+    """Atomically reserve one automatic upload from the shared daily budget.
+
+    Three live sessions finishing at once must not all read "5 used", then all
+    upload. The reservation happens before the network call; a failed upload
+    releases it.
+    """
+    with _UPLOAD_LOCK:
+        count = youtube_uploads_today()
+        if count >= max(1, int(limit)):
+            return False
+        _ledger_write(count + 1)
+        return True
+
+
+def youtube_release_upload_slot():
+    with _UPLOAD_LOCK:
+        _ledger_write(max(0, youtube_uploads_today() - 1))
 
 def youtube_auth_url():
     cid, sec = _yt_creds()

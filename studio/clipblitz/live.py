@@ -208,6 +208,7 @@ def _probe(url):
         "%(id)s", "%(is_live)s", "%(live_status)s", "%(was_live)s",
         "%(timestamp)s", "%(release_timestamp)s", "%(duration)s",
         "%(title)s", "%(channel)s", "%(uploader)s", "%(webpage_url)s",
+        "%(channel_url)s", "%(uploader_url)s",
     ])
     cmd = [ytdlp(), "--no-playlist", "--no-warnings", "--skip-download",
            "--print", template, url]
@@ -224,11 +225,11 @@ def _probe(url):
 
     lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
     row = lines[-1].split(sep) if lines else []
-    if len(row) < 11:
+    if len(row) < 13:
         tail = " | ".join((proc.stderr or "").strip().splitlines()[-3:])
         raise RuntimeError("Could not read this live URL. " + (tail or "yt-dlp returned no metadata."))
     (vid, is_live, live_status, was_live, timestamp, release_ts, duration,
-     title, channel, uploader, page) = row[:11]
+     title, channel, uploader, page, channel_url, uploader_url) = row[:13]
     vid = (vid or video_id(url)).strip()
     live = str(is_live).strip().lower() == "true"
     was = str(was_live).strip().lower() == "true"
@@ -239,6 +240,7 @@ def _probe(url):
         "url": page if page.startswith("http") else canonical(vid),
         "title": _clean(title, 240) or "Untitled live stream",
         "channel": _clean(channel, 160) or _clean(uploader, 160) or "YouTube",
+        "channel_url": (channel_url or uploader_url or "").strip(),
         "duration": _num(duration),
         "stream_start": start,
         "is_live": live,
@@ -295,6 +297,7 @@ def _probe_twitch(url):
         "url": page.strip() or ("https://www.twitch.tv/" + login), "login": login,
         "title": _clean(description, 240) or _clean(title, 240) or login,
         "channel": _clean(uploader, 160) or login,
+        "channel_url": "https://www.twitch.tv/" + login,
         "stream_start": start_value, "duration": None,
         "is_live": live, "offline": not live, "ended": False,
         "upcoming": False, "live_status": live_status,
@@ -828,20 +831,55 @@ def _title_for(spike, source_title=""):
     source = virality.clean_title(source_title, 40)
     if picked and source and source.lower() not in picked.lower():
         return virality.clean_title("%s — %s" % (source, picked), 95)
-    return picked or "Chat lost it at %s" % _hm(spike.get("peak", 0))
+    fallback = "Chat lost it at %s" % _hm(spike.get("peak", 0))
+    if source:
+        return virality.clean_title("%s — %s" % (source, fallback), 95)
+    return fallback
 
 
-def _meta_for(spike, source_title=""):
+def _meta_for(spike, source):
+    """Title, description and tags for a live clip.
+
+    `source` is the live session dict (url/channel/title) or, for old callers, a
+    plain source-title string. Attribution is not decoration: it gives the
+    original creator a link back, makes the reuse auditable, and tells a viewer
+    where the full stream lives. It does not replace permission.
+    """
+    if isinstance(source, dict):
+        source_title = source.get("title") or ""
+        channel = source.get("channel") or ""
+        url = source.get("url") or ""
+        channel_url = source.get("channel_url") or url
+        platform = (source.get("platform") or "").lower()
+    else:
+        source_title, channel, url, platform = str(source or ""), "", "", ""
+        channel_url = ""
     title = _title_for(spike, source_title)
     top = [t["text"] for t in spike.get("top") or []][:3]
-    desc = ("Live chat spike: %d messages from %d people. The room reacted here. %s"
-            % (int(spike.get("messages") or 0), int(spike.get("authors") or 0),
-               " / ".join(top))).strip()
-    return {
-        "title": title,
-        "description": desc[:900],
-        "hashtags": ["#shorts", "#live", "#clip", "#streamer"],
-    }
+    lower = (source_title + " " + title).lower()
+    if "gta" in lower:
+        tags = ["#GTA6", "#GTAVI", "#GTA6Clips", "#GTA6Shorts", "#GTA6India",
+                "#Gaming", "#GamingShorts", "#Streamer", "#Shorts", "#Viral"]
+    else:
+        tags = ["#Gaming", "#GamingShorts", "#Streamer", "#LiveStream",
+                "#Clips", "#Shorts", "#Viral"]
+        if platform == "twitch":
+            tags += ["#Twitch"]
+        else:
+            tags += ["#YouTubeGaming"]
+    credit = channel or source_title or "the original streamer"
+    credit_line = f"{credit} — {channel_url}" if channel_url else credit
+    desc = (
+        f"{title}\n\n"
+        f"Source: {credit} — {channel_url}\n"
+        f"Full stream: {url}\n\n"
+        f"Clip context: {int(spike.get('messages') or 0)} chat messages from "
+        f"{int(spike.get('authors') or 0)} people around this moment. "
+        + (" / ".join(top) + "\n\n" if top else "\n\n")
+        + f"Credit: {credit}. Fan clip; no affiliation with the creator. "
+          "If you are the rights holder and want this removed, contact the channel.\n\n"
+    )
+    return {"title": title, "description": desc[:900], "hashtags": tags[:12]}
 
 
 # ------------------------------------------------------------------ download + render
@@ -903,7 +941,7 @@ def _download_section(s, spike):
            "--download-sections", "*%.2f-%.2f" % (start, end),
            "--force-keyframes-at-cuts", "--merge-output-format", "mp4"]
     if s.get("platform") == "twitch":
-        cmd += ["-f", "best[height<=720]/best"]
+        cmd += ["-f", "best[height<=1080]/best[height<=720]/best"]
     else:
         cmd += ["-f", "bv*[height<=1080]+ba/b"]
     # yt-dlp needs ffmpeg for DASH/HLS merging and keyframe cuts. `ffmpeg()` can be
@@ -927,22 +965,84 @@ def _download_section(s, spike):
     return target, ffmpeg_tools.duration_of(target)
 
 
+def _stt_words(section, duration, video_id):
+    """Captions fallback when the stream exposes no subtitle track.
+
+    Live YouTube captions are often absent, and Twitch has no replay captions at
+    all. A clip without words is a silent autoplay clip for most viewers, so use
+    the same local/API transcriber the studio already ships. Failure is non-fatal:
+    the clip renders without burned captions rather than failing.
+    """
+    try:
+        from . import stt
+        from .config import stt_mode
+        mode = stt_mode()
+        if mode == "heuristic":
+            return []
+        tmp = os.path.join(_session_dir(video_id), "captions")
+        os.makedirs(tmp, exist_ok=True)
+        wav = os.path.join(tmp, os.path.basename(section) + ".wav")
+        subprocess.run([ffmpeg(), "-y", "-v", "error", "-i", section,
+                        "-vn", "-ac", "1", "-ar", "16000", wav],
+                       capture_output=True, timeout=120)
+        if not os.path.isfile(wav) or os.path.getsize(wav) < 1000:
+            return []
+        segments = stt.transcribe_cached(wav, mode, source=section)
+        words = []
+        for seg in segments or []:
+            ws = seg.get("words") or []
+            if ws:
+                words.extend({"word": str(w.get("word") or "").strip(),
+                              "start": float(w.get("start") or 0),
+                              "end": float(w.get("end") or 0)}
+                             for w in ws if str(w.get("word") or "").strip())
+            elif (seg.get("text") or "").strip():
+                # Provider returned a block without word timings: spread it evenly
+                # so the existing block-level caption path still has something.
+                toks = str(seg["text"]).strip().split()
+                t0, t1 = float(seg.get("start") or 0), float(seg.get("end") or duration)
+                step = max(0.08, (t1 - t0) / max(1, len(toks)))
+                words.extend({"word": t, "start": t0 + i * step,
+                              "end": min(t1, t0 + (i + 1) * step)}
+                             for i, t in enumerate(toks))
+        return [w for w in words if w["end"] > w["start"] and w["start"] < duration]
+    except Exception:
+        return []
+
+
 def _render_section(s, spike, section, section_duration, words):
     vid = s["video_id"]
     clips_dir = os.path.join(CONFIG["data_dir"], "clips")
     os.makedirs(clips_dir, exist_ok=True)
     base = "live_%s_%s" % (vid, spike["id"])
     out = os.path.join(clips_dir, base + ".mp4")
-    meta = _meta_for(spike, s.get("title") or "")
+    meta = _meta_for(spike, s)
+    stt_used = False
+    if not words:
+        words = _stt_words(section, float(section_duration), s["video_id"])
+        stt_used = bool(words)
     ass_name = None
     if words:
         ass_path = os.path.join(clips_dir, base + ".ass")
-        captions.build_ass(words, (float(spike["start"]), float(spike["end"])),
-                           "wordpop", 1.0, "bottom", ass_path)
+        # Downloaded subtitle words are absolute source times; STT words are
+        # relative to the downloaded section. Mixing those windows silently
+        # dropped every STT caption.
+        window = (0.0, float(section_duration)) if stt_used else (
+            float(spike["start"]), float(spike["end"]))
+        captions.build_ass(words, window, "wordpop", 1.0, "bottom", ass_path,
+                               margin_v=430)
         ass_name = base + ".ass"
+    # A stream is 16:9 with the webcam in a corner. A plain 9:16 centre crop
+    # deletes the face; detect that corner and render the face band on top.
+    facecam = None
+    try:
+        from . import vision
+        facecam = vision.facecam_box(section, 0.0, float(section_duration), samples=6)
+    except Exception:
+        facecam = None
     ffmpeg_tools.cut_clip(section, 0.0, float(section_duration), out, ass_name,
                           cwd=clips_dir, framing="focus", grade=True, ratio="9:16",
-                          vignette=True, auto_zoom=False)
+                          vignette=True, auto_zoom=False, facecam_box=facecam)
     thumb = None
     try:
         thumb_path = os.path.join(clips_dir, base + ".jpg")
@@ -968,6 +1068,7 @@ def _render_section(s, spike, section, section_duration, words):
         "chat": spike.get("top") or [],
         "source": {"video_id": vid, "title": s.get("title"), "channel": s.get("channel")},
         "width": 1080, "height": 1920,
+        "layout": "facecam" if facecam else "vertical",
     }
 
 
@@ -1073,6 +1174,7 @@ def _start_twitch(url, before=DEFAULT_BEFORE, after=DEFAULT_AFTER,
         "source_id": meta.get("source_id") or "",
         "url": meta.get("url") or ("https://www.twitch.tv/" + login),
         "title": meta.get("title") or login, "channel": meta.get("channel") or login,
+        "channel_url": meta.get("channel_url") or ("https://www.twitch.tv/" + login),
         "stream_start": meta.get("stream_start"), "duration": None,
         "added": now, "last_poll": None, "last_meta_probe": now,
         "message_count": 0, "last_message": None, "last_message_wall": None,
@@ -1137,6 +1239,7 @@ def start(url, before=DEFAULT_BEFORE, after=DEFAULT_AFTER, max_clips=DEFAULT_MAX
     s = {
         "id": vid, "video_id": vid, "url": meta["url"] or canonical(vid),
         "title": meta["title"], "channel": meta["channel"],
+        "channel_url": meta.get("channel_url") or "",
         "stream_start": meta.get("stream_start"), "duration": meta.get("duration"),
         "added": now, "last_poll": None, "last_meta_probe": now,
         "message_count": 0, "last_message": None,
@@ -1213,6 +1316,7 @@ def _probe_and_update(s):
             s["url"] = meta["url"] or s.get("url")
             s["title"] = meta.get("title") or s.get("title")
             s["channel"] = meta.get("channel") or s.get("channel")
+            s["channel_url"] = meta.get("channel_url") or s.get("channel_url")
             s["source_id"] = meta.get("source_id") or s.get("source_id")
             s["stream_start"] = s.get("stream_start") or meta.get("stream_start")
             if meta.get("duration"):
@@ -1308,6 +1412,14 @@ def _auto_post(s, clip):
             "note": "Connect YouTube in Connect, then this clip can be posted.",
         }
         return
+    limit = int(os.environ.get("CB_AUTO_POST_LIMIT", "6") or 6)
+    if not social.youtube_take_upload_slot(limit):
+        clip.setdefault("post", {})["youtube"] = {
+            "status": "daily_limit",
+            "note": "Today's automatic upload budget is used. The clip is rendered locally; "
+                    "post it manually tomorrow or raise CB_AUTO_POST_LIMIT.",
+        }
+        return
     try:
         link = social.youtube_upload(
             path,
@@ -1318,6 +1430,7 @@ def _auto_post(s, clip):
         )
         clip.setdefault("post", {})["youtube"] = {"status": "published", "link": link}
     except Exception as e:
+        social.youtube_release_upload_slot()
         clip.setdefault("post", {})["youtube"] = {"status": "error",
                                                   "note": str(e)[:240]}
 

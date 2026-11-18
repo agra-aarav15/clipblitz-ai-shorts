@@ -2520,39 +2520,64 @@ function stopLivePoll() {
 }
 
 async function startLiveWatch() {
-  const url = ($('live-url')?.value || '').trim();
+  const raw = ($('live-url')?.value || '').trim();
   const err = $('live-error');
   if (err) err.innerHTML = '';
-  if (!url) { toast('Paste a live URL first', true); return; }
+  if (!raw) { toast('Paste a live URL first', true); return; }
+  // One per line is the readable form; commas and spaces also work for a quick paste.
+  let urls = raw.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+  if (!urls.length) { toast('Paste a live URL first', true); return; }
+  const dropped = urls.length > 3;
+  urls = urls.slice(0, 3);
+  const auto = !!$('live-auto')?.checked;
+  const requestedMax = Math.max(1, Number($('live-max')?.value || 6));
+  // Three streams x six auto-posts would blow the 10,000-unit YouTube day.
+  // The limit is shared; split it fairly before any watcher starts.
+  const perStreamMax = auto && urls.length > 1
+    ? Math.max(1, Math.min(requestedMax, Math.floor(6 / urls.length)))
+    : requestedMax;
   const btn = $('live-start');
-  if (btn) { btn.disabled = true; btn.textContent = 'Finding the stream…'; }
+  if (btn) { btn.disabled = true; btn.textContent = `Finding ${urls.length} stream${urls.length === 1 ? '' : 's'}…`; }
+  const started = [], failed = [];
   try {
-    const r = await fetch('/api/live/start', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url,
-        before: Number($('live-before')?.value || 25),
-        after: Number($('live-after')?.value || 15),
-        max_clips: Number($('live-max')?.value || 6),
-        auto_post: !!$('live-auto')?.checked,
-        privacy: $('live-privacy')?.value || 'unlisted',
-        rights_ok: !!$('live-rights')?.checked,
-        render_policy: $('live-policy')?.value || 'instant',
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'could not start');
-    toast('Live radar: ' + (data.session?.title || 'session started'));
-    if ($('live-url')) $('live-url').value = '';
-    await loadLive(true);
-    startLivePoll();
-  } catch (e) {
-    if (err) err.innerHTML = `<div class="error">${esc(e.message)}</div>`;
-    toast(e.message, true);
+    for (const url of urls) {
+      try {
+        const r = await fetch('/api/live/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            before: Number($('live-before')?.value || 25),
+            after: Number($('live-after')?.value || 15),
+            max_clips: perStreamMax,
+            auto_post: auto,
+            privacy: $('live-privacy')?.value || 'unlisted',
+            rights_ok: !!$('live-rights')?.checked,
+            render_policy: $('live-policy')?.value || 'instant',
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'could not start');
+        started.push(data.session?.title || url);
+      } catch (e) {
+        failed.push(`${url}: ${e.message}`);
+      }
+    }
+    if (started.length) {
+      const capNote = auto && urls.length > 1 ? ` · ${perStreamMax} clips each (shared 6/day)` : '';
+      toast(`Watching ${started.length}/${urls.length} stream${urls.length === 1 ? '' : 's'}${capNote}`);
+      if ($('live-url')) $('live-url').value = '';
+      await loadLive(true);
+      startLivePoll();
+    }
+    if (failed.length && err) {
+      err.innerHTML = failed.map(x => `<div class="error">${esc(x)}</div>`).join('') +
+        (dropped ? '<div class="dim">Only the first 3 URLs were started.</div>' : '');
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = IC('signal') + ' Start watching'; }
   }
 }
+
 
 async function liveAction(id, action, body) {
   const r = await fetch(`/api/live/${action}`, {
@@ -2566,7 +2591,7 @@ async function liveAction(id, action, body) {
 }
 
 $('live-start')?.addEventListener('click', startLiveWatch);
-$('live-url')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') startLiveWatch(); });
+$('live-url')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) startLiveWatch(); });
 $('live-url')?.addEventListener('input', (e) => {
   // Twitch has no useful post-stream chat replay; the launch-stream default is to
   // clip and post first. YouTube defaults to the calmer render policy.

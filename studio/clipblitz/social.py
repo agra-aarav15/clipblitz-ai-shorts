@@ -197,21 +197,24 @@ def youtube_diagnose():
     }
     if youtube_connected():
         channel = youtube_channel()
-        steps["token_works"] = {
-            "ok": channel is not None,
-            "detail": f"token valid · channel: {channel}" if channel else
-            "token saved, but the channel name could not be read. This usually means the saved "
-            "consent was upload-only, or Google expired the token.",
-            "fix": "" if channel else (
-                "Press Disconnect, then Connect YouTube again and allow both YouTube permissions. "
-                "If it still fails, the token expired — re-consent is the fix."),
-        }
-        if channel:
+        token_ok = channel is not None
+        token_detail = (f"token valid · channel: {channel}" if channel else
+                        "token valid for uploads; channel name needs the channel-read permission "
+                        "(next consent requests it)")
+        if not channel:
             try:
-                youtube_upload  # noqa: B018 — presence check only
-                steps["upload_quota"] = {"ok": True, "detail": "ready — uploads will use today's free quota (~6/day)", "fix": ""}
+                youtube_access_token()
+                token_ok = True
             except Exception as e:
-                steps["upload_quota"] = {"ok": False, "detail": str(e)[:120], "fix": "See SETUP-YOUTUBE.md."}
+                token_ok = False
+                token_detail = str(e)[:160]
+        steps["token_works"] = {
+            "ok": token_ok, "detail": token_detail,
+            "fix": "" if token_ok else
+            "Press Disconnect, then Connect YouTube again and allow both YouTube permissions.",
+        }
+        if token_ok:
+            steps["upload_quota"] = {"ok": True, "detail": "ready — uploads will use today's free quota (~6/day)", "fix": ""}
     overall_ok = all(s["ok"] for s in steps.values())
     known = []
     if st["reauth_required"]:

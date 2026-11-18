@@ -1810,14 +1810,14 @@ async function refreshSocial() {
     const yt = s.youtube || {};
     SOCIAL = yt;                       /* the connected channel, for the source check */
     renderRightsGate(fullJobCache);
-    const configured = yt.configured && !!health.youtube_ready;
-    $('yt-redirect').textContent = `${location.origin}/oauth/youtube/callback`;
+    const configured = !!yt.configured;
+    $('yt-redirect').textContent = yt.redirect_uri || `${location.origin}/oauth/youtube/callback`;
     renderDiag(diag);
     const status = $('yt-status');
     if (yt.connected) {
       status.textContent = yt.channel ? `connected / ${yt.channel}` : 'connected';
       status.className = 'chip ok';
-      $('yt-detail').innerHTML = `<span class="chip ok">${IC('check')} OAuth token verified — auto-upload active</span>`;
+      $('yt-detail').innerHTML = `<span class="chip ok">${IC('check')} ${yt.channel ? 'OAuth token verified — auto-upload active' : 'OAuth token saved — uploads active'}</span>`;
     } else if (yt.reauth_required) {
       status.textContent = 'token expired — reconnect';
       status.className = 'chip err';

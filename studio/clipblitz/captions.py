@@ -27,6 +27,12 @@ PRESETS = {
         "outline_w": 6, "box": False, "chunk": 3, "effect": "pop", "margin_v": 300,
         "bold": 1, "sample_bg": "#000000", "sample_color": "#FFD700",
     },
+    "reel": {
+        "name": "Reel Clean", "desc": "Clean white reel captions: strong, but not shouting.",
+        "font": "Arial", "size": 70, "primary": "#FFFFFF", "outline": "#000000",
+        "outline_w": 3, "box": False, "chunk": 5, "effect": "none", "margin_v": 300,
+        "bold": 1, "sample_bg": "#000000", "sample_color": "#FFFFFF",
+    },
     "minimal": {
         "name": "Minimal White", "desc": "Clean thin white — lets the footage speak.",
         "font": "Arial", "size": 64, "primary": "#FFFFFF", "outline": "#000000",

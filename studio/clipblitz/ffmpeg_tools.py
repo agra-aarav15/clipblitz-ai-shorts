@@ -400,17 +400,17 @@ def _facecam_graph(sub_name, dur, face_box, W, H, grade_film=False,
     underneath. The streamer's face is larger and the game is sharper.
     """
     W, H = int(W), int(H)
-    top_h = max(280, min(360, int(H * 0.17)))       # 320 at 1080x1920
+    top_h = max(300, min(380, int(H * 0.18)))       # 345 at 1080x1920
     # 1200 is an 11% upscale (not the old 33%); it fills more of the frame while
     # keeping signs and HUD text noticeably sharper than a 9:16 height crop.
-    game_h = min(int(W * 1.11), H - top_h - 380)
+    game_h = min(int(W * 1.11), H - top_h - 360)
     game_h = max(720, game_h)
     bottom_h = H - top_h - game_h
     x, y, fw, fh = [float(v) for v in face_box]
     x = max(0.0, min(1.0, x)); y = max(0.0, min(1.0, y))
     fw = max(0.05, min(1.0 - x, fw)); fh = max(0.05, min(1.0 - y, fh))
-    card_w = min(520, int(W * 0.50))
-    card_h = min(300, top_h - 30)
+    card_w = min(560, int(W * 0.52))
+    card_h = min(310, top_h - 26)
     card_x = (W - card_w) // 2
     card_y = max(10, (top_h - card_h) // 2)
     fv_in = "fade=t=in:st=0:d=0.18"
@@ -425,24 +425,28 @@ def _facecam_graph(sub_name, dur, face_box, W, H, grade_film=False,
         # leaving black bars around the native-resolution game panel.
         f"[fc_bg]scale={max(2, W // 4)}:{max(2, H // 4)}:force_original_aspect_ratio=increase,"
         f"crop={max(2, W // 4)}:{max(2, H // 4)},boxblur=6:2,"
-        f"scale={W}:{H}:flags=lanczos,eq=brightness=-0.16:saturation=0.82[fc_bg2];"
+        f"scale={W}:{H}:flags=lanczos,eq=brightness=-0.28:saturation=0.68[fc_bg2];"
         # Face card, slightly larger than the old 520x320 card and never stretched.
         f"[fc_cam]crop=w=iw*{fw:.4f}:h=ih*{fh:.4f}:x=iw*{x:.4f}:y=ih*{y:.4f},"
+        f"crop=w=iw:h=ih*0.78:y=ih*0.10,"  # drop the view bar and chat strip
         f"scale={card_w}:{card_h}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={card_w}:{card_h},setsar=1[fc_face];"
         f"[fc_bg2]drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:"
-        f"color=black@0.62:t=fill,"
+        f"color=black@0.72:t=fill,"
         f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:"
-        f"color=white@0.34:t=4[fc_topbg];"
+        f"color=white@0.22:t=2[fc_topbg];"
         f"[fc_topbg][fc_face]overlay={card_x}:{card_y}[fc_top];"
         # 1080x1080 crop: the source is 1920x1080, so only the sides are removed.
-        f"[fc_game]scale={W}:{W}:force_original_aspect_ratio=increase:flags=lanczos,"
+        # Trim the bottom 12% first. Live games burn their own subtitles there;
+        # keeping them would print two captions at once.
+        f"[fc_game]crop=w=iw:h=ih*0.88:x=0:y=0,"
+        f"scale={W}:{W}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={W}:{W}:x=(iw-ow)/2:y=0,setsar=1[fc_game2];"
         f"[fc_top][fc_game2]overlay=0:{game_y}[fc_mid];"
         # A quiet caption band; the ASS text sits above YouTube's bottom UI.
         f"[fc_mid]drawbox=x=0:y={game_y + game_h}:w={W}:h={bottom_h}:"
-        f"color=black@0.26:t=fill,"
-        f"drawbox=x=0:y={game_y + game_h}:w={W}:h=2:color=white@0.18:t=fill[fc_stack];"
+        f"color=black@0.48:t=fill,"
+        f"drawbox=x=0:y={game_y + game_h}:w={W}:h=2:color=white@0.12:t=fill[fc_stack];"
         f"[fc_stack]format=yuv420p,fps=30,{fv_in},{fv_out}{grade}{sub}[v]"
     )
     return chain

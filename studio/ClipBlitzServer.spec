@@ -23,7 +23,7 @@ a = Analysis(
     ["server_entry.py"],
     pathex=[],
     binaries=[],
-    datas=list(cv_data),
+    datas=list(cv_data) + [("clipblitz/models/face_detection_yunet_2023mar.onnx", "clipblitz/models")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

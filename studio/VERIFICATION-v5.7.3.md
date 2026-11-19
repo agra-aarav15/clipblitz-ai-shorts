@@ -88,3 +88,35 @@ The clips already uploaded to YouTube before this build keep the old audio lead
 and old compression. YouTube does not allow editing the video file in place.
 They have to be deleted or replaced by a new upload after the daily upload limit
 resets (or after channel verification). New renders from 5.7.3 onward are fixed.
+
+## Late pass: real facecam detection and reel polish
+
+The Haar-only detector still missed a small, downward-looking corner webcam
+(Ray's `s10`), and sometimes selected a giant in-game character instead (Kai's
+`s18`). The renderer now uses:
+
+- **YuNet** (`face_detection_yunet_2023mar.onnx`, 228 KB) bundled with the app;
+- Haar as a second opinion;
+- an extra scan of the left/right side bands;
+- clustering across sampled frames, with a corner cluster preferred over a
+  centre game-face cluster.
+
+Measured results on real sections:
+
+- Ray `s10`: webcam `(x=0.062, y=0.660, w=0.18, h=0.22)` — bottom-left, correct;
+- Kai `s18`: webcam `(x=0.008, y=0.398, w=0.18, h=0.249)` — corner, not the giant
+  game manager;
+- Kai `s37`: webcam `(x=0.001, y=0.403, w=0.18, h=0.220)`.
+
+Reel layout changes:
+
+- face card enlarged to 560x310 and the source view bar + chat strip cropped out;
+- game panel crops the bottom 12% so a stream's own burned-in subtitles do not
+  print twice under our captions;
+- bottom caption band is darker and cleaner;
+- live captions use the new **Reel Clean** style (Arial 70, 3px outline, no pop);
+- titles now strip truncated emoji tails and reject repetitive chat spam;
+- chat polling sleeps 0.75–3.0s instead of 2–15s.
+
+Verified frames: `final2-s2.jpg`, `s6-prof.jpg`, `q2-top10.jpg`; all 19 test
+scripts pass on the final source.

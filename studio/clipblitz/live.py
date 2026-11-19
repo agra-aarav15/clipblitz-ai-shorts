@@ -809,21 +809,25 @@ def detect_spikes(messages, before=DEFAULT_BEFORE, after=DEFAULT_AFTER,
 
 
 def _title_for(spike, source_title=""):
-    """Pick a readable reaction from the chat, then add stream context.
-
-    The chat top list is noisy: it contains greetings, replies and URLs. Prefer a
-    complete phrase of roughly 3-10 words, reject the obvious noise, and keep the
-    stream title as a short prefix so a viewer knows where the clip came from.
-    """
+    """Pick a readable reaction from the chat, then add stream context."""
     scored = []
     for text in [t["text"] for t in spike.get("top") or [] if t.get("text")]:
         if re.search(r"https?://|www\.", text, re.I):
             continue
-        title = virality.clean_title(text, 80)
+        title = virality.clean_title(text, 80).replace("\ufffd", "").strip()
         words = title.split()
         if len(words) < 3 or len(title) < 16:
             continue
         low = title.lower()
+        # Chat spam repeats a short phrase ("Do a 5 sterdo a 5 sterdo...") far
+        # more than it reads as a reaction. A usable quote has some variety.
+        toks = re.findall(r"[a-z0-9']+", low)
+        if len(toks) >= 6:
+            if len(set(toks)) / float(len(toks)) < 0.55:
+                continue
+            grams = list(zip(toks, toks[1:]))
+            if len(set(grams)) / float(len(grams)) < 0.55:
+                continue
         if re.match(r"^@|^(hi|hey|hello|gm|good morning|thanks|thank you)(?![A-Za-z])", low) and len(words) < 12:
             continue
         score = 0
@@ -838,12 +842,17 @@ def _title_for(spike, source_title=""):
             score -= 12
         scored.append((score, title))
     picked = max(scored, key=lambda x: x[0])[1] if scored else ""
-    source = virality.clean_title(source_title, 40)
+    source = virality.clean_title(source_title, 40).replace("\ufffd", "").strip()
+    # "… GAMEPLAY GET" is the truncated tail of an emoji-laden title. Strip the
+    # dangling call-to-action so the title ends on a real phrase.
+    for tail in (" GET", " JOIN NOW", " LIVE NOW"):
+        if source.upper().endswith(tail):
+            source = source[: -len(tail)].rstrip(" -:;,.")
     if picked and source and source.lower() not in picked.lower():
-        return virality.clean_title("%s — %s" % (source, picked), 95)
-    fallback = "Chat lost it at %s" % _hm(spike.get("peak", 0))
+        return virality.clean_title("%s - %s" % (source, picked), 95)
+    fallback = "chat reacts"
     if source:
-        return virality.clean_title("%s — %s" % (source, fallback), 95)
+        return virality.clean_title("%s - %s" % (source, fallback), 95)
     return fallback
 
 
@@ -878,10 +887,10 @@ def _meta_for(spike, source):
         else:
             tags += ["#YouTubeGaming"]
     credit = channel or source_title or "the original streamer"
-    credit_line = f"{credit} — {channel_url}" if channel_url else credit
+    credit_line = f"{credit} - {channel_url}" if channel_url else credit
     desc = (
         f"{title}\n\n"
-        f"Source: {credit} — {channel_url}\n"
+        f"Source: {credit} - {channel_url}\n"
         f"Full stream: {url}\n\n"
         f"Clip context: {int(spike.get('messages') or 0)} chat messages from "
         f"{int(spike.get('authors') or 0)} people around this moment. "
@@ -1070,7 +1079,7 @@ def _render_section(s, spike, section, section_duration, words):
         # dropped every STT caption.
         window = (0.0, float(section_duration)) if stt_used else (
             float(spike["start"]), float(spike["end"]))
-        captions.build_ass(words, window, "wordpop", 1.0, "bottom", ass_path,
+        captions.build_ass(words, window, "reel", 1.0, "bottom", ass_path,
                                margin_v=300, chunk=5, break_on_punct=False)
         ass_name = base + ".ass"
     # A stream is 16:9 with the webcam in a corner. A plain 9:16 centre crop
@@ -1783,7 +1792,7 @@ def _run(vid):
                     s["stage"] = "watching live chat"
                     _save(s)
                     _maybe_render_live(s)
-                    time.sleep(max(2.0, min(15.0, (timeout_ms or 5000) / 1000.0)))
+                    time.sleep(max(0.75, min(3.0, (timeout_ms or 2500) / 2000.0)))
                 except Exception as e:
                     s["errors"] = int(s.get("errors") or 0) + 1
                     s["last_error"] = str(e)[:300]

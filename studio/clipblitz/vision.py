@@ -77,7 +77,7 @@ def _frames(src, start, end, count):
     # doubles the face and is still only a few JPEGs per clip.
     cmd = [ffmpeg(), "-v", "error", "-nostdin", "-ss", f"{max(0.0, float(start)):.3f}",
            "-i", src, "-t", f"{span:.3f}",
-           "-vf", f"fps={rate:.3f},scale=960:-2", "-frames:v", str(max(1, count)),
+           "-vf", f"fps={rate:.3f},scale=1280:-2", "-frames:v", str(max(1, count)),
            "-q:v", "3", pattern]
     try:
         subprocess.run(cmd, capture_output=True, timeout=90)
@@ -163,15 +163,66 @@ def face_crop_x(src, start, end, samples=4, target_ratio=9 / 16):
             pass
 
 
+_YUNET = None
+_YUNET_FAILED = False
+
+
+def _yunet_boxes(img):
+    """YuNet DNN faces in normalized coordinates, or [] if unavailable.
+
+    Haar alone misses a small, downward-looking corner webcam often enough that
+    it produced clips whose "face" card was a game character. YuNet is a 228 KB
+    ONNX model bundled with the app; it finds both the game face and the webcam,
+    and the corner-cluster logic then keeps the streamer.
+    """
+    global _YUNET, _YUNET_FAILED
+    if cv2 is None or img is None or _YUNET_FAILED:
+        return []
+    if _YUNET is None:
+        model = os.path.join(os.path.dirname(__file__), "models",
+                             "face_detection_yunet_2023mar.onnx")
+        if not os.path.isfile(model) or not hasattr(cv2, "FaceDetectorYN"):
+            _YUNET_FAILED = True
+            return []
+        try:
+            _YUNET = cv2.FaceDetectorYN.create(model, "", (320, 320), 0.5, 0.3, 5000)
+        except Exception:
+            _YUNET_FAILED = True
+            return []
+    h, w = img.shape[:2]
+    try:
+        _YUNET.setInputSize((w, h))
+        _, faces = _YUNET.detect(img)
+    except Exception:
+        return []
+    if faces is None:
+        return []
+    out = []
+    for f in faces:
+        x, y, bw, bh = (float(v) for v in f[:4])
+        score = float(f[-1])
+        if score < 0.55 or bw < 8 or bh < 8:
+            continue
+        area = bw * bh
+        if area < w * h * 0.0012:
+            continue
+        out.append((x / max(1.0, w), y / max(1.0, h),
+                    bw / max(1.0, w), bh / max(1.0, h),
+                    area / max(1.0, w * h)))
+    return out
+
+
 def _face_boxes(img, frontal, profile):
     """Return [(x, y, w, h, area)] in normalized frame coordinates."""
     if cv2 is None or img is None:
         return []
     fh, fw = img.shape[:2]
+    # DNN first; Haar adds a second opinion. Both are clustered across frames.
+    out = _yunet_boxes(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     boxes = []
-    kw = dict(scaleFactor=1.12, minNeighbors=4,
-              minSize=(max(14, fw // 18), max(14, fh // 18)))
+    kw = dict(scaleFactor=1.10, minNeighbors=3,
+              minSize=(max(16, fw // 32), max(16, fh // 32)))
     if frontal is not None:
         boxes += [tuple(int(v) for v in b) for b in frontal.detectMultiScale(gray, **kw)]
     if profile is not None:
@@ -179,13 +230,38 @@ def _face_boxes(img, frontal, profile):
         flipped = cv2.flip(gray, 1)
         for x, y, w, h in profile.detectMultiScale(flipped, **kw):
             boxes.append((int(fw - x - w), int(y), int(w), int(h)))
-    out = []
     for x, y, w, h in boxes:
         area = w * h
-        if area < fw * fh * 0.003:
+        if area < fw * fh * 0.0012:
             continue
         out.append((x / max(1.0, fw), y / max(1.0, fh),
                     w / max(1.0, fw), h / max(1.0, fh), area / max(1.0, fw * fh)))
+    return out
+
+
+def _region_face_boxes(img, frontal, profile, x0, y0, x1, y1):
+    """Detect faces in a sub-rectangle, mapped back to full-frame coordinates.
+
+    A 1920-wide webcam face is only ~90px; OpenCV's full-frame scan sometimes
+    misses a small, downward-looking face even when it is obvious. Scanning the
+    left and right halves gives the detector a much larger face relative to the
+    image and is what finds Ray's bottom-left cam reliably.
+    """
+    if cv2 is None or img is None:
+        return []
+    h, w = img.shape[:2]
+    left, top = max(0, int(w * x0)), max(0, int(h * y0))
+    right, bottom = min(w, int(w * x1)), min(h, int(h * y1))
+    if right - left < 40 or bottom - top < 40:
+        return []
+    sub = img[top:bottom, left:right]
+    sw, sh = right - left, bottom - top
+    out = []
+    for x, y, bw, bh, area in _face_boxes(sub, frontal, profile):
+        out.append(((x * sw + left) / max(1.0, w),
+                    (y * sh + top) / max(1.0, h),
+                    bw * sw / max(1.0, w), bh * sh / max(1.0, h),
+                    area * (sw * sh) / max(1.0, w * h)))
     return out
 
 
@@ -206,32 +282,62 @@ def facecam_box(src, start, end, samples=6, detail=False):
     frames = _frames(src, start, end, max(3, int(samples or 6)))
     if not frames:
         return None
-    found = []
-    max_areas = []
+    def in_corner(b):
+        cx, cy = b[0] + b[2] / 2.0, b[1] + b[3] / 2.0
+        return (cx < 0.35 or cx > 0.65 or cy < 0.35 or cy > 0.65)
+
+    # Cluster every face seen across the sampled frames. The webcam face is
+    # present in nearly every frame at roughly the same place; a game character
+    # face can be bigger, but it usually moves and only appears in a few frames.
+    # This is what s18 needs: a giant game character in the centre and Kai's
+    # small webcam in the corner. Picking the biggest face per frame selected the
+    # game character, and the median then threw the webcam away.
+    clusters = []
+    all_boxes = []
     try:
-        for path, _fw, _fh in frames:
+        for fi, (path, _fw, _fh) in enumerate(frames):
             img = cv2.imread(path)
             faces = _face_boxes(img, frontal, profile)
-            max_areas.append(max([b[4] for b in faces], default=0.0))
-            if not faces:
-                continue
-            # Pick the webcam face, not the biggest face in the game. A streamer
-            # cam sits in a corner; a character's face can be larger and central.
-            # Score area but strongly favour the outer 32% of the frame.
-            def corner_score(b):
+            # Small corner webcams are sometimes missed by the full-frame scan.
+            # Scan the two side bands too; cluster dedupes the duplicates.
+            faces += _region_face_boxes(img, frontal, profile, 0.0, 0.0, 0.55, 1.0)
+            faces += _region_face_boxes(img, frontal, profile, 0.45, 0.0, 1.0, 1.0)
+            all_boxes.extend(faces)
+            corner = [b for b in faces if in_corner(b)]
+            for b in (corner or faces):
                 cx, cy = b[0] + b[2] / 2.0, b[1] + b[3] / 2.0
-                edge = max(0.0, 0.32 - min(cx, 1.0 - cx, cy, 1.0 - cy))
-                return b[4] * (1.0 + 8.0 * edge)
-            best = max(faces, key=corner_score)
-            found.append(best)
-        if not found:
+                hit = None
+                for c in clusters:
+                    if abs(cx - c["cx"]) < 0.12 and abs(cy - c["cy"]) < 0.16:
+                        hit = c
+                        break
+                if hit is None:
+                    hit = {"cx": cx, "cy": cy, "boxes": [], "frames": set(),
+                           "corner": bool(in_corner(b))}
+                    clusters.append(hit)
+                hit["boxes"].append(b)
+                hit["frames"].add(fi)
+                hit["cx"] = sum(x[0] + x[2] / 2.0 for x in hit["boxes"]) / len(hit["boxes"])
+                hit["cy"] = sum(x[1] + x[3] / 2.0 for x in hit["boxes"]) / len(hit["boxes"])
+        if not clusters:
             return None
+        # Most frames wins. Only then prefer the larger face (a corner webcam is
+        # often small; a one-frame game face must not steal the crop).
+        def cluster_key(c):
+            # A corner cluster is the streamer cam; a centre cluster is a game
+            # face. Only fall back to the centre when no corner face exists.
+            return (c["corner"], len(c["frames"]),
+                    sum(b[4] for b in c["boxes"]) / len(c["boxes"]))
+        chosen = max(clusters, key=cluster_key)
+        found = chosen["boxes"]
+        selected_areas = [b[4] for b in found]
         # Median stabilises a one-frame false positive without lagging a cut.
         med = [sorted(b[i] for b in found)[len(found) // 2] for i in range(4)]
         # The biggest face in a frame is the useful signal: a full-screen talking
         # head has a large face in most samples, while a game character face is a
         # one-frame outlier.
-        coverage = sorted(max_areas)[len(max_areas) // 2] if max_areas else 0.0
+        coverage = (sorted(selected_areas)[len(selected_areas) // 2]
+                    if selected_areas else 0.0)
         x, y, w, h = med
         cx, cy = x + w / 2.0, y + h / 2.0
         # The webcam frame is wider and taller than the detected face. These
@@ -267,8 +373,8 @@ def _face_centres(img, frontal, profile):
     fh, fw = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     boxes = []
-    kw = dict(scaleFactor=1.12, minNeighbors=4,
-              minSize=(max(14, fw // 18), max(14, fh // 18)))
+    kw = dict(scaleFactor=1.12, minNeighbors=3,
+              minSize=(max(16, fw // 32), max(16, fh // 32)))
     if frontal is not None:
         boxes += [tuple(int(v) for v in b) for b in frontal.detectMultiScale(gray, **kw)]
     if profile is not None:
